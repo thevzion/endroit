@@ -1,0 +1,58 @@
+{
+  "$schema": "https://hairness.dev/schema/asset.json",
+  "name": "hairness/scratch",
+  "version": "0.5.0-alpha.0",
+  "description": "Explicit lightweight working memory represented as inspectable Artifacts.",
+  "capabilities": [
+    {
+      "id": "scratch",
+      "source": "capabilities/scratch.md"
+    }
+  ],
+  "skills": [
+    {
+      "id": "scratch",
+      "capability": "scratch",
+      "description": "Use when the user explicitly wants to create, join or update lightweight working memory."
+    }
+  ],
+  "commands": [
+    {
+      "id": "scratch",
+      "capability": "scratch",
+      "summary": "Create or update an explicit Scratch Artifact."
+    }
+  ],
+  "artifactKinds": [
+    {
+      "id": "scratch",
+      "template": "templates/scratch.md",
+      "targetPath": "docs/scratches",
+      "owners": [
+        "desk",
+        "home",
+        "target"
+      ],
+      "states": [
+        "active",
+        "accepted",
+        "archived"
+      ]
+    }
+  ],
+  "cli": [
+    {
+      "namespace": "scratch",
+      "routes": [
+        {
+          "name": "create",
+          "operation": "kernel:scratch.create",
+          "defaults": {
+            "kind": "hairness/scratch:scratch",
+            "owner": "desk"
+          }
+        }
+      ]
+    }
+  ]
+}

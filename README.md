@@ -4,302 +4,363 @@
 
 ### Own the place where your agents work.
 
-**A provider can host the agent. It shouldn’t own the Home.**
+**A provider can host the agent. It shouldn't own the Home.**
+
+Not another autonomous agent. A Home for the agents and workflows you already use.
 
 [![npm next](https://img.shields.io/npm/v/%40hairness%2Fcli/next?label=npm%20next)](https://www.npmjs.com/package/@hairness/cli)
 [![CI](https://github.com/thevzion/hairness/actions/workflows/ci.yml/badge.svg)](https://github.com/thevzion/hairness/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-d8996a.svg)](LICENSE)
 
-<sub>0.4 is an alpha. Use a dedicated Git repository and review every Adapter before approving it.</sub>
+<sub>0.5 is alpha software. Keep your Home in Git and review executable Assets before approving them.</sub>
 
 </div>
 
-![Ness moves from an improvised workspace into a Home, extends it, then joins a city of shared agentic assets.](https://raw.githubusercontent.com/thevzion/hairness/main/docs/assets/ness-journey.png)
+## Ness needed a Home
 
-## Ness needed a Home. So we built one.
+Ness is the agent. You are the person who owns the Home.
 
-Ness could work in Codex today and Claude tomorrow. Each provider offered a
-project folder, instructions, skills and memory in its own shape. Switching
-providers meant moving in again. Sharing the setup meant explaining which files
-belonged where.
+Without Hairness, Ness arrives in a provider folder full of instructions,
+commands and memory from previous sessions. You can use it, but you struggle to
+answer basic questions: Which files define the agent's behavior? Which project
+can it touch? What did your team share? What will survive a provider change?
 
-Hairness gives Ness one place to live:
-
-- a Git repository that owns the agentic assets;
-- provider projections that work after a clone;
-- local rooms for private memory and repository bindings;
-- Assets you can read, edit and keep.
-
-The Kernel stays small. Your Home carries the value.
-
-Hairness handles the logistics behind that Home: getting the right source-owned
-agentic material into the right place, preserving who owns it, and projecting
-it for whichever provider hosts the agent.
-
-## Give your agent a Home
-
-Create it once:
+Hairness creates a small, usable Home. Ness finds a floor plan, a welcome guide
+and the tools required to improve it. Together, you decide what the Home
+becomes.
 
 ```bash
-npx --yes @hairness/cli@0.4.0-alpha.1 create ness-home
-```
-
-Open an agent there:
-
-```bash
+npx --yes @hairness/cli@0.5.0-alpha.0 create ness-home
 codex -C ness-home
-# or
-cd ness-home && claude
+# or: cd ness-home && claude
 ```
 
-Then invoke the onboarding Skill:
+Invoke onboarding inside the agent:
 
 ```text
 $hairness-onboarding
 # Claude Code: /hairness-onboarding
 ```
 
-The conversation stays human:
-
 ```text
-Ness: I want this Home in French and I work on ~/Projects/my-game.
+You: I work in French. My projects are ~/Projects/api,
+     ~/Projects/web and ~/Projects/handbook.
 
-Agent: I can save French as your response language, declare my-game as an
-independent Target, bind this checkout, then rebuild and run doctor.
-I will change .overlay/config.json and hairness.json, and create a local
-targets/my-game binding. Shall I proceed?
+Ness: I can save that preference in your Desk, declare the three
+      repositories as shared Targets, bind these checkouts on this machine,
+      select api as the active Target, then rebuild and run Doctor.
+      I will show you each change first. Shall I proceed?
 
-Ness: Yes. Add Scratch too.
+You: Yes. Add Scratch too.
 ```
 
 <details>
-<summary><strong>What did the agent do?</strong></summary>
+<summary><strong>What did Ness do?</strong></summary>
 
-The onboarding Skill asked for consent, edited the accepted local preferences,
-then invoked the exact runtime owned by the Home:
+The onboarding Capability asked for consent, then called the exact runtime
+declared by the Home:
 
 ```bash
-npx --yes @hairness/cli@0.4.0-alpha.1 target add ~/Projects/my-game
-npx --yes @hairness/cli@0.4.0-alpha.1 add @hairness/scratch -y
-npx --yes @hairness/cli@0.4.0-alpha.1 build
-npx --yes @hairness/cli@0.4.0-alpha.1 doctor
+npx --yes @hairness/cli@0.5.0-alpha.0 target add ~/Projects/api
+npx --yes @hairness/cli@0.5.0-alpha.0 target add ~/Projects/web
+npx --yes @hairness/cli@0.5.0-alpha.0 target add ~/Projects/handbook
+npx --yes @hairness/cli@0.5.0-alpha.0 target use api
+npx --yes @hairness/cli@0.5.0-alpha.0 asset add @hairness/scratch -y
+npx --yes @hairness/cli@0.5.0-alpha.0 build
+npx --yes @hairness/cli@0.5.0-alpha.0 doctor
 ```
 
-Hairness did not install a background service, authenticate another tool or
-execute code during `add`.
+Hairness installed no daemon. Asset installation copied and validated files;
+it ran no Asset code.
 
 </details>
 
-## One tree, clear ownership
+## The model may be a black box. The Home doesn't have to be.
+
+Run the HUD at session start or ask for it at any point:
+
+```bash
+hairness hud
+```
+
+```text
+HOME        ness-home · solo
+DESK        alexis
+PROVIDERS   codex · claude
+ASSETS      3
+SURFACES    instruction:1 · skill:4 · command:3 · cli:19 · artifact:1
+GIT         main · clean · 1 worktrees
+TARGETS     3/3 bound
+ACTIVE      api · main · clean
+HEALTH      ready
+```
+
+`hairness hud --full` lists the Assets, Instructions, Skills, Commands, CLI
+routes, Artifact kinds, owners, provider-by-provider projections and context
+footprint.
+`hairness hud --json` exposes the same resolved state to tools. The Kernel reads
+safe probes and never executes Asset code while it builds the HUD.
+
+The session hook calls `hud --prompt`. It gives Ness shared Home Instructions,
+your Desk Instructions and live orientation without copying private Desk data
+into `AGENTS.md` or `CLAUDE.md`.
+
+## One tree, named owners
 
 ```text
 ness-home/
-├── hairness.json                         # Home identity and composition
+├── hairness.json                         # shared Home composition
 ├── assets/
-│   └── hairness/
-│       ├── onboarding/
-│       │   ├── hairness.json             # source + installation provenance
-│       │   ├── instructions/home.md
-│       │   └── skills/...
-│       └── scratch/                       # present only after consent
+│   ├── hairness/
+│   │   ├── home/asset.json               # onboarding, Desk, HUD, Artifacts
+│   │   ├── targets/asset.json            # Target grammar and CLI
+│   │   └── scratch/asset.json            # opt-in working memory
+│   └── company/
+│       └── engineering/asset.json         # your source-owned material
+├── artifacts/
+│   └── company/planning/plan/q3/artifact.md
 ├── AGENTS.md                              # tracked Codex projection
 ├── CLAUDE.md                              # tracked Claude projection
-├── .agents/skills/...                     # tracked Codex Skills
-├── .claude/skills/...                     # tracked Claude Skills
-├── .codex/hooks.json                      # exact runtime hook
-├── .claude/settings.json                  # exact runtime hook
-├── .gitignore
+├── .agents/skills/                        # tracked Codex Skills
+├── .claude/skills/                        # tracked Claude Skills
+├── .codex/hooks.json
+├── .claude/settings.json
 │
-├── .overlay/                              # local to this Home instance
-│   ├── config.json                        # preferences and Integration bindings
-│   └── scratches/...                      # explicit working memory
-├── targets/                               # local links to independent Git repos
-└── .hairness/build.json                   # local output ownership and digests
+├── .desk/
+│   ├── desk.json                          # identity and personal settings
+│   ├── assets/                            # local experiments
+│   ├── artifacts/                         # private work in progress
+│   └── targets/                           # ignored machine bindings
+└── .hairness/
+    ├── build.json                         # generated output ownership
+    └── approvals.json                     # local executable trust by digest
 ```
 
-Git tracks the Home definition, installed Asset sources and provider
-projections. A clone can start an agent without a build step. Git ignores the
-Overlay, Target bindings and Kernel build state in a new Home.
+Git tracks shared Assets and provider projections. A clone can open in Codex or
+Claude before rebuilding. `.hairness/` stays local.
 
-Your existing Home may track its Overlay. Hairness keeps that decision yours.
-
-## Targets keep work separate
-
-A Home holds the context. A Target holds the work.
+A solo Home tracks its Desk in the same repository. A team Home ignores
+`.desk/` in the parent and lets each collaborator create or clone a private Desk
+repository:
 
 ```bash
-npx --yes @hairness/cli@0.4.0-alpha.1 target add ~/Projects/payments-api
+npx --yes @hairness/cli@0.5.0-alpha.0 create engineering-home --mode team
+hairness desk init --id alexis
+# or: hairness desk clone git@github.com:alexis/engineering-desk.git
 ```
 
-Hairness records the Target’s normalized Git remote in `hairness.json` and adds
-a local symlink under `targets/`. Your Home can now orient the agent with the
-remote, binding, branch and clean or dirty state. The Target remains its own Git
-repository.
+The Home gives the team one shared environment. Each Desk holds one
+collaborator's preferences, experimental Assets, private Artifacts and local
+repository bindings.
 
-One personal Home can connect several projects. A team Home can connect the
-repositories that implement one business domain.
+## The framework
 
-## Assets add rooms you own
+Hairness draws one boundary:
 
-An Asset is a folder with one manifest and source files:
+> **The Kernel owns grammar, composition and safety. Assets own meaning, capabilities and surfaces.**
 
-```text
-assets/company/security/
-├── hairness.json
-├── instructions/policy.md
-├── skills/security-review/SKILL.md
-└── knowledge/threat-model.md
-```
+The Kernel ships in one package, `@hairness/cli`. It validates documents,
+resolves the Home, applies file transactions, projects provider files and
+confines approved executable output.
+
+Assets define what the Home can do:
+
+| Asset section | Purpose |
+|---|---|
+| `instructions` | Invariant context loaded for the session |
+| `capabilities` | Provider-neutral procedures |
+| `skills` | Model access to a Capability |
+| `commands` | Human access to a Capability |
+| `references` and `files` | Material loaded when needed |
+| `artifactKinds` | Schemas, states, owners and templates |
+| `cli` | Namespaces and routes |
+| `hud` | Safe Kernel probes shown in the HUD |
+| `settings` and `setup` | Home or Desk configuration |
+| `executables` | Approved code with staged, declared output |
+
+`instructions/` and `capabilities/` are readable conventions. The manifest
+declares their role; folder names carry no hidden behavior.
+
+### One Capability, two invocation policies
+
+A Capability contains the procedure once:
 
 ```json
 {
   "$schema": "https://hairness.dev/schema/asset.json",
   "name": "company/security",
   "version": "1.2.0",
-  "description": "Security policy, knowledge and review capability.",
-  "files": [
+  "description": "Company security review material.",
+  "prefix": "security",
+  "capabilities": [
+    { "id": "review", "source": "capabilities/review.md" }
+  ],
+  "skills": [
     {
-      "path": "skills/security-review/SKILL.md",
-      "type": "hairness:skill",
-      "id": "security-review",
-      "description": "Review a change against company security policy."
-    },
+      "id": "review",
+      "capability": "review",
+      "description": "Use when a change needs a security review."
+    }
+  ],
+  "commands": [
     {
-      "path": "knowledge/threat-model.md",
-      "type": "hairness:file"
+      "id": "review",
+      "capability": "review",
+      "summary": "Review a change against company security policy."
     }
   ]
 }
 ```
 
-Install from the source you trust:
+The canonical identity is `company/security:review`. With the default Home
+prefix, providers see `hairness-security-review`.
+
+A Skill lets the model invoke a Capability. A Command reserves human
+invocation. Declaring both supports both paths without duplicating the
+procedure. Hairness warns when a provider cannot preserve the distinction and
+omits the broader projection until you record consent.
+
+### Assets stay source-owned
+
+Install from a source you trust:
 
 ```bash
-hairness add @hairness/scratch
-hairness add company/agentic-assets/assets/security#v1.2.0
-hairness add company/agentic-assets/assets/security#8d31f3c7f05f4c6fd4a15ad31f4d23ff9d472312
-hairness add https://assets.example.com/security/hairness.json
-hairness add ./local/security/hairness.json
+hairness asset add company/agentic-assets/assets/security#v1.2.0
+hairness asset add company/agentic-assets/assets/security#8d31f3c7f05f4c6fd4a15ad31f4d23ff9d472312
+hairness asset add https://assets.example.com/security/asset.json
+hairness asset add ./security/asset.json
 ```
 
-Hairness copies the files into your Home. It adds source, requested reference,
-resolved commit and base digests to the same `hairness.json`. No separate lock or
-receipt hides the relationship.
-
-An installed Asset is also a valid Git source for another Home. Hairness ignores
-the previous installation provenance and records the new source and digests for
-the receiving Home.
-
-### Change the source
-
-The installed files belong to you:
+Hairness copies the Asset into your repository and records its origin and base
+digests inside `asset.json`. You can open every source file:
 
 ```bash
-$EDITOR assets/company/security/skills/security-review/SKILL.md
+$EDITOR assets/company/security/capabilities/review.md
 git diff
-hairness status company/security
+hairness asset status company/security
 ```
 
 ```text
 company/security: customized
 ```
 
-Hairness compares your file with its installation digest without contacting the
-network. A later sync stops at your edit:
+`hairness asset sync` updates an intact Asset in one transaction. A local edit
+blocks the sync and produces a diff. Hairness does not merge or overwrite that
+edit without explicit consent.
+
+A collaborator can test an Asset under `.desk/assets/`, then publish it into
+the shared Home:
 
 ```bash
-hairness sync company/security
+hairness asset publish personal/security-improvement
+git diff
 ```
 
-```text
-sync_customized: company/security has local changes; inspect hairness diff or pass --overwrite.
-```
+The move removes local provenance. Git review and your team governance take
+over.
 
-You can keep the edit, commit it, inspect `hairness diff`, or choose
-`--overwrite`. Hairness does not merge behind your back.
+## Artifacts are work, Assets are reusable capability
 
-### Build for the provider
-
-Skills stay provider-neutral inside the Asset. `hairness build` projects
-them into Codex and Claude conventions. A provider command remains a projection
-of a Skill, so the Asset does not carry two versions of the same capability.
-
-Instructions shape behavior. Skills give the agent a callable capability.
-Files carry knowledge, templates, examples or other agentic material.
-
-## Knowledge stays with its owner
-
-A Home does not collect every document under one root `docs/` directory.
-Knowledge stays close to what owns it:
-
-| Material | Owner | Canonical place |
-|---|---|---|
-| private, incomplete or uncertain work | this Home instance | `.overlay/` |
-| knowledge required by a reusable capability or domain | an Asset | `assets/<namespace>/<name>/knowledge/` |
-| product or repository knowledge | its Target | the Target's own convention, often `docs/` |
-| documentation about the Home itself | the Home | `README.md`, and `docs/` only when needed |
-
-Promotion from the Overlay to an Asset or Target is explicit. Provider
-projections consume this material but never become its canonical source.
-
-## Homes at different scales
-
-You can start with one room and keep the same grammar as your needs grow.
-
-| Home | Useful agentic assets | Typical Targets |
-|---|---|---|
-| Personal game development | engine conventions, art pipeline, playtest Scratch | game, tools, website |
-| Personal agentic tools | evaluation Skills, protocol notes, release routines | HACP, decks, adapters |
-| Engineering team | architecture, delivery policy, incident procedures | services and infrastructure |
-| Operations team | client vocabulary, checklists, reporting templates | knowledge repositories |
-| Company | shared policies, brand voice, domain map | cross-team references |
-
-An individual can clone a team Home, keep `.overlay/` local, and add a personal
-Asset. A company can publish Assets from ordinary Git repositories.
-Each team composes its own Home from the assets it needs.
-
-One Home is a house for an agent. Teams connect houses through shared
-Assets. Over time, the organization builds a city: a source-owned body of
-instructions, capabilities, knowledge and explicit memory that helps agents
-understand the business. That city is agentic capital because the organization
-can inspect it, improve it and carry it to another provider.
-
-## The Kernel
-
-`@hairness/cli` contains the whole Kernel:
-
-```text
-create · init
-add · status · diff · sync · remove
-build · doctor · prologue
-target ... · integration ...
-```
-
-The CLI validates paths and schemas, applies file changes as transactions,
-tracks output ownership and projects assets. `add` and `sync` copy data only.
-An Asset may contain an Adapter, but Hairness runs it during `build` only
-after named approval:
+Assets describe repeatable practice. Artifacts record what you produced:
 
 ```bash
-hairness build --allow-adapter company-importer
+hairness artifact create company/planning:plan q3-roadmap
+hairness artifact validate q3-roadmap
+hairness artifact publish q3-roadmap --owner home
 ```
 
-Hairness stages Adapter output, rejects undeclared paths and rolls back on a
-collision.
+Each `artifact.md` carries a small envelope:
+
+```yaml
+---
+$schema: https://hairness.dev/schema/artifact.json
+id: q3-roadmap
+kind: company/planning:plan
+owner: desk
+state: draft
+createdBy: alexis
+---
+```
+
+The owning Asset defines the kind's schema, states, templates and allowed
+owners. A Desk Artifact can stay private, move into the Home or publish into a
+bound Target. Publication preserves the Desk source and adds lineage. A
+Capability can derive a new Artifact from an earlier one.
+
+Teams compound their agentic material through this loop:
+
+```text
+work in the Desk → produce Artifacts → notice a repeated practice
+→ write or improve an Asset → review it in Git → reuse it across Homes
+```
+
+## Targets hold the work
+
+The Home provides context. Targets remain independent Git repositories:
+
+```bash
+hairness target add ~/Projects/payments-api
+hairness target add ~/Projects/customer-web
+hairness target add ~/Projects/ops-handbook
+hairness target use payments-api
+```
+
+The shared Home stores normalized repository identities. Your Desk stores
+symlinks to local checkouts. The HUD reports the active Target, branch,
+worktree count and dirty state, but Hairness does not import Target source into
+the Home.
+
+## Bring the stack you already use
+
+Hairness gives different tools a shared place and grammar:
+
+| Existing layer | Examples | Hairness relationship |
+|---|---|---|
+| Agent provider | Codex, Claude | Hosts Ness and consumes projections |
+| Autonomous runtime | OpenClaw and schedulers | Connects through an Asset and approved executable when needed |
+| Methodology | GSD, Spec Kit, Superpowers | Keeps its workflow; an Asset maps its surfaces and outputs |
+| Tool protocol | MCP | Connects as an Integration |
+| Human-agent collaboration | HACP | Shapes collaboration without owning the Home |
+| Skill or agent library | local Skills, team agent collections | Enters the Home as source-owned Assets |
+| Work repository | service, game, handbook | Stays independent as a Target |
+
+Hairness does not replace a provider, methodology or runtime. It gives your
+agents one inspectable environment around those choices. Change provider and
+keep the Home. Use two methodologies without forcing either one to organize the
+whole repository.
+
+## What you can inspect
+
+```bash
+hairness validate --json    # deterministic Resolved Home
+hairness hud --full         # current surfaces and live orientation
+hairness doctor --json      # contract, projection and binding health
+hairness build --check      # tracked projections match the Home
+```
+
+The Resolved Home has no lockfile. `validate`, `build`, `hud` and `doctor` all
+calculate the same model from the files you own. Optional byte budgets can cap
+Instructions, model-facing descriptions and the HUD prompt.
+
+Asset executables stay inert during install, sync, resolution, setup and HUD
+rendering. Their first run requires approval for the current Asset digest.
+Hairness runs Node executables with filesystem access limited to their Asset
+and staging directory, promotes declared output and revokes approval after any
+Asset change.
 
 ## Scope of the alpha
 
-A provider Project may cover your needs when you use one provider, keep a small
-context and do not need source ownership. Hairness serves Homes that need to
-move, compose or grow across people and runtimes.
+A provider Project may cover a small setup that stays with one provider.
+Hairness serves people who need a portable Home, several Targets, personal and
+shared layers, or an environment their team can inspect in Git.
 
-The alpha has no marketplace, registry service, dependency solver, daemon,
-automatic update or automatic merge. Git provides history and restoration.
-Hairness arranges the files and rebuilds the provider views.
+The alpha has no marketplace, Registry, dependency solver, daemon, automatic
+update or automatic merge. HTTPS and Git addresses distribute Assets. Git
+provides history, review and recovery.
 
-Read the [technical reference](docs/reference.md), [security policy](SECURITY.md)
-and [contribution guide](CONTRIBUTING.md) before using Hairness for shared or
-sensitive work.
+Read the [architecture](docs/architecture.md),
+[lifecycles](docs/lifecycles.md), [technical reference](docs/reference.md) and
+[security policy](SECURITY.md) before using Hairness with sensitive material.
 
 ## License
 

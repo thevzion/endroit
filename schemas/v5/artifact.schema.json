@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hairness.dev/schema/artifact.json",
+  "type": "object",
+  "required": ["$schema", "id", "kind", "owner", "state", "createdBy"],
+  "properties": {
+    "$schema": { "const": "https://hairness.dev/schema/artifact.json" },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "kind": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,63}/[a-z0-9][a-z0-9._-]{0,63}:[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "owner": {
+      "type": "string",
+      "pattern": "^(desk|home|target:[a-z0-9][a-z0-9._-]{0,127})$"
+    },
+    "state": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "createdBy": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "derivedFrom": { "type": "string", "minLength": 1, "maxLength": 512 },
+    "targets": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+      }
+    }
+  }
+}

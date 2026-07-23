@@ -1,0 +1,68 @@
+{
+  "$schema": "https://hairness.dev/schema/asset.json",
+  "name": "hairness/integrations",
+  "version": "0.5.0-alpha.0",
+  "description": "Declared access to tools and services that retain their own ownership.",
+  "prefix": "integration",
+  "capabilities": [
+    {
+      "id": "manage",
+      "source": "capabilities/manage.md"
+    }
+  ],
+  "skills": [
+    {
+      "id": "manage",
+      "capability": "manage",
+      "description": "Use when external tools, services or provider accessors must be declared or bound."
+    }
+  ],
+  "commands": [
+    {
+      "id": "manage",
+      "capability": "manage",
+      "summary": "Declare and bind an external Integration."
+    }
+  ],
+  "cli": [
+    {
+      "namespace": "integration",
+      "routes": [
+        {
+          "name": "list",
+          "operation": "kernel:integrations.list"
+        },
+        {
+          "name": "doctor",
+          "operation": "kernel:integrations.doctor"
+        },
+        {
+          "name": "add",
+          "operation": "kernel:integrations.add"
+        },
+        {
+          "name": "bind",
+          "operation": "kernel:integrations.bind"
+        },
+        {
+          "name": "unbind",
+          "operation": "kernel:integrations.unbind"
+        },
+        {
+          "name": "remove",
+          "operation": "kernel:integrations.remove"
+        }
+      ]
+    }
+  ],
+  "hud": [
+    {
+      "id": "integrations",
+      "probe": "kernel:integrations"
+    }
+  ],
+  "settings": {
+    "home": "schemas/home-settings.schema.json",
+    "desk": "schemas/desk-settings.schema.json"
+  }
+}

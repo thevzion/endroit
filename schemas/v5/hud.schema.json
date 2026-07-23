@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hairness.dev/schema/hud.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["apiVersion", "kind", "home", "desk", "surfaces", "context", "warnings", "probes"],
+  "properties": {
+    "apiVersion": { "const": "hairness.dev/hud/v1alpha1" },
+    "kind": { "const": "HUD" },
+    "home": { "type": "object" },
+    "desk": { "type": ["object", "null"] },
+    "surfaces": { "type": "array" },
+    "context": { "type": "object" },
+    "warnings": { "type": "array" },
+    "probes": { "type": "object" }
+  }
+}

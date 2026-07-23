@@ -1,5 +1,22 @@
 # Changelog
 
+## 0.5.0-alpha.0
+
+- Define Hairness as a Home-first framework with one deterministic Resolved
+  Home shared by validate, build, HUD and Doctor.
+- Replace Overlay with the solo or team Desk and keep machine Target bindings
+  outside shared configuration.
+- Give Assets typed Instructions, Capabilities, Skills, Commands, references,
+  Artifact kinds, CLI routes, HUD probes, settings, setup and executables.
+- Replace Asset `hairness.json` with `asset.json` and reject the 0.4 layout.
+- Add explicit model, user and combined invocation policies with
+  provider-specific projection warnings.
+- Add generic Artifact creation, validation, publication and lineage.
+- Replace Prologue with an inspectable HUD and context footprint.
+- Bind executable approval to the full Asset digest and restrict filesystem
+  access to Asset input and staging output.
+- Bundle Home, Targets, Integrations and Scratch in the single CLI tarball.
+
 ## 0.4.0-alpha.1
 
 - Keep GitHub Asset staging alive until every declared source file has been read.

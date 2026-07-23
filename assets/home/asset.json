@@ -1,0 +1,139 @@
+{
+  "$schema": "https://hairness.dev/schema/asset.json",
+  "name": "hairness/home",
+  "version": "0.5.0-alpha.0",
+  "description": "The operating contract, onboarding and core surfaces of a Hairness Home.",
+  "instructions": [
+    {
+      "id": "contract",
+      "source": "instructions/contract.md"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "orient",
+      "source": "capabilities/orient.md"
+    },
+    {
+      "id": "onboarding",
+      "source": "capabilities/onboarding.md"
+    }
+  ],
+  "skills": [
+    {
+      "id": "home",
+      "capability": "orient",
+      "description": "Use when the user needs orientation, current Home state or the next useful route."
+    },
+    {
+      "id": "onboarding",
+      "capability": "onboarding",
+      "description": "Use when a Home or Desk needs its smallest useful configuration."
+    }
+  ],
+  "commands": [
+    {
+      "id": "onboarding",
+      "capability": "onboarding",
+      "summary": "Configure the smallest useful Home and Desk through conversation."
+    }
+  ],
+  "cli": [
+    {
+      "namespace": "hud",
+      "routes": [
+        {
+          "name": "show",
+          "operation": "kernel:hud.show"
+        }
+      ]
+    },
+    {
+      "namespace": "desk",
+      "routes": [
+        {
+          "name": "init",
+          "operation": "kernel:desk.init"
+        },
+        {
+          "name": "clone",
+          "operation": "kernel:desk.clone"
+        },
+        {
+          "name": "status",
+          "operation": "kernel:desk.status"
+        }
+      ]
+    },
+    {
+      "namespace": "artifact",
+      "routes": [
+        {
+          "name": "create",
+          "operation": "kernel:artifacts.create"
+        },
+        {
+          "name": "list",
+          "operation": "kernel:artifacts.list"
+        },
+        {
+          "name": "inspect",
+          "operation": "kernel:artifacts.inspect"
+        },
+        {
+          "name": "validate",
+          "operation": "kernel:artifacts.validate"
+        },
+        {
+          "name": "publish",
+          "operation": "kernel:artifacts.publish"
+        }
+      ]
+    },
+    {
+      "namespace": "command",
+      "routes": [
+        {
+          "name": "render",
+          "operation": "kernel:commands.render"
+        }
+      ]
+    }
+  ],
+  "hud": [
+    {
+      "id": "home",
+      "probe": "kernel:home"
+    },
+    {
+      "id": "desk",
+      "probe": "kernel:desk"
+    },
+    {
+      "id": "git",
+      "probe": "kernel:git"
+    },
+    {
+      "id": "assets",
+      "probe": "kernel:assets"
+    },
+    {
+      "id": "artifacts",
+      "probe": "kernel:artifacts"
+    }
+  ],
+  "settings": {
+    "home": "schemas/home-settings.schema.json",
+    "desk": "schemas/desk-settings.schema.json"
+  },
+  "setup": [
+    {
+      "scope": "home",
+      "command": "onboarding"
+    },
+    {
+      "scope": "desk",
+      "command": "onboarding"
+    }
+  ]
+}

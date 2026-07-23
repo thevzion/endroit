@@ -1,135 +1,159 @@
-# Hairness 0.4 technical reference
+# Hairness 0.5 reference
 
-Hairness 0.4 is an alpha. The JSON schemas under `schemas/v4` define the machine
-contracts. This page defines the human-readable contract.
+Hairness 0.5 is an alpha and a clean break from 0.4. JSON schemas under
+`schemas/v5` define the machine contracts.
 
 ## Home
 
-`hairness.json` requires a name, an exact CLI runtime and one or more providers.
-Hairness omits empty optional fields.
+`hairness.json` requires:
 
 ```json
 {
   "$schema": "https://hairness.dev/schema/home.json",
-  "name": "my-home",
-  "runtime": "@hairness/cli@0.4.0-alpha.1",
+  "name": "engineering-home",
+  "runtime": "@hairness/cli@0.5.0-alpha.0",
+  "mode": "team",
   "providers": ["codex", "claude"]
 }
 ```
 
-Optional `targets`, `integrations` and `config` fields hold shared composition.
-New Homes ignore `.overlay/`, `targets/` and `.hairness/`. Provider projections
-remain tracked.
+`projection.prefix` changes provider-facing names. Optional byte budgets cover
+`instructionsBytes`, `skillDescriptionsBytes` and `hudPromptBytes`.
+`settings` uses full Asset names as keys.
 
-`create <home> [base-asset]` creates a Git repository, installs
-`@hairness/onboarding`, optionally installs the base Asset, builds provider
-projections, runs doctor and creates one initial commit. `init` writes a bare
-Home without an Asset, build or commit.
+The Home contains no machine path, Target or Integration field. Assets own
+those settings.
+
+## Desk
+
+`.desk/desk.json` contains an id and namespaced personal settings:
+
+```json
+{
+  "$schema": "https://hairness.dev/schema/desk.json",
+  "id": "alexis",
+  "settings": {
+    "hairness/targets": {
+      "active": "api"
+    }
+  }
+}
+```
+
+Solo Homes track `.desk/` in the Home repository while `.desk/targets/` stays
+ignored. Team Homes ignore `.desk/` in the parent repository. `desk init`
+creates an independent Git repository there; `desk clone <repository>` connects
+an existing private Desk.
 
 ## Asset
 
-An installed Asset lives at
-`assets/<namespace>/<name>/hairness.json`. The `name` field must match the
-two path segments. Its `files` may use these alpha types:
+An Asset lives at `assets/<namespace>/<name>/asset.json` or
+`.desk/assets/<namespace>/<name>/asset.json`. Its `name` must match those two
+path segments.
 
-- `hairness:instruction` for provider-neutral operating context;
-- `hairness:skill` for a named, described capability;
-- `hairness:file` for knowledge, examples, templates and Adapter source.
-
-A Skill requires `id` and `description`. Other file types reject those fields.
-The optional `adapter` declares an id, entry file and output roots.
-
-Hairness adds `installation` during `add` or `sync`. It records the source,
-requested Git reference, resolved commit, mobility, canonical source-manifest
-digest and a base digest for each file. Source manifests omit this field.
-
-An installed Asset may itself be used as a local, HTTPS or Git source. Hairness
-removes its previous `installation` block before validation and records fresh
-provenance in the receiving Home.
-
-Supported addresses:
+Supported source addresses:
 
 ```text
-@hairness/onboarding
+@hairness/home
+@hairness/targets
+@hairness/integrations
 @hairness/scratch
 owner/repository/path#tag
 owner/repository/path#40-character-commit
 owner/repository/path
-https://example.com/path/hairness.json
-./path/to/hairness.json
+https://example.com/path/asset.json
+./path/to/asset.json
 ```
 
-Git tags and full commits count as pinned. An unpinned GitHub address, HTTPS
-manifest or local path counts as mobile.
+`asset add` validates and copies source files. It adds `origin` with the source,
+requested reference, resolved commit, mobility, source manifest digest and
+file digests. The lifecycle remains inert.
 
-## Lifecycle
+Asset sections:
 
-`add` resolves all requested Assets, validates every manifest and source
-file, previews writes and applies one transaction after confirmation. It rejects
-existing destinations unless the user passes `--overwrite`. It executes no
-Asset code.
+- `instructions`: invariant session context;
+- `capabilities`: provider-neutral procedures;
+- `skills` and `commands`: model and human invocation paths;
+- `references` and `files`: on-demand material;
+- `artifactKinds`: schemas, templates, states and owners;
+- `cli`: typed Kernel operations or approved executables;
+- `hud`: safe Kernel probes;
+- `settings`: Home and Desk JSON Schemas;
+- `setup`: Commands offered during onboarding;
+- `executables`: approved code with declared outputs.
 
-`status` works offline. It compares the source part of the manifest and every
-declared file with installation digests, then returns `clean`, `customized`,
-`missing` or `invalid`.
+The Kernel ignores folder names. Each section points to source paths.
 
-`diff` fetches the current or selected source and reports additions, changes and
-removals. `sync --check` reports availability without writing. `sync` updates a
-clean Asset in one transaction. A local modification blocks the transaction
-unless the user passes `--overwrite`. Hairness preserves undeclared local files.
+Provider-facing names combine the Home prefix, optional Asset prefix and local
+surface id. Canonical ids remain `<namespace>/<asset>:<local-id>`.
 
-`remove` deletes the manifest and the files recorded in `baseDigests`. It
-preserves undeclared files and refuses local divergence unless the user passes
-`--overwrite`.
+## Resolved Home
 
-The lifecycle commands do not build provider projections. The caller invokes
-`build` after the accepted source change.
+`validate` loads and validates the Home, Desk and every Asset. It rejects
+canonical, projected and CLI route collisions before writing files. It
+calculates settings, capabilities, surfaces, Artifact kinds, warnings, byte
+footprints and a stable digest.
 
-The legacy `extensions/` layout and Extension schema are rejected. Hairness
-does not discover or migrate them implicitly.
+`validate --json` exposes the public part of this model. Hairness persists no
+resolved lockfile. `build`, `hud` and `doctor` resolve the same inputs.
 
-## Ownership
+## Kernel CLI
 
-Private or uncertain work belongs in `.overlay/`. Knowledge owned by an Asset
-belongs under that Asset, conventionally in `knowledge/`. Knowledge about a
-Target remains in that independent repository. A Home-level `docs/` directory
-documents the Home itself and is not a general knowledge store.
+```text
+create <home> [base-asset] [--mode solo|team]
+init [--mode solo|team]
 
-Promotion from Overlay to Asset or Target requires explicit consent. Generated
-provider projections are never canonical sources.
+asset add <addresses...> [--desk] [--dry-run] [--overwrite] [-y]
+asset status [id] [--desk]
+asset diff <id> [--to <address>] [--desk]
+asset sync <id>|--all [--check] [--to <address>] [--overwrite]
+asset remove <id> [--overwrite] [--desk]
+asset validate <id> [--desk]
+asset publish <id>
 
-## Build
+validate [--json]
+build [--check] [--allow-executable <canonical-id>]
+doctor [--json]
+```
 
-`build` discovers `assets/*/*/hairness.json`, composes instructions and
-projects Skills to `.agents/skills` and `.claude/skills`. It maintains bounded
-regions in `AGENTS.md` and `CLAUDE.md`, plus exact-runtime session hooks.
+Bundled Assets contribute:
 
-`.hairness/build.json` records generated output owners and digests. A clone can
-run `build --check` without this local state because tracked projections contain
-the expected bytes. Hairness refuses edits to outputs it owns.
+```text
+hud [--full] [--json] [--prompt]
+desk init|clone|status
+artifact create|list|inspect|validate|publish
+command render
+target list|discover|doctor|add|bind|use|unbind|remove
+integration list|doctor|add|bind|unbind|remove
+scratch create
+```
 
-An Adapter remains inert until `build --allow-adapter <id>`. Hairness executes
-the entry with a minimal environment and a bounded output directory. It limits
-time and output size, rejects symlinks, undeclared outputs, reserved Kernel
-outputs and owner collisions, then reconciles staged files.
+Removing the declaring Asset removes its namespace.
 
-## Targets and Integrations
+## Provider projections
 
-A Target declaration stores a normalized Git remote. A local binding under
-`targets/` points to the independent checkout. Prologue reports the remote,
-binding, branch and clean state. Hairness never imports the Target into the Home
-repository.
+`build` writes managed regions in `AGENTS.md` and `CLAUDE.md`, Skills under
+`.agents/skills` and `.claude/skills`, and session hooks under `.codex` and
+`.claude`.
 
-An Integration declares acceptable CLI or provider accessors. The local Overlay
-stores the selected accessor per provider. Hairness does not install or
-authenticate external tools.
+Codex receives model-facing Skills. A command-only surface is omitted because
+Codex cannot preserve user-only invocation. The HUD records a warning. Home
+settings can record provider-specific lossy consent.
 
-## Prologue and doctor
+Claude receives model-facing Skills and command-only Skills with
+`disable-model-invocation: true`.
 
-`prologue` emits bounded preferences, facts and signals for session orientation.
-It excludes secrets and treats live evidence as a signal, not a guarantee.
+Desk Instructions enter `hud --prompt`; they never enter shared managed
+regions.
 
-`doctor` validates runtime, Assets, Targets, Integrations and generated
-outputs. A customized Asset remains healthy after a matching build; missing
-or invalid source files block readiness. Doctor reports `ready` or `partial`
-with repair routes.
+## HUD and Doctor
+
+The compact HUD reports Home, Desk, providers, surface counts, Git state,
+Target bindings, active Target and health. `--full` adds every resolved surface,
+owner, projection, context footprint and warning. `--json` returns the HUD
+schema. `--prompt` renders bounded session orientation.
+
+HUD probes call Kernel readers. They execute no Asset code.
+
+Doctor validates runtime, resolution, Asset state, projections, Targets and
+Integrations. It reports `ready` or `partial` and gives repair routes.

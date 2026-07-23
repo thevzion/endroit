@@ -3,8 +3,9 @@
 Read the [technical reference](docs/reference.md) and [security policy](SECURITY.md)
 before changing public behavior.
 
-Change canonical source under `src/`, `schemas/` or `assets/`. Keep the
-README, reference, schemas, CLI and tests aligned. Add a durable test for a
+Change canonical source under `src/`, `schemas/` or `assets/`. Provider
+projections are test output, not source. Keep the README, architecture,
+lifecycles, reference, schemas, CLI and tests aligned. Add a durable test for a
 recurring correction.
 
 ```bash
@@ -18,5 +19,5 @@ npm run check:lab
 ```
 
 Use Conventional Commits and keep changes focused. A new dependency, executable
-Adapter or public contract change needs a concrete consumer and maintainer
+Asset or public contract change needs a concrete consumer and maintainer
 agreement.

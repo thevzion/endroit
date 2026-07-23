@@ -1,61 +1,21 @@
 import { execFile } from 'node:child_process'
+import { mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
 const assets = new URL('../docs/assets/', import.meta.url).pathname
-const journey = join(assets, 'ness-journey.png')
-const social = join(assets, 'hairness-social-card.png')
-const proof = join(assets, 'terminal-proof.png')
+const proof = join(assets, 'checkpoint-terminal.png')
 
-await exec('magick', [
-  journey,
-  '-resize', '1200x630^',
-  '-gravity', 'center',
-  '-extent', '1200x630',
-  '-fill', 'rgba(15,17,19,0.80)',
-  '-draw', 'rectangle 0,0 650,630',
-  '-fill', 'rgba(15,17,19,0.42)',
-  '-draw', 'rectangle 650,0 830,630',
-  '-gravity', 'northwest',
-  '-font', 'Arial-Bold',
-  '-fill', '#d8996a',
-  '-pointsize', '22',
-  '-kerning', '4',
-  '-annotate', '+72+84', '0.4 ALPHA',
-  '-fill', '#f1eee8',
-  '-pointsize', '86',
-  '-kerning', '-2',
-  '-annotate', '+68+148', 'hairness',
-  '-font', 'Arial-Bold',
-  '-pointsize', '36',
-  '-kerning', '0',
-  '-annotate', '+72+268', 'Own the place where',
-  '-annotate', '+72+312', 'your agents work.',
-  '-stroke', '#d8996a',
-  '-strokewidth', '3',
-  '-draw', 'line 72,382 420,382',
-  '-stroke', 'none',
-  '-font', 'Arial',
-  '-fill', '#d8d4cd',
-  '-pointsize', '21',
-  '-annotate', '+72+426', 'A provider can host the agent.',
-  '-annotate', '+72+458', "It shouldn't own the Home.",
-  '-fill', '#a7aaa7',
-  '-pointsize', '18',
-  '-annotate', '+72+548', 'SOURCE-OWNED · PROVIDER-AGNOSTIC',
-  '-depth', '8',
-  social,
-])
-
+await mkdir(assets, { recursive: true })
 await exec('magick', [
   '-size', '1200x630',
-  'xc:#0f1113',
-  '-fill', '#191c1f',
-  '-stroke', '#30353a',
+  'xc:#111315',
+  '-fill', '#1b1e21',
+  '-stroke', '#34393e',
   '-strokewidth', '2',
   '-draw', 'roundrectangle 38,34 1162,596 18,18',
-  '-fill', '#22262a',
+  '-fill', '#25292d',
   '-stroke', 'none',
   '-draw', 'roundrectangle 40,36 1160,92 16,16',
   '-fill', '#e06c5f',
@@ -68,34 +28,34 @@ await exec('magick', [
   '-font', 'Courier-New-Bold',
   '-fill', '#aeb5ba',
   '-pointsize', '19',
-  '-annotate', '+170+56', 'hairness / checkpoint 1',
+  '-annotate', '+170+56', 'hairness 0.5 / local checkpoint',
   '-font', 'Courier-New',
   '-pointsize', '22',
   '-fill', '#d8996a',
   '-annotate', '+76+126', '$ npm run test:node22',
   '-fill', '#8fc49a',
-  '-annotate', '+76+166', '  tests 13  pass 13  fail 0',
+  '-annotate', '+76+166', '  tests 18  pass 18  fail 0',
   '-fill', '#d8996a',
   '-annotate', '+76+216', '$ npm run test:node24',
   '-fill', '#8fc49a',
-  '-annotate', '+76+256', '  tests 13  pass 13  fail 0',
+  '-annotate', '+76+256', '  tests 18  pass 18  fail 0',
   '-fill', '#d8996a',
   '-annotate', '+76+306', '$ npm run check:lab',
   '-fill', '#8fc49a',
-  '-annotate', '+76+346', '  README smoke · doctor ready',
+  '-annotate', '+76+346', '  Home + Desk + 3 Targets + HUD + Doctor ready',
   '-fill', '#d8996a',
   '-annotate', '+76+396', '$ npm run check:pack',
   '-fill', '#8fc49a',
-  '-annotate', '+76+436', '  one CLI · onboarding + Scratch bundled',
+  '-annotate', '+76+436', '  one CLI · four bundled Assets',
   '-fill', '#d8996a',
-  '-annotate', '+76+486', '$ hairness status',
+  '-annotate', '+76+486', '$ npm audit --omit=dev',
   '-fill', '#8fc49a',
-  '-annotate', '+76+526', '  source ownership intact',
+  '-annotate', '+76+526', '  found 0 vulnerabilities',
   '-fill', '#768089',
   '-pointsize', '17',
-  '-annotate', '+76+570', 'local qualification · no merge · no publish',
+  '-annotate', '+76+570', 'local qualification · no push · no merge · no publish',
   '-depth', '8',
   proof,
 ])
 
-process.stdout.write(`${social}\n${proof}\n`)
+process.stdout.write(`${proof}\n`)

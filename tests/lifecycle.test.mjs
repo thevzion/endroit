@@ -5,10 +5,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import test from 'node:test'
+import { addAssets, diffAsset, publishAsset, removeAsset, resolveAsset, statusAssets, syncAssets } from '../src/assets.mjs'
 import { buildHome } from '../src/build.mjs'
 import { createHome } from '../src/create.mjs'
-import { doctorHome } from '../src/doctor.mjs'
-import { addAssets, diffAsset, removeAsset, resolveAsset, statusAssets, syncAssets } from '../src/assets.mjs'
+import { executableApproved } from '../src/executables.mjs'
+import { resolveHome } from '../src/resolved.mjs'
 import { asset, writeAsset } from './helpers.mjs'
 
 const exec = promisify(execFile)
@@ -18,210 +19,153 @@ test('add, status, diff, sync and remove preserve source ownership', async () =>
   try {
     const home = join(root, 'home')
     await createHome(home)
-    const v1 = await writeAsset(join(root, 'v1'), asset(), { 'skills/review/SKILL.md': 'Review version one.\n' })
+    const v1 = await writeAsset(join(root, 'v1'), asset(), { 'capabilities/review.md': 'Review version one.\n' })
     await addAssets(home, [v1])
     assert.equal((await statusAssets(home, 'fixture/review'))[0].state, 'clean')
     await buildHome(home)
-    assert.match(await readFile(join(home, '.agents/skills/review/SKILL.md'), 'utf8'), /version one/)
+    assert.match(await readFile(join(home, '.agents/skills/hairness-review/SKILL.md'), 'utf8'), /version one/)
 
-    const sourceFile = join(home, 'assets/fixture/review/skills/review/SKILL.md')
+    const sourceFile = join(home, 'assets/fixture/review/capabilities/review.md')
     await writeFile(sourceFile, 'Local customization.\n')
     assert.equal((await statusAssets(home, 'review'))[0].state, 'customized')
-    await buildHome(home)
-    assert.equal((await doctorHome(home)).status, 'ready')
-    const v2 = await writeAsset(join(root, 'v2'), asset({ version: '2.0.0', files: [
-      { path: 'skills/review/SKILL.md', type: 'hairness:skill', id: 'review', description: 'Review a subject.' },
-      { path: 'knowledge/new.md', type: 'hairness:file' },
-    ] }), { 'skills/review/SKILL.md': 'Review version two.\n', 'knowledge/new.md': 'New knowledge.\n' })
+    const v2 = await writeAsset(join(root, 'v2'), asset({
+      version: '2.0.0',
+      references: [{ id: 'new', source: 'knowledge/new.md', description: 'New knowledge.' }],
+    }), { 'capabilities/review.md': 'Review version two.\n', 'knowledge/new.md': 'New knowledge.\n' })
     const before = await readFile(sourceFile)
     await assert.rejects(() => syncAssets(home, 'review', { to: v2 }), (error) => error.code === 'sync_customized')
     assert.deepEqual(await readFile(sourceFile), before)
-    assert.equal((await diffAsset(home, 'review', { to: v2 })).files.find((file) => file.path === 'skills/review/SKILL.md').change, 'changed')
+    assert.equal((await diffAsset(home, 'review', { to: v2 })).files.find((file) => file.path === 'capabilities/review.md').change, 'changed')
 
     const unknown = join(home, 'assets/fixture/review/notes.md')
     await writeFile(unknown, 'Owned locally.\n')
     await syncAssets(home, 'review', { to: v2, overwrite: true })
-    assert.equal((await statusAssets(home, 'review'))[0].state, 'clean')
     assert.equal(await readFile(unknown, 'utf8'), 'Owned locally.\n')
     assert.equal(await readFile(sourceFile, 'utf8'), 'Review version two.\n')
-    const v3 = await writeAsset(join(root, 'v3'), asset({ version: '3.0.0' }), { 'skills/review/SKILL.md': 'Review version three.\n' })
-    await syncAssets(home, 'review', { to: v3 })
-    await assert.rejects(readFile(join(home, 'assets/fixture/review/knowledge/new.md')), (error) => error.code === 'ENOENT')
+    await removeAsset(home, 'review')
     assert.equal(await readFile(unknown, 'utf8'), 'Owned locally.\n')
-    await writeFile(sourceFile, 'Another customization.\n')
-    await assert.rejects(() => removeAsset(home, 'review'), (error) => error.code === 'asset_customized')
-    await removeAsset(home, 'review', { overwrite: true })
-    assert.equal(await readFile(unknown, 'utf8'), 'Owned locally.\n')
-    await assert.rejects(readFile(sourceFile), (error) => error.code === 'ENOENT')
   } finally {
     await rm(root, { recursive: true, force: true })
   }
 })
 
-test('installed Assets can be shared with fresh provenance and local manifest edits block sync', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'hairness-manifest-'))
+test('a Desk Asset publishes to the Home with origin removed', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hairness-publish-'))
   try {
     const home = join(root, 'home')
     await createHome(home)
-    const source = await writeAsset(join(root, 'source'), asset(), { 'skills/review/SKILL.md': 'Review.\n' })
-    await addAssets(home, [source])
-    const installedPath = join(home, 'assets/fixture/review/hairness.json')
-    const installed = JSON.parse(await readFile(installedPath, 'utf8'))
-    assert.equal(installed.installation.source, source)
-    assert.match(installed.installation.baseManifestDigest, /^sha256:/)
-    await assert.rejects(readFile(join(home, 'assets/fixture/review/hairness.item.json')), (error) => error.code === 'ENOENT')
-
-    const secondHome = join(root, 'second-home')
-    await createHome(secondHome)
-    await addAssets(secondHome, [installedPath])
-    const shared = JSON.parse(await readFile(join(secondHome, 'assets/fixture/review/hairness.json'), 'utf8'))
-    assert.equal(shared.installation.source, installedPath)
-    assert.equal(shared.installation.requestedRef, null)
-    assert.equal(shared.installation.resolvedCommit, null)
-    assert.equal(shared.installation.mobile, true)
-    assert.equal(shared.installation.baseManifestDigest, installed.installation.baseManifestDigest)
-
-    installed.description = 'Locally described.'
-    await writeFile(installedPath, `${JSON.stringify(installed, null, 2)}\n`)
-    assert.equal((await statusAssets(home, 'review'))[0].manifest, 'customized')
-    await assert.rejects(() => syncAssets(home, 'review'), (error) => error.code === 'sync_customized')
+    const source = await writeAsset(join(root, 'source'), asset({ name: 'personal/proof' }), { 'capabilities/review.md': 'Personal proof.\n' })
+    await addAssets(home, [source], { scope: 'desk' })
+    const result = await publishAsset(home, 'personal/proof')
+    assert.equal(result.status, 'published')
+    const manifest = JSON.parse(await readFile(join(home, 'assets/personal/proof/asset.json'), 'utf8'))
+    assert.equal('origin' in manifest, false)
+    await assert.rejects(readFile(join(home, '.desk/assets/personal/proof/asset.json')), (error) => error.code === 'ENOENT')
+    assert.equal((await statusAssets(home, 'personal/proof'))[0].state, 'local')
   } finally {
     await rm(root, { recursive: true, force: true })
   }
 })
 
-test('Scratch is absent by default and becomes owned source only after an explicit add', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'hairness-scratch-'))
-  try {
-    const home = join(root, 'home')
-    await createHome(home)
-    await assert.rejects(readFile(join(home, 'assets/hairness/scratch/hairness.json')), (error) => error.code === 'ENOENT')
-    await addAssets(home, ['@hairness/scratch'])
-    await buildHome(home)
-    assert.match(await readFile(join(home, '.agents/skills/hairness-scratch/SKILL.md'), 'utf8'), /explicit, lightweight working memory/i)
-    assert.equal((await statusAssets(home, 'hairness/scratch'))[0].state, 'clean')
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-})
-
-test('status reports an invalid installed manifest without hiding the Asset', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'hairness-invalid-'))
-  try {
-    const home = join(root, 'home')
-    await createHome(home)
-    const path = join(home, 'assets/hairness/onboarding/hairness.json')
-    await writeFile(path, '{ invalid json\n')
-    const [status] = await statusAssets(home, 'hairness/onboarding')
-    assert.equal(status.state, 'invalid')
-    await assert.rejects(() => buildHome(home), (error) => error.code === 'asset_invalid')
-
-    const legacyHome = join(root, 'legacy-home')
-    await createHome(legacyHome)
-    await mkdir(join(legacyHome, 'extensions'), { recursive: true })
-    await assert.rejects(() => buildHome(legacyHome), (error) => error.code === 'legacy_asset_layout')
-
-    const oldSchema = join(root, 'old-schema.json')
-    await writeFile(oldSchema, `${JSON.stringify({ ...asset(), $schema: 'https://hairness.dev/schema/extension.json' }, null, 2)}\n`)
-    await assert.rejects(() => resolveAsset(home, oldSchema), (error) => error.code === 'document_invalid')
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-})
-
-test('HTTPS manifests install their relative source files and reject query secrets', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'hairness-https-'))
-  const previousFetch = globalThis.fetch
-  try {
-    const home = join(root, 'home')
-    await createHome(home)
-    globalThis.fetch = async (url) => {
-      if (String(url).endsWith('hairness.json')) return new Response(JSON.stringify(asset({ name: 'remote/review', files: [{ path: 'review.md', type: 'hairness:file' }] })), { status: 200 })
-      return new Response('Remote.\n', { status: 200 })
-    }
-    await addAssets(home, ['https://assets.example/assets/review/hairness.json'])
-    assert.equal(await readFile(join(home, 'assets/remote/review/review.md'), 'utf8'), 'Remote.\n')
-    await assert.rejects(() => resolveAsset(home, 'https://assets.example/hairness.json?token=secret'), (error) => error.code === 'source_insecure')
-  } finally {
-    globalThis.fetch = previousFetch
-    await rm(root, { recursive: true, force: true })
-  }
-})
-
-test('Adapters are inert during add and require explicit build approval', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'hairness-adapter-'))
-  try {
-    const home = join(root, 'home')
-    await createHome(home)
-    const adapter = await writeAsset(join(root, 'adapter'), asset({
-      name: 'fixture/adapter', files: [{ path: 'adapter.mjs', type: 'hairness:file' }],
-      adapter: { id: 'fixture-adapter', entry: 'adapter.mjs', outputs: ['generated'] },
-    }), {
-      'adapter.mjs': "import { mkdirSync, writeFileSync } from 'node:fs'; import { join } from 'node:path'; const root = process.env.HAIRNESS_OUTPUT_DIR; mkdirSync(join(root, 'generated'), { recursive: true }); writeFileSync(join(root, 'generated/proof.txt'), 'adapter ready\\n')\n",
-    })
-    await addAssets(home, [adapter])
-    await assert.rejects(readFile(join(home, 'generated/proof.txt')), (error) => error.code === 'ENOENT')
-    await assert.rejects(() => buildHome(home), (error) => error.code === 'adapter_approval_required')
-    await buildHome(home, { allowAdapters: ['fixture-adapter'] })
-    assert.equal(await readFile(join(home, 'generated/proof.txt'), 'utf8'), 'adapter ready\n')
-    await buildHome(home, { check: true })
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-})
-
-test('Adapters cannot claim Kernel-managed files', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'hairness-adapter-reserved-'))
-  try {
-    const home = join(root, 'home')
-    await createHome(home, { providers: ['codex'] })
-    const before = await readFile(join(home, '.codex/hooks.json'))
-    const adapter = await writeAsset(join(root, 'adapter'), asset({
-      name: 'fixture/reserved', files: [{ path: 'adapter.mjs', type: 'hairness:file' }],
-      adapter: { id: 'reserved-adapter', entry: 'adapter.mjs', outputs: ['.codex'] },
-    }), {
-      'adapter.mjs': "import { mkdirSync, writeFileSync } from 'node:fs'; import { join } from 'node:path'; const root = process.env.HAIRNESS_OUTPUT_DIR; mkdirSync(join(root, '.codex'), { recursive: true }); writeFileSync(join(root, '.codex/hooks.json'), '{}\\n')\n",
-    })
-    await addAssets(home, [adapter])
-    await assert.rejects(() => buildHome(home, { allowAdapters: ['reserved-adapter'] }), (error) => error.code === 'adapter_output_reserved')
-    assert.deepEqual(await readFile(join(home, '.codex/hooks.json')), before)
-  } finally {
-    await rm(root, { recursive: true, force: true })
-  }
-})
-
-test('paths, collisions and symlinks are rejected before any Home write', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'hairness-paths-'))
+test('legacy manifests, Overlay, path escapes, symlinks and Home/Desk shadows are rejected', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hairness-safety-'))
   try {
     const home = join(root, 'home')
     await createHome(home)
     const source = join(root, 'source')
-    await mkdir(source, { recursive: true })
+    await mkdir(source)
     await writeFile(join(root, 'outside.md'), 'outside\n')
     await symlink(join(root, 'outside.md'), join(source, 'linked.md'))
-    const manifest = await writeAsset(source, asset({ files: [{ path: 'linked.md', type: 'hairness:file' }] }))
-    await assert.rejects(() => addAssets(home, [manifest]), (error) => error.code === 'symlink_forbidden')
-    await assert.rejects(readFile(join(home, 'assets/fixture/review/hairness.json')), (error) => error.code === 'ENOENT')
+    const linked = await writeAsset(source, asset({ files: [{ source: 'linked.md' }] }), { 'capabilities/review.md': 'Review.\n' })
+    await assert.rejects(() => addAssets(home, [linked]), (error) => error.code === 'symlink_forbidden')
 
-    const first = await writeAsset(join(root, 'first'), asset(), { 'skills/review/SKILL.md': 'First.\n' })
-    const second = await writeAsset(join(root, 'second'), asset({ name: 'fixture/second' }), { 'skills/review/SKILL.md': 'Second.\n' })
-    await addAssets(home, [first])
-    await assert.rejects(() => addAssets(home, [second]), (error) => error.code === 'capability_collision')
-    await assert.rejects(readFile(join(home, 'assets/fixture/second/hairness.json')), (error) => error.code === 'ENOENT')
+    const old = join(root, 'hairness.json')
+    await writeFile(old, JSON.stringify(asset()))
+    await assert.rejects(() => resolveAsset(home, old), (error) => error.code === 'legacy_asset_manifest')
+
+    const clean = await writeAsset(join(root, 'clean'), asset({ name: 'fixture/shadow' }), { 'capabilities/review.md': 'Review.\n' })
+    await addAssets(home, [clean])
+    await assert.rejects(() => addAssets(home, [clean], { scope: 'desk' }), (error) => error.code === 'asset_collision')
+
+    await mkdir(join(home, '.overlay'))
+    await assert.rejects(() => statusAssets(home), (error) => error.code === 'legacy_overlay')
+    await rm(join(home, '.overlay'), { recursive: true, force: true })
+    await mkdir(join(home, '.codex'), { recursive: true })
+    await writeFile(join(home, '.codex/hooks.json'), '{"hooks":{"SessionStart":[{"hooks":[{"command":"npx --yes @hairness/cli@0.4.0-alpha.1 prologue"}]}]}}\n')
+    await assert.rejects(() => statusAssets(home), (error) => error.code === 'legacy_prologue')
   } finally {
     await rm(root, { recursive: true, force: true })
   }
 })
 
-test('GitHub tag, commit and mobile addresses resolve an autonomous manifest', async () => {
+test('executables are inert on add, approved by digest and revoked after source changes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hairness-executable-'))
+  try {
+    const home = join(root, 'home')
+    await createHome(home)
+    const manifest = asset({
+      name: 'fixture/executable',
+      capabilities: [],
+      skills: [],
+      executables: [{ id: 'proof', entry: 'proof.mjs', runOn: 'build', outputs: ['generated'] }],
+      files: [],
+    })
+    const source = await writeAsset(join(root, 'source'), manifest, {
+      'proof.mjs': "import { mkdirSync, writeFileSync } from 'node:fs'; import { join } from 'node:path'; const root = process.env.HAIRNESS_OUTPUT_DIR; mkdirSync(join(root, 'generated'), { recursive: true }); writeFileSync(join(root, 'generated/proof.txt'), 'ready\\n')\n",
+    })
+    await addAssets(home, [source])
+    await assert.rejects(readFile(join(home, 'generated/proof.txt')), (error) => error.code === 'ENOENT')
+    await assert.rejects(() => buildHome(home), (error) => error.code === 'executable_approval_required')
+    await buildHome(home, { allowExecutables: ['fixture/executable:proof'] })
+    assert.equal(await readFile(join(home, 'generated/proof.txt'), 'utf8'), 'ready\n')
+    const executable = (await resolveHome(home)).executables[0]
+    assert.equal(await executableApproved(home, executable), true)
+    await writeFile(join(home, 'assets/fixture/executable/proof.mjs'), `${await readFile(join(home, 'assets/fixture/executable/proof.mjs'), 'utf8')}\n`)
+    assert.equal(await executableApproved(home, (await resolveHome(home)).executables[0]), false)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('approved executables cannot write outside their staging directory', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hairness-executable-sandbox-'))
+  try {
+    const home = join(root, 'home')
+    await createHome(home)
+    const manifest = asset({
+      name: 'fixture/escape',
+      capabilities: [],
+      skills: [],
+      executables: [{ id: 'escape', entry: 'escape.mjs', runOn: 'build', outputs: ['generated'] }],
+      files: [],
+    })
+    const source = await writeAsset(join(root, 'source'), manifest, {
+      'escape.mjs': "import { writeFileSync } from 'node:fs'; writeFileSync('../../escaped.txt', 'unsafe\\n')\n",
+    })
+    await addAssets(home, [source])
+    await assert.rejects(
+      () => buildHome(home, { allowExecutables: ['fixture/escape:escape'] }),
+      (error) => error.code === 'executable_failed' && /ERR_ACCESS_DENIED|restricted/.test(error.message),
+    )
+    await assert.rejects(readFile(join(home, 'escaped.txt')), (error) => error.code === 'ENOENT')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('GitHub tag, commit and mobile addresses resolve asset.json', async () => {
   const root = await mkdtemp(join(tmpdir(), 'hairness-github-'))
   const previous = Object.fromEntries(['GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1'].map((key) => [key, process.env[key]]))
   try {
+    await assert.rejects(
+      () => resolveAsset(root, 'acme/repository/assets/review#--upload-pack=evil'),
+      (error) => error.code === 'source_invalid',
+    )
     const repository = join(root, 'source')
     const github = join(root, 'github')
     const bare = join(github, 'acme/assets.git')
     await exec('git', ['init', '--quiet', '--initial-branch=main', repository])
-    await writeAsset(join(repository, 'assets/review'), asset({ name: 'acme/review' }), { 'skills/review/SKILL.md': 'GitHub source.\n' })
+    await writeAsset(join(repository, 'assets/review'), asset({ name: 'acme/review' }), { 'capabilities/review.md': 'GitHub source.\n' })
     await exec('git', ['add', '--all'], { cwd: repository })
     await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'asset'], { cwd: repository })
     await exec('git', ['tag', 'v1.0.0'], { cwd: repository })
@@ -236,11 +180,10 @@ test('GitHub tag, commit and mobile addresses resolve an autonomous manifest', a
     const home = join(root, 'home')
     await createHome(home)
     await addAssets(home, ['acme/assets/assets/review#v1.0.0'])
-    const installed = JSON.parse(await readFile(join(home, 'assets/acme/review/hairness.json'), 'utf8'))
-    assert.equal(installed.installation.requestedRef, 'v1.0.0')
-    assert.equal(installed.installation.resolvedCommit, commit)
-    assert.equal(installed.installation.mobile, false)
-    assert.equal(await readFile(join(home, 'assets/acme/review/skills/review/SKILL.md'), 'utf8'), 'GitHub source.\n')
+    const installed = JSON.parse(await readFile(join(home, 'assets/acme/review/asset.json'), 'utf8'))
+    assert.equal(installed.origin.requestedRef, 'v1.0.0')
+    assert.equal(installed.origin.resolvedCommit, commit)
+    assert.equal(installed.origin.mobile, false)
     assert.equal((await resolveAsset(home, 'acme/assets/assets/review')).mobile, true)
     assert.equal((await resolveAsset(home, `acme/assets/assets/review#${commit}`)).mobile, false)
   } finally {
@@ -251,3 +194,46 @@ test('GitHub tag, commit and mobile addresses resolve an autonomous manifest', a
     await rm(root, { recursive: true, force: true })
   }
 })
+
+test('HTTPS Assets resolve relative source files without exposing URL secrets', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hairness-https-'))
+  const previousFetch = globalThis.fetch
+  try {
+    const manifest = asset({ name: 'fixture/https' })
+    globalThis.fetch = async (url) => {
+      const value = String(url)
+      const content = value.endsWith('/asset.json')
+        ? `${JSON.stringify(manifest)}\n`
+        : value.endsWith('/capabilities/review.md')
+          ? 'HTTPS review.\n'
+          : null
+      if (content === null) return response(value, 'missing', 404)
+      return response(value, content, 200)
+    }
+    const home = join(root, 'home')
+    await createHome(home)
+    await addAssets(home, ['https://assets.example.test/review/asset.json'])
+    assert.equal(await readFile(join(home, 'assets/fixture/https/capabilities/review.md'), 'utf8'), 'HTTPS review.\n')
+    assert.equal((await statusAssets(home, 'fixture/https'))[0].mobile, true)
+    await assert.rejects(
+      () => resolveAsset(home, 'https://token:secret@assets.example.test/review/asset.json'),
+      (error) => error.code === 'source_insecure' && !error.message.includes('token:secret'),
+    )
+    await assert.rejects(
+      () => resolveAsset(home, 'https://assets.example.test/review/asset.json?token=secret'),
+      (error) => error.code === 'source_insecure' && !error.message.includes('token=secret'),
+    )
+  } finally {
+    globalThis.fetch = previousFetch
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+function response(url, content, status) {
+  return {
+    url,
+    ok: status >= 200 && status < 300,
+    status,
+    arrayBuffer: async () => Buffer.from(content),
+  }
+}

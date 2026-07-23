@@ -1,9 +1,9 @@
 # Security policy
 
-Hairness `0.4.0-alpha.1` is prerelease software. Report vulnerabilities through
+Hairness `0.5.0-alpha.0` is prerelease software. Report vulnerabilities through
 [GitHub Security Advisories](https://github.com/thevzion/hairness/security/advisories/new).
-Do not put credentials, private Home content or unpublished company assets in a
-public issue.
+Do not put credentials, private Home content or unpublished company Assets in
+a public issue.
 
 ## Trust model
 
@@ -12,43 +12,49 @@ flowchart LR
   source["Untrusted Asset source"] --> validate["Schema, path and symlink checks"]
   validate --> copy["Inert transactional copy"]
   copy --> home["Source-owned Home"]
-  home --> consent["Named Adapter approval"]
-  consent --> stage["Bounded staging process"]
-  stage --> promote["Declared output, owner and digest checks"]
+  home --> consent["Digest-bound executable approval"]
+  consent --> stage["Permission-limited staging process"]
+  stage --> promote["Declared output and ownership checks"]
 ```
 
-Hairness treats every manifest and static file as untrusted input. It treats an
-approved Adapter as executable source with local access. Review the Adapter
-before passing `--allow-adapter`.
-
-Provider sessions and their tools remain outside Hairness authority. A composed
-Home does not authorize an agent to change a Target or use an Integration.
+Hairness treats manifests and static files as untrusted input. An executable
+Asset becomes trusted code only after local approval for its current digest.
+Provider sessions and their tools remain outside Hairness authority.
 
 ## Enforced controls
 
-- JSON schemas reject unknown fields and invalid manifests.
+- JSON schemas reject unknown manifest fields and invalid settings.
 - Source and destination checks reject escaping paths, duplicate destinations
   and symbolic links.
-- HTTPS sources reject credentials and query strings in URLs. Redirects must
-  remain on HTTPS.
-- `add`, `status`, `diff`, `sync` and `remove` execute no Asset code.
-- Transactions stage all writes, back up touched paths and restore them after a
-  failed promotion.
+- HTTPS sources reject credentials and query strings. Redirects must remain on
+  HTTPS.
+- Asset add, status, diff, sync, remove, setup, resolution and HUD execute no
+  Asset code.
+- File transactions stage writes, back up touched paths and restore them after
+  a failed promotion.
 - Sync and remove stop on local divergence unless the user passes
-  `--overwrite`. Undeclared local files survive both operations.
-- `build --check` and `sync --check` write nothing.
-- Adapter execution requires a named approval. Hairness limits runtime and
-  output size, clears most environment variables and rejects undeclared,
-  reserved, symbolic-link or colliding output.
-- Target binding verifies a Git remote before creating a local symlink.
-- Integration bindings select accessors and contain no credentials.
-- Prologue rejects secret-like material before rendering it into a session.
+  `--overwrite`. Undeclared files survive.
+- `build --check` and `asset sync --check` write nothing.
+- Executable approval covers the current Asset tree. A change revokes approval.
+- Node's permission model limits executable filesystem reads to the Asset and
+  writes to staging. Hairness also limits runtime and output size.
+- Promotion rejects undeclared, reserved, symbolic-link or colliding output.
+- Target binding verifies a Git remote before it creates a local symlink.
+- Integration bindings select accessors and store no credentials.
+- Provider projections omit a surface when the provider cannot preserve its
+  invocation policy. The user must record lossy consent to widen access.
 
-## User responsibilities
+## Boundaries
 
-Commit a Home before changing Assets. Pin Git sources with a tag or full
-commit when reproducibility matters. Review source diffs and Adapter code.
-Protect the Home repository according to the sensitivity of its agentic assets.
+Hairness cannot control an agent after a provider starts it. A composed Home
+does not authorize the agent to change a Target or use an Integration.
 
-The Adapter process does not provide an operating-system sandbox. Run Hairness
-inside an isolated environment when you do not trust the Adapter author.
+The Node permission model limits direct filesystem access from an executable.
+An Asset can request `child-process`; the manifest and approval expose that
+wider boundary. A child process does not inherit Node's filesystem restrictions.
+Approve that permission only when you trust the Asset and the invoked program.
+
+Keep a Home in Git. Pin Git sources with a tag or full commit when
+reproducibility matters. Review source diffs and executable code. Protect the
+Home and Desk repositories according to the sensitivity of their agentic
+material.

@@ -14,81 +14,101 @@ const githubAddress = /^([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)\/(.+?)(?:#([^#]+))?
 export async function resolveAsset(root, address) {
   const source = String(address)
   const official = source.match(/^@hairness\/([a-z0-9][a-z0-9._-]*)$/)
-  if (official) return loadManifest(join(builtinRoot, official[1], 'hairness.json'), { root, source, mobile: false })
-  if (source.startsWith('@')) throw new HairnessError('source_invalid', `Unsupported Asset namespace ${source}; use a GitHub, HTTPS or local manifest address.`)
+  if (official) return loadManifest(join(builtinRoot, official[1], 'asset.json'), { root, source, mobile: false, boundary: builtinRoot })
+  if (source.startsWith('@')) throw new HairnessError('source_invalid', `Unsupported Asset namespace ${source}; use a GitHub, HTTPS or local asset.json address.`)
   if (/^https:\/\//.test(source)) return loadManifest(assertSafeUrl(source), { root, source, mobile: true })
   if (/^http:\/\//.test(source)) throw new HairnessError('source_insecure', 'Asset URLs must use HTTPS.')
-  if (source.startsWith('.') || source.startsWith('/')) return loadManifest(source, { root, source, mobile: true })
+  if (source.startsWith('.') || source.startsWith('/')) {
+    if (source.split(/[\\/]/).at(-1) !== 'asset.json') {
+      throw new HairnessError('legacy_asset_manifest', 'Local Assets must be addressed through asset.json.')
+    }
+    return loadManifest(source, { root, source, mobile: true })
+  }
   const github = source.match(githubAddress)
   if (github) return loadGithub(source, github)
   throw new HairnessError('source_invalid', `Unsupported Asset address ${source}.`)
 }
 
 export async function addAssets(root, addresses, options = {}) {
+  const scope = options.scope ?? 'home'
+  if (!['home', 'desk'].includes(scope)) throw new HairnessError('scope_invalid', `Unsupported Asset scope ${scope}.`)
   const resolved = await Promise.all(addresses.map((address) => resolveAsset(root, address)))
   const ids = resolved.map((entry) => entry.manifest.name)
   if (new Set(ids).size !== ids.length) throw new HairnessError('asset_collision', 'Each Asset may be selected only once per add transaction.')
   const installed = (await installedAssets(root)).filter((entry) => !entry.invalid)
-  assertCapabilityCollisions([
-    ...installed.filter((entry) => !options.overwrite || !ids.includes(entry.manifest.name)).map((entry) => entry.manifest),
-    ...resolved.map((entry) => entry.manifest),
+  const replacing = new Set(options.overwrite ? ids.map((id) => `${scope}:${id}`) : [])
+  assertAssetNames([
+    ...installed.filter((entry) => !replacing.has(`${entry.scope}:${entry.id}`)),
+    ...resolved.map((entry) => ({ id: entry.manifest.name, scope })),
   ])
-  const current = new Set(installed.map((entry) => entry.manifest.name))
   const writes = []
   for (const asset of resolved) {
-    const id = asset.manifest.name
-    if (current.has(id) && !options.overwrite) throw new HairnessError('asset_exists', `${id} is already installed.`)
-    const assetRoot = join(root, 'assets', id)
+    const assetRoot = join(assetBase(root, scope), asset.manifest.name)
+    if (installed.some((entry) => entry.scope === scope && entry.id === asset.manifest.name) && !options.overwrite) {
+      throw new HairnessError('asset_exists', `${scope} Asset ${asset.manifest.name} is already installed.`)
+    }
     for (const file of asset.files) {
       const path = assertInside(assetRoot, join(assetRoot, file.path), 'Asset destination')
       if (await exists(path) && !options.overwrite) throw new HairnessError('file_collision', `${relative(root, path)} already exists.`)
       writes.push({ path, content: file.content })
     }
-    const manifestPath = join(assetRoot, 'hairness.json')
+    const manifestPath = join(assetRoot, 'asset.json')
     if (await exists(manifestPath) && !options.overwrite) throw new HairnessError('file_collision', `${relative(root, manifestPath)} already exists.`)
     writes.push({ path: manifestPath, content: manifestBytes(installedManifest(asset)) })
   }
-  const preview = plan(root, writes, [])
-  if (options.dryRun) return { status: 'planned', assets: ids, ...preview }
+  const preview = transactionPlan(root, writes, [])
+  if (options.dryRun) return { status: 'planned', scope, assets: ids, ...preview }
   await applyTransaction(root, writes, [])
-  return { status: 'added', assets: ids, ...preview }
+  return { status: 'added', scope, assets: ids, ...preview }
 }
 
-export async function installedAssets(root) {
+export async function installedAssets(root, options = {}) {
+  await assertNoLegacyState(root)
   if (await exists(join(root, 'extensions'))) {
-    throw new HairnessError('legacy_asset_layout', 'The legacy extensions/ layout is unsupported; move managed sources under assets/.')
+    throw new HairnessError('legacy_asset_layout', 'The legacy extensions/ layout is unsupported.')
   }
-  const base = join(root, 'assets')
-  if (!await exists(base)) return []
+  if (await exists(join(root, '.overlay'))) {
+    throw new HairnessError('legacy_overlay', 'The legacy .overlay/ layout is unsupported; migrate it to .desk/.')
+  }
+  const scopes = options.scope ? [options.scope] : ['home', 'desk']
   const values = []
-  for (const namespace of await directories(base, root)) {
-    for (const name of await directories(join(base, namespace), root)) {
-      const path = join(base, namespace, name, 'hairness.json')
-      if (!await exists(path)) continue
-      values.push(await loadInstalled(root, path, `${namespace}/${name}`))
+  for (const scope of scopes) values.push(...await scanAssets(root, scope))
+  assertAssetNames(values.filter((entry) => !entry.invalid))
+  return values.sort((left, right) => `${left.scope}:${left.id}`.localeCompare(`${right.scope}:${right.id}`))
+}
+
+async function assertNoLegacyState(root) {
+  for (const path of [join(root, '.codex', 'hooks.json'), join(root, '.claude', 'settings.json')]) {
+    const content = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? '' : Promise.reject(error))
+    if (/(?:@hairness\/cli@\S+|(?:^|\s)hairness)\s+prologue\b/.test(content)) {
+      throw new HairnessError('legacy_prologue', `${relative(root, path)} contains an unsupported Prologue hook; Hairness 0.5 uses the HUD.`)
     }
   }
-  const ids = values.filter((entry) => !entry.invalid).map((entry) => entry.manifest.name)
-  if (new Set(ids).size !== ids.length) throw new HairnessError('asset_invalid', 'Installed Asset names must be unique.')
-  return values.sort((left, right) => left.id.localeCompare(right.id))
 }
 
-export async function statusAssets(root, selector) {
-  const entries = selector ? [await findInstalled(root, selector)] : await installedAssets(root)
+export async function statusAssets(root, selector, options = {}) {
+  const entries = selector ? [await findInstalled(root, selector, options)] : await installedAssets(root, options)
   return Promise.all(entries.map(assetStatus))
 }
 
+export async function validateAsset(root, selector, options = {}) {
+  const entry = await requireValid(await findInstalled(root, selector, options))
+  return { name: entry.id, scope: entry.scope, status: 'valid', paths: sourcePaths(entry.manifest) }
+}
+
 export async function diffAsset(root, selector, options = {}) {
-  const installed = await requireValid(await findInstalled(root, selector))
+  const installed = await requireValid(await findInstalled(root, selector, options))
+  const origin = requireOrigin(installed)
   const local = await assetStatus(installed)
-  const upstream = await resolveAsset(root, options.to ?? installed.manifest.installation.source)
+  const upstream = await resolveAsset(root, options.to ?? origin.source)
   assertSameAsset(installed, upstream)
-  const base = installed.manifest.installation.baseDigests
+  const base = origin.baseDigests
   const next = new Map(upstream.files.map((file) => [file.path, digest(file.content)]))
   const paths = [...new Set([...Object.keys(base), ...next.keys()])].sort()
   return {
-    name: installed.manifest.name,
-    from: { version: installed.manifest.version, commit: installed.manifest.installation.resolvedCommit },
+    name: installed.id,
+    scope: installed.scope,
+    from: { version: installed.manifest.version, commit: origin.resolvedCommit },
     to: { version: upstream.manifest.version, commit: upstream.resolvedCommit },
     local: local.state,
     files: paths.map((path) => ({
@@ -100,54 +120,74 @@ export async function diffAsset(root, selector, options = {}) {
 }
 
 export async function syncAssets(root, selector, options = {}) {
-  const selected = options.all ? await installedAssets(root) : [await findInstalled(root, selector)]
+  const selected = options.all ? await installedAssets(root, options) : [await findInstalled(root, selector, options)]
   const results = []
   for (const installed of selected) results.push(await syncOne(root, await requireValid(installed), options))
   return results
 }
 
 export async function removeAsset(root, selector, options = {}) {
-  const installed = await requireValid(await findInstalled(root, selector))
+  const installed = await requireValid(await findInstalled(root, selector, options))
   const current = await assetStatus(installed)
-  if (current.state !== 'clean' && !options.overwrite) {
-    throw new HairnessError('asset_customized', `${installed.id} has customized, missing or invalid source-owned files.`, { details: current })
+  if ((current.state !== 'clean' || !installed.manifest.origin) && !options.overwrite) {
+    throw new HairnessError('asset_customized', `${installed.scope} Asset ${installed.id} is not safely recoverable; pass --overwrite to remove its declared files.`, { details: current })
   }
-  const deletes = [...Object.keys(installed.manifest.installation.baseDigests).map((path) => join(installed.root, path)), installed.path]
+  const paths = installed.manifest.origin ? Object.keys(installed.manifest.origin.baseDigests) : sourcePaths(installed.manifest)
+  const deletes = [...paths.map((path) => join(installed.root, path)), installed.path]
   await applyTransaction(root, [], deletes)
-  await removeEmptyParents(installed.root, join(root, 'assets'))
-  return { status: 'removed', name: installed.id, files: Object.keys(installed.manifest.installation.baseDigests) }
+  await removeEmptyParents(installed.root, assetBase(root, installed.scope))
+  return { status: 'removed', name: installed.id, scope: installed.scope, files: paths }
+}
+
+export async function publishAsset(root, selector) {
+  const installed = await requireValid(await findInstalled(root, selector, { scope: 'desk' }))
+  const destination = join(assetBase(root, 'home'), installed.id)
+  if (await exists(join(destination, 'asset.json'))) throw new HairnessError('asset_exists', `Home Asset ${installed.id} already exists.`)
+  const paths = sourcePaths(installed.manifest)
+  const writes = []
+  for (const path of paths) {
+    const source = await resolvePackageFile(installed.root, path, `${installed.id} source`)
+    writes.push({ path: join(destination, path), content: await readFile(source) })
+  }
+  writes.push({ path: join(destination, 'asset.json'), content: manifestBytes(sourceManifest(installed.manifest)) })
+  const deletes = [...paths.map((path) => join(installed.root, path)), installed.path]
+  await applyTransaction(root, writes, deletes)
+  await removeEmptyParents(installed.root, assetBase(root, 'desk'))
+  return { status: 'published', name: installed.id, from: 'desk', to: 'home', files: paths }
 }
 
 export async function assetStatus(entry) {
-  if (entry.invalid) return { name: entry.id, state: 'invalid', manifest: 'invalid', files: [], error: entry.invalid.message }
-  const installation = entry.manifest.installation
-  const expectedManifest = installation.baseManifestDigest
-  const actualManifest = manifestDigest(entry.manifest)
-  const manifest = actualManifest === expectedManifest ? 'clean' : 'customized'
+  if (entry.invalid) return { name: entry.id, scope: entry.scope, state: 'invalid', manifest: 'invalid', files: [], error: entry.invalid.message }
+  const paths = entry.manifest.origin ? Object.keys(entry.manifest.origin.baseDigests) : sourcePaths(entry.manifest)
   const files = []
-  for (const [path, expected] of Object.entries(installation.baseDigests)) {
-    let state
+  for (const path of paths) {
+    let state = 'clean'
     try {
       const info = await lstat(join(entry.root, path))
       if (info.isSymbolicLink() || !info.isFile()) state = 'invalid'
-      else state = digest(await readFile(join(entry.root, path))) === expected ? 'clean' : 'customized'
+      else if (entry.manifest.origin && digest(await readFile(join(entry.root, path))) !== entry.manifest.origin.baseDigests[path]) state = 'customized'
     } catch (error) {
       if (error.code !== 'ENOENT') throw error
       state = 'missing'
     }
-    files.push({ path, state, baseDigest: expected })
+    files.push({ path, state, ...(entry.manifest.origin ? { baseDigest: entry.manifest.origin.baseDigests[path] } : {}) })
   }
+  const manifest = !entry.manifest.origin ? 'local'
+    : manifestDigest(entry.manifest) === entry.manifest.origin.baseManifestDigest ? 'clean' : 'customized'
   const state = files.some((file) => file.state === 'invalid') ? 'invalid'
     : files.some((file) => file.state === 'missing') ? 'missing'
-      : manifest !== 'clean' || files.some((file) => file.state === 'customized') ? 'customized'
-        : 'clean'
+      : manifest === 'customized' || files.some((file) => file.state === 'customized') ? 'customized'
+        : manifest === 'local' ? 'local' : 'clean'
   return {
-    name: entry.manifest.name,
+    name: entry.id,
+    scope: entry.scope,
     version: entry.manifest.version,
-    source: installation.source,
-    requestedRef: installation.requestedRef,
-    resolvedCommit: installation.resolvedCommit,
-    mobile: installation.mobile,
+    ...(entry.manifest.origin ? {
+      source: entry.manifest.origin.source,
+      requestedRef: entry.manifest.origin.requestedRef,
+      resolvedCommit: entry.manifest.origin.resolvedCommit,
+      mobile: entry.manifest.origin.mobile,
+    } : {}),
     state,
     manifest,
     files,
@@ -155,29 +195,52 @@ export async function assetStatus(entry) {
 }
 
 async function syncOne(root, installed, options) {
+  const origin = requireOrigin(installed)
   const status = await assetStatus(installed)
-  const upstream = await resolveAsset(root, options.to ?? installed.manifest.installation.source)
+  const upstream = await resolveAsset(root, options.to ?? origin.source)
   assertSameAsset(installed, upstream)
-  const others = (await installedAssets(root)).filter((entry) => !entry.invalid && entry.id !== installed.id).map((entry) => entry.manifest)
-  assertCapabilityCollisions([...others, upstream.manifest])
   if (status.state !== 'clean' && !options.overwrite) {
-    const result = await diffAsset(root, installed.id, { to: options.to })
+    const result = await diffAsset(root, installed.id, { ...options, scope: installed.scope })
     if (options.check) return { status: 'blocked', reason: 'customized', ...result }
-    throw new HairnessError('sync_customized', `${installed.id} has local changes; inspect hairness diff or pass --overwrite.`, { details: result })
+    throw new HairnessError('sync_customized', `${installed.id} has local changes; inspect hairness asset diff or pass --overwrite.`, { details: result })
   }
   const writes = upstream.files.map((file) => ({ path: join(installed.root, file.path), content: file.content }))
   writes.push({ path: installed.path, content: manifestBytes(installedManifest(upstream)) })
   const nextPaths = new Set(upstream.files.map((file) => file.path))
-  const deletes = Object.keys(installed.manifest.installation.baseDigests).filter((path) => !nextPaths.has(path)).map((path) => join(installed.root, path))
+  const deletes = Object.keys(origin.baseDigests).filter((path) => !nextPaths.has(path)).map((path) => join(installed.root, path))
   const changed = deletes.length > 0 || await anyWriteChanged(writes)
-  if (options.check) return { status: changed ? 'available' : 'current', name: installed.id, version: upstream.manifest.version, commit: upstream.resolvedCommit }
+  if (options.check) return { status: changed ? 'available' : 'current', name: installed.id, scope: installed.scope, version: upstream.manifest.version, commit: upstream.resolvedCommit }
   await applyTransaction(root, writes, deletes)
-  return { status: 'synced', name: installed.id, version: upstream.manifest.version, commit: upstream.resolvedCommit }
+  return { status: 'synced', name: installed.id, scope: installed.scope, version: upstream.manifest.version, commit: upstream.resolvedCommit }
+}
+
+async function scanAssets(root, scope) {
+  const base = assetBase(root, scope)
+  if (!await exists(base)) return []
+  const values = []
+  for (const namespace of await directories(base, root)) {
+    for (const name of await directories(join(base, namespace), root)) {
+      const directory = join(base, namespace, name)
+      const legacy = join(directory, 'hairness.json')
+      if (await exists(legacy)) throw new HairnessError('legacy_asset_manifest', `${relative(root, legacy)} is unsupported; Assets use asset.json.`)
+      const path = join(directory, 'asset.json')
+      if (!await exists(path)) continue
+      values.push(await loadInstalled(root, path, `${namespace}/${name}`, scope))
+    }
+  }
+  return values
+}
+
+function assetBase(root, scope) {
+  return scope === 'desk' ? join(root, '.desk', 'assets') : join(root, 'assets')
 }
 
 async function loadGithub(source, match) {
   const [, owner, repository, assetPath, requestedRef] = match
   if (!assetPath || assetPath.startsWith('/') || assetPath.includes('..') || assetPath.includes('\\')) throw new HairnessError('source_invalid', `Invalid GitHub Asset path ${assetPath}.`)
+  if (requestedRef && (!/^[a-zA-Z0-9][a-zA-Z0-9._/-]{0,239}$/.test(requestedRef) || requestedRef.includes('..') || requestedRef.includes('@{') || requestedRef.endsWith('.lock'))) {
+    throw new HairnessError('source_invalid', `Invalid GitHub reference ${requestedRef}.`)
+  }
   const stage = await mkdtemp(join(tmpdir(), 'hairness-asset-'))
   try {
     await git(['init', '--quiet'], { cwd: stage })
@@ -187,8 +250,8 @@ async function loadGithub(source, match) {
     const resolvedCommit = await git(['rev-parse', 'HEAD'], { cwd: stage })
     const tag = requestedRef ? await git(['ls-remote', '--tags', 'origin', `refs/tags/${requestedRef}`], { cwd: stage }).then(Boolean, () => false) : false
     const pinned = Boolean(requestedRef && (/^[a-f0-9]{40}$/i.test(requestedRef) || tag))
-    const manifestPath = assetPath.endsWith('.json') ? assetPath : join(assetPath, 'hairness.json')
-    return await loadManifest(join(stage, manifestPath), { source, requestedRef: requestedRef ?? null, resolvedCommit, mobile: !pinned })
+    const manifestPath = assetPath.endsWith('.json') ? assetPath : join(assetPath, 'asset.json')
+    return await loadManifest(join(stage, manifestPath), { source, requestedRef: requestedRef ?? null, resolvedCommit, mobile: !pinned, boundary: stage })
   } finally {
     await rm(stage, { recursive: true, force: true })
   }
@@ -206,18 +269,19 @@ async function loadManifest(location, context) {
     const stat = await lstat(candidate)
     if (stat.isSymbolicLink()) throw new HairnessError('symlink_forbidden', `Asset manifest ${location} must not be a symbolic link.`)
     const path = await realpath(candidate)
+    if (context.boundary) assertInside(await realpath(context.boundary), path, 'Asset manifest')
     document = JSON.parse(await readFile(path, 'utf8'))
     base = path
   }
   const manifest = sourceManifest(await validateDocument(document, 'asset'))
   validateManifest(manifest)
   const files = []
-  for (const file of manifest.files) {
+  for (const path of sourcePaths(manifest)) {
     const content = /^https:\/\//.test(base)
-      ? await fetchBytes(new URL(file.path, base).href)
-      : await readFile(await resolvePackageFile(dirname(base), file.path, 'Asset file'))
-    if (content.length > MAX_FILE_BYTES) throw new HairnessError('source_too_large', `${file.path} exceeds 5 MiB.`)
-    files.push({ ...file, content })
+      ? await fetchBytes(new URL(path, base).href)
+      : await readFile(await resolvePackageFile(dirname(base), path, 'Asset file'))
+    if (content.length > MAX_FILE_BYTES) throw new HairnessError('source_too_large', `${path} exceeds 5 MiB.`)
+    files.push({ path, content })
   }
   return {
     manifest,
@@ -229,31 +293,30 @@ async function loadManifest(location, context) {
   }
 }
 
-async function loadInstalled(root, path, id) {
+async function loadInstalled(root, path, id, scope) {
   try {
     const info = await lstat(path)
     if (info.isSymbolicLink()) throw new HairnessError('symlink_forbidden', `Asset manifest ${relative(root, path)} must not be a symbolic link.`)
     const manifest = await validateDocument(JSON.parse(await readFile(path, 'utf8')), 'asset')
-    if (!manifest.installation) throw new HairnessError('asset_invalid', `${relative(root, path)} has no installation provenance.`)
     if (manifest.name !== id) throw new HairnessError('asset_invalid', `${relative(root, path)} declares ${manifest.name}, expected ${id}.`)
     validateManifest(sourceManifest(manifest))
-    return { id, root: dirname(path), path, manifest }
+    return { id, scope, root: dirname(path), path, manifest }
   } catch (error) {
-    return { id, root: dirname(path), path, invalid: error }
+    return { id, scope, root: dirname(path), path, invalid: error }
   }
 }
 
-async function findInstalled(root, selector) {
-  const matches = (await installedAssets(root)).filter((entry) => entry.id === selector || entry.id.split('/').at(-1) === selector)
+async function findInstalled(root, selector, options = {}) {
+  const matches = (await installedAssets(root, options)).filter((entry) => entry.id === selector || entry.id.split('/').at(-1) === selector)
   if (!matches.length) throw new HairnessError('asset_not_installed', `${selector} is not installed.`)
-  if (matches.length > 1) throw new HairnessError('asset_ambiguous', `${selector} matches multiple Assets; use the full name.`)
+  if (matches.length > 1) throw new HairnessError('asset_ambiguous', `${selector} matches multiple Assets; specify scope or full name.`)
   return matches[0]
 }
 
 function installedManifest(asset) {
   return {
     ...asset.manifest,
-    installation: {
+    origin: {
       source: asset.source,
       requestedRef: asset.requestedRef,
       resolvedCommit: asset.resolvedCommit,
@@ -265,7 +328,7 @@ function installedManifest(asset) {
 }
 
 function sourceManifest(manifest) {
-  const { installation, ...source } = manifest
+  const { origin, ...source } = manifest
   return source
 }
 
@@ -279,28 +342,46 @@ function stable(value) {
   return value
 }
 
-function validateManifest(manifest) {
-  const paths = new Set()
-  for (const file of manifest.files) {
-    if (file.path === 'hairness.json') throw new HairnessError('asset_invalid', 'hairness.json is reserved for the Asset manifest.')
-    if (paths.has(file.path)) throw new HairnessError('asset_invalid', `${manifest.name} declares ${file.path} more than once.`)
-    paths.add(file.path)
-    if (file.type === 'hairness:skill' && (!file.id || !file.description)) throw new HairnessError('asset_invalid', `Skill ${file.path} requires id and description.`)
-    if (file.type !== 'hairness:skill' && (file.id || file.description)) throw new HairnessError('asset_invalid', `${file.path} may declare id and description only when it is a Skill.`)
-  }
-  if (manifest.adapter && !paths.has(manifest.adapter.entry)) throw new HairnessError('asset_invalid', `Adapter entry ${manifest.adapter.entry} must be a declared file.`)
+export function sourcePaths(manifest) {
+  const values = [
+    ...(manifest.instructions ?? []).map((entry) => entry.source),
+    ...(manifest.capabilities ?? []).map((entry) => entry.source),
+    ...(manifest.references ?? []).map((entry) => entry.source),
+    ...(manifest.files ?? []).map((entry) => entry.source),
+    ...(manifest.artifactKinds ?? []).flatMap((entry) => [entry.schema, entry.template].filter(Boolean)),
+    ...Object.values(manifest.settings ?? {}).filter(Boolean),
+    ...(manifest.executables ?? []).map((entry) => entry.entry),
+  ]
+  return [...new Set(values)].sort()
 }
 
-function assertCapabilityCollisions(manifests) {
-  const claims = new Map()
-  for (const manifest of manifests) {
-    for (const file of manifest.files.filter((entry) => entry.type === 'hairness:skill')) claim(`skill:${file.id}`, manifest.name)
-    if (manifest.adapter) claim(`adapter:${manifest.adapter.id}`, manifest.name)
+function validateManifest(manifest) {
+  const paths = sourcePaths(manifest)
+  if (paths.includes('asset.json') || paths.includes('hairness.json')) throw new HairnessError('asset_invalid', 'Asset manifests cannot declare their own manifest as source material.')
+  const capabilities = ids(manifest, 'capabilities')
+  const commands = ids(manifest, 'commands')
+  const executables = ids(manifest, 'executables')
+  for (const skill of manifest.skills ?? []) if (!capabilities.has(skill.capability)) throw new HairnessError('asset_invalid', `Skill ${skill.id} references missing Capability ${skill.capability}.`)
+  for (const command of manifest.commands ?? []) if (!capabilities.has(command.capability)) throw new HairnessError('asset_invalid', `Command ${command.id} references missing Capability ${command.capability}.`)
+  for (const item of manifest.setup ?? []) if (!commands.has(item.command)) throw new HairnessError('asset_invalid', `Setup references missing Command ${item.command}.`)
+  for (const group of manifest.cli ?? []) for (const route of group.routes) {
+    if (route.executable && !executables.has(route.executable)) throw new HairnessError('asset_invalid', `CLI route ${group.namespace} ${route.name} references missing Executable ${route.executable}.`)
   }
-  function claim(id, owner) {
-    const current = claims.get(id)
-    if (current && current !== owner) throw new HairnessError('capability_collision', `${id} is claimed by both ${current} and ${owner}.`)
-    claims.set(id, owner)
+  for (const section of ['instructions', 'capabilities', 'skills', 'commands', 'references', 'artifactKinds', 'executables']) ids(manifest, section)
+}
+
+function ids(manifest, section) {
+  const values = (manifest[section] ?? []).map((entry) => entry.id)
+  if (new Set(values).size !== values.length) throw new HairnessError('asset_invalid', `${manifest.name} declares duplicate ${section} ids.`)
+  return new Set(values)
+}
+
+function assertAssetNames(entries) {
+  const claims = new Map()
+  for (const entry of entries) {
+    const current = claims.get(entry.id)
+    if (current && current !== entry.scope) throw new HairnessError('asset_collision', `${entry.id} exists in both the Home and Desk; Assets compose additively and cannot shadow each other.`)
+    claims.set(entry.id, entry.scope)
   }
 }
 
@@ -318,7 +399,9 @@ async function fetchBytes(url) {
   const response = await fetch(assertSafeUrl(url), { redirect: 'follow' })
   assertSafeResponse(response)
   if (!response.ok) throw new HairnessError('source_fetch_failed', `Asset file request failed with HTTP ${response.status}.`, { exitCode: 4 })
-  return Buffer.from(await response.arrayBuffer())
+  const bytes = Buffer.from(await response.arrayBuffer())
+  if (bytes.length > MAX_FILE_BYTES) throw new HairnessError('source_too_large', 'Asset file exceeds 5 MiB.')
+  return bytes
 }
 
 function assertSafeUrl(value) {
@@ -341,8 +424,13 @@ async function directories(root, home) {
 }
 
 async function requireValid(entry) {
-  if (entry.invalid) throw new HairnessError('asset_invalid', `${entry.id} is invalid: ${entry.invalid.message}`)
+  if (entry.invalid) throw new HairnessError('asset_invalid', `${entry.scope} Asset ${entry.id} is invalid: ${entry.invalid.message}`)
   return entry
+}
+
+function requireOrigin(entry) {
+  if (!entry.manifest.origin) throw new HairnessError('asset_local', `${entry.id} has no upstream origin.`)
+  return entry.manifest.origin
 }
 
 function assertSameAsset(installed, upstream) {
@@ -357,7 +445,7 @@ async function anyWriteChanged(writes) {
   return false
 }
 
-async function applyTransaction(root, writes, deletes) {
+export async function applyTransaction(root, writes, deletes) {
   const transaction = await mkdtemp(join(root, '.hairness-transaction-'))
   const staged = join(transaction, 'staged')
   const backup = join(transaction, 'backup')
@@ -367,7 +455,7 @@ async function applyTransaction(root, writes, deletes) {
       const relativePath = relative(root, assertInside(root, entry.path, 'transaction path'))
       const path = join(staged, relativePath)
       await mkdir(dirname(path), { recursive: true })
-      await writeFile(path, entry.content, { mode: 0o644 })
+      await writeFile(path, entry.content, { mode: entry.mode ?? 0o644 })
     }
     for (const path of touched) await assertNoSymlink(root, path)
     const backedUp = []
@@ -414,4 +502,4 @@ async function removeEmptyParents(path, stop) {
 }
 
 function manifestBytes(value) { return Buffer.from(`${JSON.stringify(value, null, 2)}\n`) }
-function plan(root, writes, deletes) { return { writes: writes.map((entry) => relative(root, entry.path)).sort(), deletes: deletes.map((path) => relative(root, path)).sort() } }
+function transactionPlan(root, writes, deletes) { return { writes: writes.map((entry) => relative(root, entry.path)).sort(), deletes: deletes.map((path) => relative(root, path)).sort() } }

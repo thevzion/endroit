@@ -1,7 +1,7 @@
 import { readFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { API, validateDocument, validateLocalConfig } from './contracts.mjs'
+import { API, validateDocument } from './contracts.mjs'
 import { HairnessError } from './lib/errors.mjs'
 import { assertId, digest, readJson, writeJsonAtomic } from './lib/io.mjs'
 
@@ -26,11 +26,8 @@ export async function findHome(start = process.env.HAIRNESS_HOME_PATH ?? process
 export async function loadHome(root) {
   root ??= await findHome()
   const home = await validateDocument(await readJson(join(root, 'hairness.json')), 'home')
-  home.targets ??= []
-  home.integrations ??= []
-  home.config ??= {}
-  unique(home.targets.map((entry) => entry.id), 'Target ids')
-  unique(home.integrations.map((entry) => entry.id), 'Integration ids')
+  home.projection ??= {}
+  home.settings ??= {}
   return home
 }
 
@@ -42,8 +39,16 @@ export async function assertRuntime(root) {
   return home
 }
 
-export async function loadLocalConfig(root) {
-  return validateLocalConfig(await readJson(join(root, '.overlay', 'config.json'), localConfigDocument()))
+export async function loadDesk(root, options = {}) {
+  const path = join(root, '.desk', 'desk.json')
+  const document = await readJson(path, null)
+  if (document === null) {
+    if (options.required) throw new HairnessError('desk_missing', 'This operation requires an active .desk/desk.json.')
+    return null
+  }
+  const desk = await validateDocument(document, 'desk')
+  desk.settings ??= {}
+  return desk
 }
 
 export function homeId(destination) {
@@ -52,41 +57,52 @@ export function homeId(destination) {
 }
 
 export function homeDocument(options = {}) {
-  const targets = options.targets ?? []
-  const integrations = options.integrations ?? []
-  const config = options.config ?? {}
+  const projection = options.projection ?? {}
+  const settings = options.settings ?? {}
   return {
     $schema: API.home,
     name: assertId(options.name ?? homeId(options.destination ?? process.cwd()), 'Home name'),
     runtime: RUNTIME,
+    mode: options.mode ?? 'solo',
     providers: [...new Set(options.providers ?? ['codex', 'claude'])],
-    ...(targets.length ? { targets } : {}),
-    ...(integrations.length ? { integrations } : {}),
-    ...(Object.keys(config).length ? { config } : {}),
+    ...(Object.keys(projection).length ? { projection } : {}),
+    ...(Object.keys(settings).length ? { settings } : {}),
   }
 }
 
 export async function saveHome(root, home) {
   const document = homeDocument({
     name: home.name,
+    mode: home.mode,
     providers: home.providers,
-    targets: home.targets,
-    integrations: home.integrations,
-    config: home.config,
+    projection: home.projection,
+    settings: home.settings,
   })
   document.runtime = home.runtime
   await writeJsonAtomic(join(root, 'hairness.json'), document, 0o644)
   return document
 }
 
-export function localConfigDocument(preferences = {}) {
+export function deskDocument(options = {}) {
   return {
-    version: 1,
-    preferences: Object.fromEntries(Object.entries(preferences).filter(([, value]) => typeof value === 'string' && value.trim())),
-    integrationBindings: {},
+    $schema: API.desk,
+    id: assertId(options.id ?? 'owner', 'Desk id'),
+    ...(Object.keys(options.settings ?? {}).length ? { settings: options.settings } : {}),
   }
 }
 
-function unique(values, label) {
-  if (new Set(values).size !== values.length) throw new HairnessError('document_invalid', `${label} must be unique.`)
+export async function saveDesk(root, desk) {
+  await writeJsonAtomic(join(root, '.desk', 'desk.json'), deskDocument(desk), 0o644)
+  return desk
+}
+
+export function settingsFor(document, asset) {
+  return document?.settings?.[asset] ?? {}
+}
+
+export function updateSettings(document, asset, value) {
+  document.settings ??= {}
+  if (Object.keys(value).length) document.settings[asset] = value
+  else delete document.settings[asset]
+  return document
 }

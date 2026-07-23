@@ -1,0 +1,76 @@
+{
+  "$schema": "https://hairness.dev/schema/asset.json",
+  "name": "hairness/targets",
+  "version": "0.5.0-alpha.0",
+  "description": "Independent repository declarations, local bindings and bounded Git state.",
+  "prefix": "target",
+  "capabilities": [
+    {
+      "id": "manage",
+      "source": "capabilities/manage.md"
+    }
+  ],
+  "skills": [
+    {
+      "id": "manage",
+      "capability": "manage",
+      "description": "Use when a repository must be declared, bound or inspected as a Hairness Target."
+    }
+  ],
+  "commands": [
+    {
+      "id": "manage",
+      "capability": "manage",
+      "summary": "Declare, bind or inspect an independent Target."
+    }
+  ],
+  "cli": [
+    {
+      "namespace": "target",
+      "routes": [
+        {
+          "name": "list",
+          "operation": "kernel:targets.list"
+        },
+        {
+          "name": "discover",
+          "operation": "kernel:targets.discover"
+        },
+        {
+          "name": "doctor",
+          "operation": "kernel:targets.doctor"
+        },
+        {
+          "name": "add",
+          "operation": "kernel:targets.add"
+        },
+        {
+          "name": "bind",
+          "operation": "kernel:targets.bind"
+        },
+        {
+          "name": "use",
+          "operation": "kernel:targets.use"
+        },
+        {
+          "name": "unbind",
+          "operation": "kernel:targets.unbind"
+        },
+        {
+          "name": "remove",
+          "operation": "kernel:targets.remove"
+        }
+      ]
+    }
+  ],
+  "hud": [
+    {
+      "id": "targets",
+      "probe": "kernel:targets"
+    }
+  ],
+  "settings": {
+    "home": "schemas/home-settings.schema.json",
+    "desk": "schemas/desk-settings.schema.json"
+  }
+}

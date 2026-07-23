@@ -1,12 +1,12 @@
 import { lstat, mkdir, readdir, readlink, realpath, symlink, unlink } from 'node:fs/promises'
 import { basename, join } from 'node:path'
-import { loadHome, saveHome } from './home.mjs'
+import { loadDesk, loadHome, saveDesk, saveHome, settingsFor, updateSettings } from './home.mjs'
 import { inspectRepository, normalizeRepository } from './git.mjs'
 import { HairnessError } from './lib/errors.mjs'
 import { assertId, exists } from './lib/io.mjs'
 
 export async function targetBinding(root, id) {
-  const link = join(root, 'targets', id)
+  const link = join(root, '.desk', 'targets', id)
   let info
   try {
     info = await lstat(link)
@@ -25,16 +25,21 @@ export async function targetBinding(root, id) {
 
 export async function listTargets(root) {
   const home = await loadHome(root)
-  return Promise.all(home.targets.map(async (target) => {
+  const desk = await loadDesk(root)
+  const targets = settingsFor(home, 'hairness/targets').targets ?? []
+  const active = settingsFor(desk, 'hairness/targets').active ?? null
+  return Promise.all(targets.map(async (target) => {
     const binding = await targetBinding(root, target.id)
     const evidence = binding?.path ? await inspectRepository(binding.path).catch((error) => ({ error: error.message })) : null
     const matches = evidence?.remotes?.some((remote) => remote.repository === normalizeRepository(target.repository)) ?? false
-    return { ...target, binding: binding?.path ?? null, broken: binding?.broken ?? false, matches, evidence }
+    return { ...target, active: target.id === active, binding: binding?.path ?? null, broken: binding?.broken ?? false, matches, evidence }
   }))
 }
 
 export async function addTarget(root, repository, options = {}) {
   const home = await loadHome(root)
+  const settings = structuredClone(settingsFor(home, 'hairness/targets'))
+  settings.targets ??= []
   let path = null
   let normalized = normalizeRepository(repository)
   if (await exists(repository)) {
@@ -44,8 +49,9 @@ export async function addTarget(root, repository, options = {}) {
     normalized = evidence.remotes[0].repository
   }
   const id = assertId(options.id ?? slug(path ? basename(path) : normalized.split('/').at(-1)), 'Target id')
-  if (home.targets.some((target) => target.id === id)) throw new HairnessError('target_exists', `Target ${id} already exists.`)
-  home.targets.push({ id, repository: normalized, ...(options.summary ? { summary: options.summary } : {}) })
+  if (settings.targets.some((target) => target.id === id)) throw new HairnessError('target_exists', `Target ${id} already exists.`)
+  settings.targets.push({ id, repository: normalized, ...(options.summary ? { summary: options.summary } : {}) })
+  updateSettings(home, 'hairness/targets', settings)
   await saveHome(root, home)
   if (path) await bindTarget(root, id, path)
   return (await listTargets(root)).find((target) => target.id === id)
@@ -53,17 +59,18 @@ export async function addTarget(root, repository, options = {}) {
 
 export async function bindTarget(root, id, repositoryPath) {
   const home = await loadHome(root)
-  const target = home.targets.find((entry) => entry.id === id)
+  await loadDesk(root, { required: true })
+  const target = (settingsFor(home, 'hairness/targets').targets ?? []).find((entry) => entry.id === id)
   if (!target) throw new HairnessError('target_missing', `Target ${id} is not declared.`)
   const evidence = await inspectRepository(repositoryPath)
   if (!evidence.remotes.some((remote) => remote.repository === normalizeRepository(target.repository))) {
     throw new HairnessError('target_remote_mismatch', `${evidence.root} does not match ${target.repository}.`)
   }
-  const link = join(root, 'targets', id)
+  const link = join(root, '.desk', 'targets', id)
   const previous = await targetBinding(root, id)
   if (previous?.path === evidence.root) return { id, path: evidence.root, repository: target.repository }
   if (previous) await unlink(link)
-  await mkdir(join(root, 'targets'), { recursive: true })
+  await mkdir(join(root, '.desk', 'targets'), { recursive: true })
   await symlink(evidence.root, link, 'dir')
   return { id, path: await realpath(link), repository: target.repository }
 }
@@ -75,12 +82,36 @@ export async function unbindTarget(root, id) {
   return { id, status: 'unbound' }
 }
 
+export async function useTarget(root, id) {
+  const home = await loadHome(root)
+  const desk = await loadDesk(root, { required: true })
+  const target = (settingsFor(home, 'hairness/targets').targets ?? []).find((entry) => entry.id === id)
+  if (!target) throw new HairnessError('target_missing', `Target ${id} is not declared.`)
+  const binding = await targetBinding(root, id)
+  if (!binding?.path) throw new HairnessError('target_unbound', `Target ${id} is not bound on this Desk.`)
+  const settings = structuredClone(settingsFor(desk, 'hairness/targets'))
+  settings.active = id
+  updateSettings(desk, 'hairness/targets', settings)
+  await saveDesk(root, desk)
+  return { id, status: 'active', path: binding.path }
+}
+
 export async function removeTarget(root, id) {
   const home = await loadHome(root)
-  if (!home.targets.some((target) => target.id === id)) throw new HairnessError('target_missing', `Target ${id} is not declared.`)
+  const settings = structuredClone(settingsFor(home, 'hairness/targets'))
+  settings.targets ??= []
+  if (!settings.targets.some((target) => target.id === id)) throw new HairnessError('target_missing', `Target ${id} is not declared.`)
   await unbindTarget(root, id)
-  home.targets = home.targets.filter((target) => target.id !== id)
+  settings.targets = settings.targets.filter((target) => target.id !== id)
+  updateSettings(home, 'hairness/targets', settings)
   await saveHome(root, home)
+  const desk = await loadDesk(root)
+  if (desk && settingsFor(desk, 'hairness/targets').active === id) {
+    const deskSettings = structuredClone(settingsFor(desk, 'hairness/targets'))
+    delete deskSettings.active
+    updateSettings(desk, 'hairness/targets', deskSettings)
+    await saveDesk(root, desk)
+  }
   return { id, status: 'removed' }
 }
 

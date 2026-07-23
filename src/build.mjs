@@ -1,130 +1,104 @@
-import { spawn } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, unlink } from 'node:fs/promises'
-import { dirname, join, relative } from 'node:path'
-import { installedAssets } from './assets.mjs'
-import { loadHome, loadLocalConfig } from './home.mjs'
+import { readFile } from 'node:fs/promises'
+import { join, relative } from 'node:path'
+import { applyTransaction } from './assets.mjs'
+import { approveExecutable, runExecutable } from './executables.mjs'
 import { HairnessError } from './lib/errors.mjs'
-import { digest, exists, readJson, resolvePackageFile, treeFiles, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
+import { digest, exists, readJson } from './lib/io.mjs'
+import { provider } from './providers/index.mjs'
+import { resolveHome } from './resolved.mjs'
 
 const managedRegion = /<!-- hairness:begin id="agent-contract" -->[\s\S]*?<!-- hairness:end id="agent-contract" -->/
 
 export async function buildHome(root, options = {}) {
-  const [home, local, installed] = await Promise.all([loadHome(root), loadLocalConfig(root), installedAssets(root)])
+  const plan = await resolveHome(root)
   const statePath = join(root, '.hairness', 'build.json')
   const previous = await readJson(statePath, null)
-  const invalid = installed.find((asset) => asset.invalid)
-  if (invalid) throw new HairnessError('asset_invalid', `${invalid.id} is invalid: ${invalid.invalid.message}`)
-  const materials = await loadMaterials(installed)
-  const adapterBuild = await adapterOutputs(root, options.adapterHomeRoot ?? root, home, installed, options.allowAdapters ?? [], options.check, previous)
-  const wanted = [...providerOutputs(home, local, materials), ...adapterBuild.outputs].sort((left, right) => left.path.localeCompare(right.path))
+  const wanted = providerOutputs(plan)
+  const executableBuild = await executableOutputs(root, plan, options, previous)
+  wanted.push(...executableBuild.outputs)
+  wanted.sort((left, right) => left.path.localeCompare(right.path))
   assertNoOutputCollisions(wanted)
-  const outputs = await reconcileOutputs(root, previous?.outputs ?? [], wanted, Boolean(options.check))
+  const mutations = await reconcileOutputs(root, previous?.outputs ?? [], wanted, Boolean(options.check))
   const managed = []
-  for (const provider of ['codex', 'claude']) {
-    const active = home.providers.includes(provider)
-    const instructionPath = join(root, provider === 'codex' ? 'AGENTS.md' : 'CLAUDE.md')
-    managed.push(relativeManaged(root, await updateManagedText(instructionPath, active ? renderAgentContract(home, local.preferences, materials.instructions) : null, options.check)))
-    const hookPath = join(root, provider === 'codex' ? '.codex/hooks.json' : '.claude/settings.json')
-    managed.push(relativeManaged(root, await updateHookConfig(hookPath, active, home.runtime, options.check)))
+  const writes = [...mutations.writes]
+  for (const id of ['codex', 'claude']) {
+    const projector = provider(id)
+    const active = plan.home.providers.includes(id)
+    const instructionPath = join(root, projector.instructionPath)
+    const instruction = await planManagedText(instructionPath, active ? renderAgentContract(plan) : null, options.check)
+    managed.push(relativeManaged(root, instruction.managed))
+    if (instruction.write) writes.push(instruction.write)
+    const hookPath = join(root, projector.hookPath)
+    const hook = await planHookConfig(hookPath, active, projector, plan.home.runtime, options.check)
+    managed.push(relativeManaged(root, hook.managed))
+    if (hook.write) writes.push(hook.write)
   }
-  const state = { version: 1, outputs, managed: managed.filter(Boolean), adapters: adapterBuild.adapters }
+  const state = {
+    version: 2,
+    planDigest: plan.digest,
+    outputs: mutations.outputs,
+    managed: managed.filter(Boolean),
+    executables: executableBuild.executables,
+  }
   if (options.check) {
-    if (previous && JSON.stringify(previous) !== JSON.stringify(state)) throw stale('Local build state does not match generated assets.')
-  } else await writeJsonAtomic(statePath, state)
+    if (previous && JSON.stringify(previous) !== JSON.stringify(state)) throw stale('Local build state does not match the resolved Home.')
+  } else {
+    writes.push({ path: statePath, content: Buffer.from(`${JSON.stringify(state, null, 2)}\n`), mode: 0o600 })
+    await applyTransaction(root, writes, mutations.deletes)
+  }
   return state
 }
 
-async function loadMaterials(assets) {
-  const instructions = []
-  const skills = []
-  for (const asset of assets) {
-    const owner = asset.manifest.name
-    for (const file of asset.manifest.files) {
-      if (!['hairness:instruction', 'hairness:skill'].includes(file.type)) continue
-      const content = await readFile(await resolvePackageFile(asset.root, file.path, `${owner} asset`), 'utf8')
-      if (file.type === 'hairness:instruction') instructions.push({ owner, content })
-      else skills.push({ id: file.id, summary: file.description, owner, content: skillBody(content) })
+function providerOutputs(plan) {
+  const values = []
+  const capabilities = new Map(plan.capabilities.map((item) => [item.id, item]))
+  const skillMap = new Map(plan.skills.map((item) => [item.id, item]))
+  const commandMap = new Map(plan.commands.map((item) => [item.id, item]))
+  const lossy = new Set(plan.home.settings?.['hairness/home']?.lossyProjection ?? [])
+  for (const providerId of plan.home.providers) {
+    const projector = provider(providerId)
+    for (const id of [...new Set([...skillMap.keys(), ...commandMap.keys()])].sort()) {
+      const skill = skillMap.get(id)
+      const command = commandMap.get(id)
+      const surface = {
+        id,
+        owner: skill?.owner ?? command.owner,
+        projectedName: skill?.projectedName ?? command.projectedName,
+        skill,
+        command,
+      }
+      const capability = capabilities.get(skill?.capability ?? command.capability)
+      const output = projector.output(surface, capability, { allowLossy: lossy.has(`${providerId}:${id}`) })
+      if (output) values.push({ ...output, provider: providerId, owner: surface.owner })
     }
   }
-  return { instructions, skills }
-}
-
-function skillBody(content) {
-  return content.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trimStart()
-}
-
-function providerOutputs(home, local, materials) {
-  const values = []
-  for (const provider of home.providers) for (const skill of materials.skills) values.push(providerOutput(provider, skill, local))
   return values
 }
 
-function providerOutput(provider, skill, local) {
-  const providerRoot = provider === 'codex' ? '.agents/skills' : '.claude/skills'
-  const invocation = provider === 'codex' ? `$${skill.id}` : `/${skill.id}`
-  const language = local.preferences.responseLanguage ?? 'en'
-  const content = `---\nname: ${skill.id}\ndescription: ${JSON.stringify(skill.summary)}\n---\n\n# ${invocation}\n\nSpeak ${language} from the first reply and preserve the user's language.\n\n${skill.content.trim()}\n\nThis file is generated from ${skill.owner}. Persist nothing unless the user asks.\n`
-  return { path: join(providerRoot, skill.id, 'SKILL.md'), provider, owner: skill.owner, content }
-}
-
-async function adapterOutputs(root, adapterHomeRoot, home, assets, allowed, check, previous) {
+async function executableOutputs(root, plan, options, previous) {
   const values = []
   const built = []
-  const approvals = new Set(Array.isArray(allowed) ? allowed : allowed ? [allowed] : [])
-  for (const asset of assets.filter((entry) => entry.manifest.adapter)) {
-    const adapter = asset.manifest.adapter
-    if (!approvals.has(adapter.id) && !approvals.has(asset.manifest.name)) {
-      if (check) {
-        if (!(previous?.adapters ?? []).includes(asset.manifest.name)) throw stale(`${adapter.id} has not completed an approved build.`)
-        values.push(...(previous?.outputs ?? []).filter((entry) => entry.provider === 'adapter' && entry.owner === asset.manifest.name).map((entry) => ({ ...entry, content: null })))
-        built.push(asset.manifest.name)
-        continue
-      }
-      throw new HairnessError('adapter_approval_required', `${adapter.id} requires --allow-adapter ${adapter.id}.`)
+  const allowed = new Set(Array.isArray(options.allowExecutables) ? options.allowExecutables : options.allowExecutables ? [options.allowExecutables] : [])
+  for (const executable of plan.executables.filter((entry) => entry.runOn === 'build')) {
+    if (allowed.has(executable.id) || allowed.has(executable.localId)) await approveExecutable(root, executable)
+    if (options.check) {
+      const prior = (previous?.outputs ?? []).filter((entry) => entry.provider === 'executable' && entry.owner === executable.owner)
+      if (!prior.length) throw stale(`${executable.id} has not completed an approved build.`)
+      values.push(...prior.map((entry) => ({ ...entry, content: null })))
+      built.push(executable.id)
+      continue
     }
-    await mkdir(join(root, '.hairness'), { recursive: true })
-    const outputRoot = await mkdtemp(join(root, '.hairness', 'adapter-'))
-    try {
-      const entry = await resolvePackageFile(asset.root, adapter.entry, `${adapter.id} adapter entry`)
-      await runAdapter(entry, outputRoot, {
-        home: { id: home.name, root: adapterHomeRoot, providers: home.providers },
-        config: home.config[asset.manifest.name] ?? {},
-      }, root)
-      const declared = adapter.outputs.map((path) => path.replaceAll('\\', '/').replace(/\/+$/, ''))
-      for (const file of await treeFiles(outputRoot)) {
-        if (!declared.some((path) => file.path === path || file.path.startsWith(`${path}/`))) throw new HairnessError('adapter_output_undeclared', `${adapter.id} wrote undeclared output ${file.path}.`)
-        if (['AGENTS.md', 'CLAUDE.md', '.codex/hooks.json', '.claude/settings.json'].includes(file.path)) throw new HairnessError('adapter_output_reserved', `${adapter.id} wrote reserved managed output ${file.path}.`)
-        values.push({ path: file.path, provider: 'adapter', owner: asset.manifest.name, content: file.content })
-      }
-      built.push(asset.manifest.name)
-    } finally {
-      await rm(outputRoot, { recursive: true, force: true })
+    const files = await runExecutable(root, executable, {
+      home: { id: plan.home.name, providers: plan.home.providers },
+      settings: plan.home.settings?.[executable.owner] ?? {},
+    })
+    for (const file of files) {
+      if (reserved(file.path)) throw new HairnessError('executable_output_reserved', `${executable.id} wrote reserved output ${file.path}.`)
+      values.push({ path: file.path, provider: 'executable', owner: executable.owner, content: file.content })
     }
+    built.push(executable.id)
   }
-  return { outputs: values, adapters: built.sort() }
-}
-
-async function runAdapter(entry, outputRoot, context, stageRoot) {
-  await new Promise((resolvePromise, reject) => {
-    const child = spawn(process.execPath, [entry], {
-      cwd: dirname(entry),
-      env: { PATH: process.env.PATH ?? '', HOME: '/nonexistent', NO_COLOR: '1', HAIRNESS_OUTPUT_DIR: outputRoot, HAIRNESS_HOME_DIR: context.home.root, HAIRNESS_STAGE_DIR: stageRoot },
-      stdio: ['pipe', 'pipe', 'pipe'],
-    })
-    const stdout = []
-    const stderr = []
-    let size = 0
-    const timer = setTimeout(() => { child.kill('SIGKILL'); reject(new HairnessError('adapter_timeout', `${entry} exceeded 120 seconds.`)) }, 120_000)
-    for (const stream of [child.stdout, child.stderr]) stream.on('data', (chunk) => { size += chunk.length; if (size > 2 * 1024 * 1024) child.kill('SIGKILL'); else (stream === child.stdout ? stdout : stderr).push(chunk) })
-    child.on('error', reject)
-    child.on('close', (code) => {
-      clearTimeout(timer)
-      if (size > 2 * 1024 * 1024) reject(new HairnessError('adapter_output_too_large', `${entry} emitted more than 2 MiB.`))
-      else if (code !== 0) reject(new HairnessError('adapter_failed', Buffer.concat(stderr).toString('utf8').trim() || `${entry} exited ${code}.`))
-      else resolvePromise(Buffer.concat(stdout).toString('utf8'))
-    })
-    child.stdin.end(JSON.stringify(context))
-  })
+  return { outputs: values, executables: built.sort() }
 }
 
 async function reconcileOutputs(root, previous, wanted, check) {
@@ -133,7 +107,7 @@ async function reconcileOutputs(root, previous, wanted, check) {
     if (entry.content !== null) normalized.push(entry)
     else {
       const current = await readFile(join(root, entry.path)).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
-      if (!current || digest(current) !== entry.digest) throw stale(`${entry.path} needs an approved Adapter rebuild.`)
+      if (!current || digest(current) !== entry.digest) throw stale(`${entry.path} needs an approved executable rebuild.`)
       normalized.push({ ...entry, content: current })
     }
   }
@@ -159,9 +133,43 @@ async function reconcileOutputs(root, previous, wanted, check) {
     if (!check && (!current || digest(current) !== digest(entry.content))) writes.push({ path, content: entry.content })
     outputs.push({ path: entry.path, provider: entry.provider, owner: entry.owner, digest: digest(entry.content) })
   }
-  for (const path of removals) await unlink(path)
-  for (const entry of writes) await writeFileAtomic(entry.path, entry.content, 0o644)
-  return outputs
+  return { outputs, writes, deletes: removals }
+}
+
+function renderAgentContract(plan) {
+  const instructions = plan.instructions.filter((entry) => entry.scope === 'home')
+  return `<!-- hairness:begin id="agent-contract" -->\n## Hairness Home\n\n- Run \`npx --yes ${plan.home.runtime} hud --prompt\` when no Hairness HUD was injected for this session.\n- Treat provider files as projections; edit Home or Asset sources instead.\n\n${instructions.map((entry) => `### ${entry.owner}\n\n${entry.content.trim()}`).join('\n\n')}\n<!-- hairness:end id="agent-contract" -->`
+}
+
+async function planManagedText(path, block, check) {
+  const current = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? '' : Promise.reject(error))
+  const next = block ? managedRegion.test(current) ? current.replace(managedRegion, block) : `${current.trimEnd()}${current.trim() ? '\n\n' : ''}${block}\n` : current.replace(managedRegion, '').trimStart()
+  if (check && current !== next) throw stale(`${path} needs a managed-region rebuild.`)
+  return {
+    managed: block ? { path, digest: digest(next) } : null,
+    write: !check && current !== next ? { path, content: Buffer.from(next) } : null,
+  }
+}
+
+async function planHookConfig(path, active, projector, runtime, check) {
+  const currentText = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+  if (!active && currentText === null) return { managed: null, write: null }
+  const current = currentText ? JSON.parse(currentText) : {}
+  current.hooks ??= {}
+  const entries = (current.hooks.SessionStart ?? []).flatMap((entry) => {
+    const hooks = (entry.hooks ?? []).filter((hook) => !/hairness.* hud --prompt$/.test(hook.command ?? ''))
+    return hooks.length ? [{ ...entry, hooks }] : []
+  })
+  if (active) entries.push(projector.hook(runtime))
+  if (entries.length) current.hooks.SessionStart = entries
+  else delete current.hooks.SessionStart
+  if (!Object.keys(current.hooks).length) delete current.hooks
+  const next = `${JSON.stringify(current, null, 2)}\n`
+  if (check && currentText !== next) throw stale(`${path} needs a SessionStart hook rebuild.`)
+  return {
+    managed: active ? { path, digest: digest(next) } : null,
+    write: !check && currentText !== next ? { path, content: Buffer.from(next) } : null,
+  }
 }
 
 function assertNoOutputCollisions(outputs) {
@@ -172,34 +180,8 @@ function assertNoOutputCollisions(outputs) {
   }
 }
 
-function renderAgentContract(home, preferences, instructions) {
-  const language = preferences.responseLanguage ?? 'en'
-  const prologueCommand = `npx --yes ${home.runtime} prologue`
-  const preferenceLines = Object.entries(preferences).map(([key, value]) => `- ${key}: ${value}`)
-  return `<!-- hairness:begin id="agent-contract" -->\n## Hairness Home\n\n### User preferences\n\n${preferenceLines.length ? preferenceLines.join('\n') : '- None configured.'}\n\n### Operating contract\n\n- Speak ${language} from the first reply and preserve the user's language.\n- Use an injected \`<hairness-prologue>\` as orientation. If absent, run \`${prologueCommand}\` once.\n- The Home owns agentic assets and explicit human memory; Targets remain independent Git repositories.\n- Sessions are ephemeral. Persist only explicit Scratch notes or accepted documents.\n- Revalidate live evidence before relying on it.\n\n${instructions.map((entry) => `### ${entry.owner}\n\n${entry.content.trim()}`).join('\n\n')}\n<!-- hairness:end id="agent-contract" -->`
-}
-
-async function updateManagedText(path, block, check) {
-  const current = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? '' : Promise.reject(error))
-  const next = block ? managedRegion.test(current) ? current.replace(managedRegion, block) : `${current.trimEnd()}${current.trim() ? '\n\n' : ''}${block}\n` : current.replace(managedRegion, '').trimStart()
-  if (check && current !== next) throw stale(`${path} needs a managed-region rebuild.`)
-  if (!check && current !== next) await writeFileAtomic(path, next, 0o644)
-  return block ? { path, digest: digest(next) } : null
-}
-
-async function updateHookConfig(path, active, runtime, check) {
-  const currentText = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
-  const current = currentText ? JSON.parse(currentText) : {}
-  current.hooks ??= {}
-  const entries = (current.hooks.SessionStart ?? []).filter((entry) => !entry.hooks?.some((hook) => /hairness.* prologue$/.test(hook.command ?? '')))
-  if (active) entries.push({ matcher: 'startup|resume|clear|compact', hooks: [{ type: 'command', command: `npx --yes ${runtime} prologue` }] })
-  if (entries.length) current.hooks.SessionStart = entries
-  else delete current.hooks.SessionStart
-  if (!Object.keys(current.hooks).length) delete current.hooks
-  const next = `${JSON.stringify(current, null, 2)}\n`
-  if (check && currentText !== next) throw stale(`${path} needs a SessionStart hook rebuild.`)
-  if (!check && currentText !== next) await writeFileAtomic(path, next, 0o644)
-  return active ? { path, digest: digest(next) } : null
+function reserved(path) {
+  return ['hairness.json', 'AGENTS.md', 'CLAUDE.md', '.codex/hooks.json', '.claude/settings.json', '.hairness'].some((entry) => path === entry || path.startsWith(`${entry}/`))
 }
 
 function relativeManaged(root, entry) { return entry ? { ...entry, path: relative(root, entry.path) } : null }

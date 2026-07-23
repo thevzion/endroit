@@ -13,15 +13,18 @@ try {
   await mkdir(source)
   const manifest = {
     $schema: 'https://hairness.dev/schema/asset.json',
-    name: 'conformance/proof', version: '1.0.0', description: 'Conformance proof.',
-    files: [{ path: 'proof.md', type: 'hairness:file' }],
+    name: 'conformance/proof',
+    version: '1.0.0',
+    description: 'Conformance proof.',
+    files: [{ source: 'proof.md' }],
   }
-  await writeFile(join(source, 'hairness.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+  const sourceManifest = join(source, 'asset.json')
+  await writeFile(sourceManifest, `${JSON.stringify(manifest, null, 2)}\n`)
   await writeFile(join(source, 'proof.md'), 'one\n')
-  await addAssets(home, [join(source, 'hairness.json')])
+  await addAssets(home, [sourceManifest])
   assert.equal((await statusAssets(home, 'proof'))[0].state, 'clean')
   manifest.version = '2.0.0'
-  await writeFile(join(source, 'hairness.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+  await writeFile(sourceManifest, `${JSON.stringify(manifest, null, 2)}\n`)
   await writeFile(join(source, 'proof.md'), 'two\n')
   assert.equal((await syncAssets(home, 'proof', { check: true }))[0].status, 'available')
   await syncAssets(home, 'proof')

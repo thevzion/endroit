@@ -1,0 +1,54 @@
+{
+  "$schema": "https://hairness.dev/schema/asset.json",
+  "name": "hairness/project",
+  "version": "0.5.0-alpha.0",
+  "description": "Maintainer instructions, architecture reference and release capabilities for Hairness.",
+  "prefix": "project",
+  "instructions": [
+    {
+      "id": "maintenance",
+      "source": "instructions/maintaining-hairness.md"
+    }
+  ],
+  "references": [
+    {
+      "id": "architecture",
+      "source": "knowledge/architecture.md",
+      "description": "The public architecture and ownership boundaries of Hairness."
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "review",
+      "source": "capabilities/review.md"
+    },
+    {
+      "id": "release",
+      "source": "capabilities/release.md"
+    }
+  ],
+  "skills": [
+    {
+      "id": "review",
+      "capability": "review",
+      "description": "Use when a Hairness change must be reviewed against public contracts and qualification gates."
+    },
+    {
+      "id": "release",
+      "capability": "release",
+      "description": "Use when preparing a resumable Hairness prerelease without crossing approval checkpoints."
+    }
+  ],
+  "commands": [
+    {
+      "id": "review",
+      "capability": "review",
+      "summary": "Review a Hairness change against its contracts."
+    },
+    {
+      "id": "release",
+      "capability": "release",
+      "summary": "Prepare a checkpointed Hairness prerelease."
+    }
+  ]
+}
