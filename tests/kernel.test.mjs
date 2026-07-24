@@ -14,7 +14,7 @@ import { doctorHome } from '../src/doctor.mjs'
 import { hudModel, renderHud, renderHudPrompt } from '../src/hud.mjs'
 import { assertRuntime } from '../src/home.mjs'
 import { publicPlan, resolveHome } from '../src/resolved.mjs'
-import { addTarget, listTargets, useTarget } from '../src/targets.mjs'
+import { addTarget, bindTarget, cloneTarget, listTargets, mapTarget, unbindTarget } from '../src/targets.mjs'
 
 const exec = promisify(execFile)
 
@@ -55,7 +55,11 @@ test('create produces a source-owned solo Home with tracked shared projections',
     const hud = await hudModel(home)
     assert.match(renderHud(hud), /HOME\s+home · solo/)
     assert.match(renderHud(hud, { full: true }), /hairness\/home:home/)
-    assert.match(renderHudPrompt(hud, plan), /<hairness-hud/)
+    const prompt = renderHudPrompt(hud, plan)
+    assert.match(prompt, /<hairness-hud/)
+    assert.match(prompt, /<home name="home"/)
+    assert.match(prompt, /<surfaces assets="2"/)
+    assert.match(prompt, /namespaces="artifact,command,desk,hud,target"/)
     document.runtime = '@hairness/cli@9.0.0'
     await writeFile(join(home, 'hairness.json'), `${JSON.stringify(document, null, 2)}\n`)
     await assert.rejects(() => assertRuntime(home), (error) => error.code === 'runtime_mismatch')
@@ -119,7 +123,44 @@ test('team onboarding can clone an independent private Desk repository', async (
   }
 })
 
-test('Targets keep shared identity in settings and machine bindings under the Desk', async () => {
+test('Desk Skills project natively while Git visibility follows solo or team mode', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hairness-desk-projection-'))
+  try {
+    const source = join(root, 'asset')
+    await mkdir(join(source, 'capabilities'), { recursive: true })
+    await writeFile(join(source, 'asset.json'), `${JSON.stringify({
+      $schema: 'https://hairness.dev/schema/asset.json',
+      name: 'personal/focus',
+      version: '1.0.0',
+      description: 'Personal focus surface.',
+      capabilities: [{ id: 'focus', source: 'capabilities/focus.md' }],
+      skills: [{ id: 'focus', capability: 'focus', description: 'Use for personal focus.' }],
+    }, null, 2)}\n`)
+    await writeFile(join(source, 'capabilities/focus.md'), '# Focus\n')
+
+    const team = join(root, 'team')
+    await createHome(team, { mode: 'team', providers: ['codex'] })
+    await initDesk(team, { id: 'alexis' })
+    await addAssets(team, [join(source, 'asset.json')], { scope: 'desk' })
+    await buildHome(team)
+    const teamProjection = '.agents/skills/hairness-focus/SKILL.md'
+    await readFile(join(team, teamProjection))
+    await exec('git', ['check-ignore', '--quiet', teamProjection], { cwd: team })
+    assert.equal((await exec('git', ['status', '--porcelain'], { cwd: team })).stdout, '')
+
+    const solo = join(root, 'solo')
+    await createHome(solo, { mode: 'solo', providers: ['codex'] })
+    await addAssets(solo, [join(source, 'asset.json')], { scope: 'desk' })
+    await buildHome(solo)
+    await readFile(join(solo, teamProjection))
+    await assert.rejects(exec('git', ['check-ignore', '--quiet', teamProjection], { cwd: solo }))
+    assert.match((await exec('git', ['status', '--porcelain'], { cwd: solo })).stdout, /hairness-focus/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('Targets keep shared identity in settings and named machine bindings under the Desk', async () => {
   const root = await mkdtemp(join(tmpdir(), 'hairness-target-'))
   try {
     const home = join(root, 'home')
@@ -131,17 +172,86 @@ test('Targets keep shared identity in settings and machine bindings under the De
     await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'initial'], { cwd: target })
     await exec('git', ['remote', 'add', 'origin', 'git@github.com:acme/target.git'], { cwd: target })
     await addTarget(home, target, { id: 'target' })
-    await useTarget(home, 'target')
     const [entry] = await listTargets(home)
-    assert.equal(entry.binding, await realpath(target))
+    assert.equal(entry.bindings[0].path, await realpath(target))
+    assert.equal(entry.bindings[0].id, 'target')
+    assert.equal(entry.state, 'bound')
     assert.equal(entry.matches, true)
-    assert.equal(entry.active, true)
     const document = JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8'))
     assert.equal(document.settings['hairness/targets'].targets[0].repository, 'github.com/acme/target')
+    assert.equal(document.settings['hairness/targets'].targets[0].source, 'git@github.com:acme/target.git')
     assert.doesNotMatch(JSON.stringify(document), new RegExp(target.replaceAll('/', '\\/')))
-    const link = await realpath(join(home, '.desk/targets/target'))
+    const link = await realpath(join(home, '.desk/targets/target/target'))
     assert.equal(link, await realpath(target))
-    assert.match(renderHud(await hudModel(home)), /ACTIVE\s+target · main · clean/)
+    assert.match(renderHud(await hudModel(home)), /target\s+target:bound\/clean · map:missing/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('Targets address multiple Bindings and map one checkout without writing into it', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hairness-target-map-'))
+  try {
+    const home = join(root, 'home')
+    const main = join(root, 'main')
+    const feature = join(root, 'feature')
+    await createHome(home, { providers: ['codex'] })
+    for (const path of [main, feature]) {
+      await exec('git', ['init', '--quiet', '--initial-branch=main', path])
+      await writeFile(join(path, 'package.json'), `${JSON.stringify({ scripts: { test: 'node --test' }, dependencies: { example: '1.0.0' } }, null, 2)}\n`)
+      await mkdir(join(path, 'src'))
+      await writeFile(join(path, 'src/index.js'), 'export const ready = true\n')
+      await exec('git', ['add', '--all'], { cwd: path })
+      await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'initial'], { cwd: path })
+      await exec('git', ['remote', 'add', 'origin', 'git@github.com:acme/target.git'], { cwd: path })
+    }
+    await addTarget(home, main, { id: 'target', binding: 'main' })
+    await bindTarget(home, 'target', feature, { binding: 'feature' })
+    assert.equal((await listTargets(home))[0].bindings.length, 2)
+    await assert.rejects(() => mapTarget(home, 'target'), (error) => error.code === 'target_binding_ambiguous')
+    const before = (await exec('git', ['status', '--porcelain'], { cwd: main })).stdout
+    const mapped = await mapTarget(home, 'target', { binding: 'main' })
+    assert.equal(mapped.target, 'target')
+    assert.equal(mapped.binding, 'main')
+    for (const path of ['STACK.md', 'INTEGRATIONS.md', 'ARCHITECTURE.md', 'STRUCTURE.md', 'CONVENTIONS.md', 'TESTING.md', 'CONCERNS.md']) {
+      await readFile(join(mapped.path, path))
+    }
+    assert.equal((await exec('git', ['status', '--porcelain'], { cwd: main })).stdout, before)
+    assert.match(renderHud(await hudModel(home)), /2 bindings/)
+    assert.match(renderHud(await hudModel(home)), /map:current/)
+    await writeFile(join(main, 'src/next.js'), 'export const next = true\n')
+    await exec('git', ['add', 'src/next.js'], { cwd: main })
+    await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'next'], { cwd: main })
+    await writeFile(join(feature, 'src/feature.js'), 'export const feature = true\n')
+    await exec('git', ['add', 'src/feature.js'], { cwd: feature })
+    await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'feature'], { cwd: feature })
+    assert.match(renderHud(await hudModel(home)), /map:stale/)
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('a managed Target Binding clones into the Desk and requires explicit clean deletion', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hairness-target-clone-'))
+  try {
+    const home = join(root, 'home')
+    const source = join(root, 'source')
+    const bare = join(root, 'source.git')
+    await createHome(home)
+    await exec('git', ['init', '--quiet', '--initial-branch=main', source])
+    await writeFile(join(source, 'README.md'), '# Source\n')
+    await exec('git', ['add', 'README.md'], { cwd: source })
+    await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'initial'], { cwd: source })
+    await exec('git', ['clone', '--quiet', '--bare', source, bare])
+    await addTarget(home, `file://${await realpath(bare)}`, { id: 'managed' })
+    const cloned = await cloneTarget(home, 'managed', { binding: 'main' })
+    assert.equal(cloned.type, 'managed')
+    assert.match(cloned.path, /\.desk\/targets\/managed\/main$/)
+    await assert.rejects(() => unbindTarget(home, 'managed', 'main'), (error) => error.code === 'target_managed_delete_required')
+    await writeFile(join(cloned.path, 'local.md'), 'dirty\n')
+    await assert.rejects(() => unbindTarget(home, 'managed', 'main', { delete: true }), (error) => error.code === 'target_binding_dirty')
+    await rm(join(cloned.path, 'local.md'))
+    assert.equal((await unbindTarget(home, 'managed', 'main', { delete: true })).status, 'unbound')
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -164,6 +274,32 @@ test('Scratch Artifacts validate and publish without deleting the Desk source', 
     const invalid = (await readFile(join(published.to, 'artifact.md'), 'utf8')).replace('owner: home', 'owner: desk')
     await writeFile(join(published.to, 'artifact.md'), invalid)
     await assert.rejects(() => validateArtifact(home, published.to), (error) => error.code === 'artifact_owner_mismatch')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('Artifact creation imports a multi-file staging directory atomically', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hairness-artifact-import-'))
+  try {
+    const home = join(root, 'home')
+    await createHome(home)
+    await addAssets(home, ['@hairness/scratch'])
+    const stage = join(home, '.hairness/staging/import-proof')
+    await mkdir(stage, { recursive: true })
+    await writeFile(join(stage, 'evidence.md'), '# Evidence\n')
+    const created = await createArtifact(home, 'scratch', 'import-proof', { owner: 'desk', from: stage })
+    assert.equal(await readFile(join(created.path, 'evidence.md'), 'utf8'), '# Evidence\n')
+    await assert.rejects(readFile(stage), (error) => error.code === 'ENOENT')
+
+    const reserved = join(root, 'reserved')
+    await mkdir(reserved)
+    await writeFile(join(reserved, 'artifact.md'), '# Collision\n')
+    await assert.rejects(
+      () => createArtifact(home, 'scratch', 'reserved-proof', { owner: 'desk', from: reserved }),
+      (error) => error.code === 'artifact_import_reserved',
+    )
+    await assert.rejects(readFile(join(home, '.desk/artifacts/hairness/scratch/scratch/reserved-proof/artifact.md')), (error) => error.code === 'ENOENT')
   } finally {
     await rm(root, { recursive: true, force: true })
   }
@@ -207,6 +343,18 @@ test('CLI namespaces exist only when their declaring Assets are installed', asyn
     const ready = captureIo()
     assert.equal(await runCli(['scratch', 'create', 'idea', '--home', home], ready.io), 0)
     assert.match(ready.stdout(), /created/)
+
+    const personal = join(root, 'personal')
+    await mkdir(personal)
+    await writeFile(join(personal, 'asset.json'), `${JSON.stringify({
+      $schema: 'https://hairness.dev/schema/asset.json',
+      name: 'fixture/personal',
+      version: '1.0.0',
+      description: 'Personal Asset fixture.',
+    }, null, 2)}\n`)
+    await addAssets(home, [join(personal, 'asset.json')], { scope: 'desk' })
+    assert.equal(await runCli(['asset', 'publish', 'fixture/personal', '--home', home], captureIo().io), 2)
+    assert.equal(await runCli(['asset', 'publish', 'fixture/personal', '--to', 'home', '--home', home], captureIo().io), 0)
 
     const reserved = join(root, 'reserved')
     await mkdir(reserved)

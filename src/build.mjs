@@ -2,8 +2,9 @@ import { readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { applyTransaction } from './assets.mjs'
 import { approveExecutable, runExecutable } from './executables.mjs'
+import { git } from './git.mjs'
 import { HairnessError } from './lib/errors.mjs'
-import { digest, exists, readJson } from './lib/io.mjs'
+import { digest, exists, readJson, writeFileAtomic } from './lib/io.mjs'
 import { provider } from './providers/index.mjs'
 import { resolveHome } from './resolved.mjs'
 
@@ -44,8 +45,9 @@ export async function buildHome(root, options = {}) {
     if (previous && JSON.stringify(previous) !== JSON.stringify(state)) throw stale('Local build state does not match the resolved Home.')
   } else {
     writes.push({ path: statePath, content: Buffer.from(`${JSON.stringify(state, null, 2)}\n`), mode: 0o600 })
-    await applyTransaction(root, writes, mutations.deletes)
   }
+  await reconcileDeskExcludes(root, plan, mutations.outputs, Boolean(options.check))
+  if (!options.check) await applyTransaction(root, writes, mutations.deletes)
   return state
 }
 
@@ -69,7 +71,7 @@ function providerOutputs(plan) {
       }
       const capability = capabilities.get(skill?.capability ?? command.capability)
       const output = projector.output(surface, capability, { allowLossy: lossy.has(`${providerId}:${id}`) })
-      if (output) values.push({ ...output, provider: providerId, owner: surface.owner })
+      if (output) values.push({ ...output, provider: providerId, owner: surface.owner, scope: skill?.scope ?? command.scope })
     }
   }
   return values
@@ -84,7 +86,7 @@ async function executableOutputs(root, plan, options, previous) {
     if (options.check) {
       const prior = (previous?.outputs ?? []).filter((entry) => entry.provider === 'executable' && entry.owner === executable.owner)
       if (!prior.length) throw stale(`${executable.id} has not completed an approved build.`)
-      values.push(...prior.map((entry) => ({ ...entry, content: null })))
+      values.push(...prior.map((entry) => ({ ...entry, content: null, scope: executable.scope })))
       built.push(executable.id)
       continue
     }
@@ -94,7 +96,7 @@ async function executableOutputs(root, plan, options, previous) {
     })
     for (const file of files) {
       if (reserved(file.path)) throw new HairnessError('executable_output_reserved', `${executable.id} wrote reserved output ${file.path}.`)
-      values.push({ path: file.path, provider: 'executable', owner: executable.owner, content: file.content })
+      values.push({ path: file.path, provider: 'executable', owner: executable.owner, scope: executable.scope, content: file.content })
     }
     built.push(executable.id)
   }
@@ -131,7 +133,7 @@ async function reconcileOutputs(root, previous, wanted, check) {
     if (current && !prior && digest(current) !== digest(entry.content)) throw new HairnessError('generated_output_collision', `${entry.path} already exists and Hairness does not own it.`, { exitCode: 5 })
     if (check && (!current || digest(current) !== digest(entry.content))) throw stale(`${entry.path} needs a rebuild.`)
     if (!check && (!current || digest(current) !== digest(entry.content))) writes.push({ path, content: entry.content })
-    outputs.push({ path: entry.path, provider: entry.provider, owner: entry.owner, digest: digest(entry.content) })
+    outputs.push({ path: entry.path, provider: entry.provider, owner: entry.owner, scope: entry.scope ?? 'home', digest: digest(entry.content) })
   }
   return { outputs, writes, deletes: removals }
 }
@@ -187,3 +189,27 @@ function reserved(path) {
 function relativeManaged(root, entry) { return entry ? { ...entry, path: relative(root, entry.path) } : null }
 function stale(message) { return new HairnessError('build_stale', message, { exitCode: 5 }) }
 function diverged(path) { return new HairnessError('generated_output_diverged', `${path} was edited.`, { exitCode: 5 }) }
+
+async function reconcileDeskExcludes(root, plan, outputs, check) {
+  let path
+  try {
+    path = await git(['rev-parse', '--git-path', 'info/exclude'], { cwd: root })
+  } catch {
+    return
+  }
+  if (!path.startsWith('/')) path = join(root, path)
+  const current = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? '' : Promise.reject(error))
+  const region = /# hairness:desk-projections begin\n[\s\S]*?# hairness:desk-projections end\n?/g
+  const withoutRegion = current.replace(region, '')
+  const paths = plan.home.mode === 'team' && plan.desk
+    ? outputs.filter((entry) => entry.scope === 'desk').map((entry) => `/${entry.path}`).sort()
+    : []
+  const block = paths.length
+    ? `# hairness:desk-projections begin\n${paths.join('\n')}\n# hairness:desk-projections end\n`
+    : ''
+  const next = block
+    ? `${withoutRegion.trimEnd()}${withoutRegion.trim() ? '\n' : ''}${block}`
+    : current === withoutRegion ? current : `${withoutRegion.trimEnd()}${withoutRegion.trim() ? '\n' : ''}`
+  if (check && current !== next) throw stale('Local Git excludes do not match Desk projections.')
+  if (!check && current !== next) await writeFileAtomic(path, next, 0o644)
+}

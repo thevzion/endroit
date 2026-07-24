@@ -28,6 +28,7 @@
           "additionalProperties": false,
           "properties": {
             "instructionsBytes": { "type": "integer", "minimum": 0 },
+            "deskInstructionsBytes": { "type": "integer", "minimum": 0 },
             "skillDescriptionsBytes": { "type": "integer", "minimum": 0 },
             "hudPromptBytes": { "type": "integer", "minimum": 0 }
           }

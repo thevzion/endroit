@@ -1,10 +1,10 @@
-import { mkdir, readFile, readdir } from 'node:fs/promises'
-import { dirname, join, relative } from 'node:path'
+import { readFile, readdir, realpath, rm } from 'node:fs/promises'
+import { dirname, join, relative, resolve, sep } from 'node:path'
 import { applyTransaction } from './assets.mjs'
 import { validateAgainstSchema, validateDocument } from './contracts.mjs'
 import { listTargets, targetBinding } from './targets.mjs'
 import { HairnessError } from './lib/errors.mjs'
-import { assertId, assertInside, exists, resolvePackageFile, treeFiles, writeFileAtomic } from './lib/io.mjs'
+import { assertId, assertInside, exists, resolvePackageFile, treeFiles } from './lib/io.mjs'
 import { resolveHome } from './resolved.mjs'
 
 export async function createArtifact(root, kindId, id, options = {}) {
@@ -13,7 +13,7 @@ export async function createArtifact(root, kindId, id, options = {}) {
   const owner = options.owner ?? 'desk'
   assertOwner(kind, owner)
   id = assertId(id, 'Artifact id')
-  const { path: directory } = await artifactDestination(root, kind, id, owner, options.target)
+  const { path: directory, transactionRoot } = await artifactDestination(root, kind, id, owner, options.target, options.binding)
   if (await exists(directory)) throw new HairnessError('artifact_exists', `${relative(root, directory)} already exists.`)
   const state = options.state ?? kind.states?.[0] ?? 'draft'
   if (kind.states && !kind.states.includes(state)) throw new HairnessError('artifact_state_invalid', `${state} is not valid for ${kind.id}.`)
@@ -31,9 +31,18 @@ export async function createArtifact(root, kindId, id, options = {}) {
     ? await readFile(await resolvePackageFile(kind.root, kind.template, `${kind.id} template`), 'utf8')
     : `# ${id}\n`
   await validateMetadata(kind, metadata)
-  await mkdir(directory, { recursive: true })
-  await writeFileAtomic(join(directory, 'artifact.md'), renderArtifact(metadata, body), 0o644)
-  return { status: 'created', id, kind: kind.id, owner: metadata.owner, path: directory }
+  const imported = options.from ? await importedFiles(options.from, kind) : []
+  const writes = [
+    { path: join(directory, 'artifact.md'), content: Buffer.from(renderArtifact(metadata, body)) },
+    ...imported.map((file) => ({ path: assertInside(directory, join(directory, file.path), 'Artifact import'), content: file.content })),
+  ]
+  await applyTransaction(transactionRoot, writes, [])
+  if (options.from) {
+    const source = await realpath(options.from)
+    const staging = await realpath(join(root, '.hairness', 'staging')).catch(() => null)
+    if (staging && inside(staging, source)) await rm(source, { recursive: true, force: true })
+  }
+  return { status: 'created', id, kind: kind.id, owner: metadata.owner, path: directory, files: imported.map((file) => file.path) }
 }
 
 export async function listArtifacts(root) {
@@ -44,10 +53,12 @@ export async function listArtifacts(root) {
   ]
   const targets = await listTargets(root)
   const targetRoots = new Map()
-  for (const target of targets.filter((entry) => entry.binding)) {
-    for (const kind of plan.artifactKinds.filter((entry) => entry.owners.includes('target') && entry.targetPath)) {
-      const path = assertInside(target.binding, join(target.binding, kind.targetPath), 'Target Artifact root')
-      targetRoots.set(`${target.id}:${path}`, { scope: `target:${target.id}`, path })
+  for (const target of targets) {
+    for (const binding of target.bindings.filter((entry) => entry.path)) {
+      for (const kind of plan.artifactKinds.filter((entry) => entry.owners.includes('target') && entry.targetPath)) {
+        const path = assertInside(binding.path, join(binding.path, kind.targetPath), 'Target Artifact root')
+        targetRoots.set(`${target.id}:${binding.id}:${path}`, { scope: `target:${target.id}`, binding: binding.id, path })
+      }
     }
   }
   roots.push(...targetRoots.values())
@@ -56,7 +67,7 @@ export async function listArtifacts(root) {
     for (const path of await findArtifactFiles(entry.path)) {
       try {
         const artifact = await readArtifact(path)
-        values.push({ ...artifact.metadata, scope: entry.scope, path: dirname(path) })
+        values.push({ ...artifact.metadata, scope: entry.scope, ...(entry.binding ? { binding: entry.binding } : {}), path: dirname(path) })
       } catch (error) {
         values.push({ scope: entry.scope, path: dirname(path), invalid: error.message })
       }
@@ -106,7 +117,7 @@ export async function publishArtifact(root, selector, options = {}) {
   const owner = options.owner ?? 'home'
   if (owner === 'desk') throw new HairnessError('artifact_scope_invalid', 'Publish destination must be Home or Target.')
   assertOwner(kind, owner)
-  const destination = await artifactDestination(root, kind, entry.id, owner, options.target)
+  const destination = await artifactDestination(root, kind, entry.id, owner, options.target, options.binding)
   if (await exists(destination.path)) throw new HairnessError('artifact_exists', `${relative(root, destination.path)} already exists.`)
   const files = await treeFiles(entry.path)
   const writes = files.map((file) => ({ path: assertInside(destination.path, join(destination.path, file.path), 'Artifact destination'), content: file.content }))
@@ -134,11 +145,11 @@ async function validateMetadata(kind, metadata) {
   await validateAgainstSchema(metadata, schema, `${kind.id} Artifact`)
 }
 
-async function artifactDestination(root, kind, id, owner, targetId) {
+async function artifactDestination(root, kind, id, owner, targetId, bindingId) {
   const kindPath = kind.id.replace(':', '/')
   if (owner === 'desk') return { path: join(root, '.desk', 'artifacts', kindPath, id), transactionRoot: root }
   if (owner === 'home') return { path: join(root, 'artifacts', kindPath, id), transactionRoot: root }
-  const binding = await targetBinding(root, required(targetId, 'Target id'))
+  const binding = await targetBinding(root, required(targetId, 'Target id'), bindingId)
   if (!binding?.path) throw new HairnessError('target_unbound', `Target ${targetId} is not bound.`)
   if (!kind.targetPath) throw new HairnessError('artifact_target_path_missing', `${kind.id} does not declare a Target destination.`)
   return {
@@ -211,6 +222,23 @@ async function findArtifactFiles(root) {
   }
   await visit(root)
   return files.sort()
+}
+
+async function importedFiles(source, kind) {
+  const files = await treeFiles(source)
+  if (files.some((file) => file.path === 'artifact.md')) {
+    throw new HairnessError('artifact_import_reserved', 'Imported Artifact files cannot include artifact.md.')
+  }
+  const paths = new Set(files.map((file) => file.path))
+  for (const path of kind.requiredFiles ?? []) {
+    if (!paths.has(path)) throw new HairnessError('artifact_import_incomplete', `${kind.id} requires ${path}.`)
+  }
+  return files
+}
+
+function inside(root, candidate) {
+  const path = relative(resolve(root), resolve(candidate))
+  return path !== '..' && !path.startsWith(`..${sep}`)
 }
 
 function required(value, label) {

@@ -8,6 +8,8 @@
 
 Not another autonomous agent. A Home for the agents and workflows you already use.
 
+<sub>A lightweight framework for source-owned, portable agent work environments.</sub>
+
 [![npm next](https://img.shields.io/npm/v/%40hairness%2Fcli/next?label=npm%20next)](https://www.npmjs.com/package/@hairness/cli)
 [![CI](https://github.com/thevzion/hairness/actions/workflows/ci.yml/badge.svg)](https://github.com/thevzion/hairness/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-d8996a.svg)](LICENSE)
@@ -47,8 +49,8 @@ You: I work in French. My projects are ~/Projects/api,
      ~/Projects/web and ~/Projects/handbook.
 
 Ness: I can save that preference in your Desk, declare the three
-      repositories as shared Targets, bind these checkouts on this machine,
-      select api as the active Target, then rebuild and run Doctor.
+      repositories as shared Targets, create one local Binding for each
+      checkout, map api, then rebuild and run Doctor.
       I will show you each change first. Shall I proceed?
 
 You: Yes. Add Scratch too.
@@ -64,7 +66,7 @@ declared by the Home:
 npx --yes @hairness/cli@0.5.0-alpha.0 target add ~/Projects/api
 npx --yes @hairness/cli@0.5.0-alpha.0 target add ~/Projects/web
 npx --yes @hairness/cli@0.5.0-alpha.0 target add ~/Projects/handbook
-npx --yes @hairness/cli@0.5.0-alpha.0 target use api
+npx --yes @hairness/cli@0.5.0-alpha.0 target map api
 npx --yes @hairness/cli@0.5.0-alpha.0 asset add @hairness/scratch -y
 npx --yes @hairness/cli@0.5.0-alpha.0 build
 npx --yes @hairness/cli@0.5.0-alpha.0 doctor
@@ -75,31 +77,48 @@ it ran no Asset code.
 
 </details>
 
+In the examples below, `hairness` means the exact `npx --yes
+@hairness/cli@0.5.0-alpha.0` runtime declared by the Home. Ness uses that exact
+runtime; the shorter form keeps the examples readable.
+
 ## The model may be a black box. The Home doesn't have to be.
 
-Run the HUD at session start or ask for it at any point:
+When Ness wakes up in the Home, the provider hook injects an XML HUD. Ness gets
+its bearings before searching through folders or guessing what is available.
+The agent can request it again as the session changes. The same state remains
+human-readable from the terminal:
 
 ```bash
 hairness hud
 ```
 
 ```text
-HOME        ness-home · solo
+HOME        ness-home · solo · @hairness/cli@0.5.0-alpha.0
 DESK        alexis
 PROVIDERS   codex · claude
 ASSETS      3
-SURFACES    instruction:1 · skill:4 · command:3 · cli:19 · artifact:1
-GIT         main · clean · 1 worktrees
-TARGETS     3/3 bound
-ACTIVE      api · main · clean
+SURFACES    instruction:1 · capability:5 · skill:5 · command:4 · cli:20 · artifact:2
+ARTIFACTS   1 · desk:1
+GIT         main · clean · +0/-0 · 1 worktrees · 2h ago
+TARGETS     3 declared · 3 bindings · 3 worktrees
+  api          api:bound/clean · map:current
+  handbook     handbook:bound/clean · map:missing
+  web          web:bound/clean · map:missing
+CONTEXT     instructions:436B · desk:0B · skills:381B · hud:782B
 HEALTH      ready
 ```
 
-`hairness hud --full` lists the Assets, Instructions, Skills, Commands, CLI
-routes, Artifact kinds, owners, provider-by-provider projections and context
-footprint.
-`hairness hud --json` exposes the same resolved state to tools. The Kernel reads
-safe probes and never executes Asset code while it builds the HUD.
+The formats have different jobs:
+
+| Form | Consumer | Purpose |
+|---|---|---|
+| `hud` | Human | Dense, scannable orientation |
+| `hud --prompt` | Agent | XML facts injected at session start |
+| `hud --json` | Tools | Stable machine-readable state |
+| `hud --full` | Human or agent | Owners, surfaces, projections and exact evidence |
+
+The Kernel uses local, safe probes. It performs no network request and executes
+no Asset while building the HUD.
 
 The session hook calls `hud --prompt`. It gives Ness shared Home Instructions,
 your Desk Instructions and live orientation without copying private Desk data
@@ -130,7 +149,7 @@ ness-home/
 │   ├── desk.json                          # identity and personal settings
 │   ├── assets/                            # local experiments
 │   ├── artifacts/                         # private work in progress
-│   └── targets/                           # ignored machine bindings
+│   └── targets/                           # ignored named Bindings
 └── .hairness/
     ├── build.json                         # generated output ownership
     └── approvals.json                     # local executable trust by digest
@@ -149,15 +168,35 @@ hairness desk init --id alexis
 # or: hairness desk clone git@github.com:alexis/engineering-desk.git
 ```
 
-The Home gives the team one shared environment. Each Desk holds one
-collaborator's preferences, experimental Assets, private Artifacts and local
-repository bindings.
+**Ness lives in the Home. You work together from your Desk.**
+
+The provider gives you a window to the agent. The Desk gives one collaborator
+an owned place to resume that collaboration: preferences, experimental Assets,
+private Artifacts and local Bindings. Ness can use those materials natively,
+but they do not become team material until you publish them. The Home can be
+ours. The Desk is yours. In Hairness terms: **Desk = Collaborator × Home**.
 
 ## The framework
 
 Hairness draws one boundary:
 
 > **The Kernel owns grammar, composition and safety. Assets own meaning, capabilities and surfaces.**
+
+The architecture is deliberately small: **HAT — Home, Asset, Target**.
+
+| Primitive | Owns |
+|---|---|
+| Home | The portable environment and shared agentic material |
+| Asset | Reusable meaning, capability and surface |
+| Target | Independent work that Hairness connects without polluting |
+
+**Target Sovereignty** means the work repository keeps its own structure and
+lifecycle. The Home connects to it through local Bindings; it does not turn the
+Target into a Hairness repository.
+
+**Projection Inversion** means provider files are outputs, never the canonical
+source. Assets declare provider-neutral meaning and the Kernel projects only
+what Codex, Claude or another host needs.
 
 The Kernel ships in one package, `@hairness/cli`. It validates documents,
 resolves the Home, applies file transactions, projects provider files and
@@ -168,7 +207,7 @@ Assets define what the Home can do:
 | Asset section | Purpose |
 |---|---|
 | `instructions` | Invariant context loaded for the session |
-| `capabilities` | Provider-neutral procedures |
+| `capabilities` | Provider-neutral procedures with an optional bounded contract |
 | `skills` | Model access to a Capability |
 | `commands` | Human access to a Capability |
 | `references` and `files` | Material loaded when needed |
@@ -193,7 +232,16 @@ A Capability contains the procedure once:
   "description": "Company security review material.",
   "prefix": "security",
   "capabilities": [
-    { "id": "review", "source": "capabilities/review.md" }
+    {
+      "id": "review",
+      "source": "capabilities/review.md",
+      "contract": {
+        "inputs": ["target"],
+        "requires": ["binding"],
+        "produces": ["report"],
+        "effects": ["read-target"]
+      }
+    }
   ],
   "skills": [
     {
@@ -248,16 +296,29 @@ company/security: customized
 blocks the sync and produces a diff. Hairness does not merge or overwrite that
 edit without explicit consent.
 
-A collaborator can test an Asset under `.desk/assets/`, then publish it into
-the shared Home:
+A collaborator can create a new Asset under `.desk/assets/` or explicitly
+override a shared Asset without changing the team source:
 
 ```bash
-hairness asset publish personal/security-improvement
+hairness asset override company/security
+$EDITOR .desk/assets/company/security/capabilities/review.md
+hairness asset diff company/security
+hairness build
+```
+
+The Desk version is now provider-native for that collaborator. The HUD marks
+the override and keeps the Home digest used as its base. To govern it:
+
+```bash
+hairness asset publish company/security --to home
 git diff
 ```
 
-The move removes local provenance. Git review and your team governance take
-over.
+Publication blocks if the Home changed since the override began. Otherwise it
+replaces the Home source transactionally, removes the Desk override and leaves
+the resulting diff to Git review. `hairness asset remove company/security`
+abandons the Desk override and reveals the unchanged Home source again. There
+is no automatic merge.
 
 ## Artifacts are work, Assets are reusable capability
 
@@ -265,6 +326,7 @@ Assets describe repeatable practice. Artifacts record what you produced:
 
 ```bash
 hairness artifact create company/planning:plan q3-roadmap
+hairness artifact create hairness/scratch:scratch api-notes --from .hairness/staging/api-notes
 hairness artifact validate q3-roadmap
 hairness artifact publish q3-roadmap --owner home
 ```
@@ -294,6 +356,15 @@ work in the Desk → produce Artifacts → notice a repeated practice
 → write or improve an Asset → review it in Git → reuse it across Homes
 ```
 
+This is **Context Mining**:
+
+> Context is temporary. Knowledge should compound.
+
+Do not hoard conversations. Distill what matters, own the Artifact, and turn
+repeated value into an Asset. Over time, that source-owned material becomes
+agentic capital: the organization's inspectable capacity to help agents
+understand and act within its domain.
+
 ## Targets hold the work
 
 The Home provides context. Targets remain independent Git repositories:
@@ -302,13 +373,23 @@ The Home provides context. Targets remain independent Git repositories:
 hairness target add ~/Projects/payments-api
 hairness target add ~/Projects/customer-web
 hairness target add ~/Projects/ops-handbook
-hairness target use payments-api
+hairness target bind payments-api ~/Worktrees/payments-auth --binding auth
+hairness target map payments-api --binding auth
 ```
 
-The shared Home stores normalized repository identities. Your Desk stores
-symlinks to local checkouts. The HUD reports the active Target, branch,
-worktree count and dirty state, but Hairness does not import Target source into
-the Home.
+The Home stores normalized repository identities. A Target can remain
+`declared`, be cloned as a `managed` Binding or connect to an existing checkout
+as a `bound` Binding. One Target may have several named Bindings and worktrees;
+operations require `--binding` only when the choice is ambiguous.
+
+A Target needs no Hairness files, provider projections or agent instructions.
+Those stay in the Home. Hairness writes into a Target only when you explicitly
+publish an Artifact kind whose Asset declares a Target destination.
+
+`target map` reads one Binding and creates a private Target Map Artifact with
+STACK, INTEGRATIONS, ARCHITECTURE, STRUCTURE, CONVENTIONS, TESTING and
+CONCERNS. The map records the exact commit, evidence and uncertainty. It never
+writes into the Target.
 
 ## Bring the stack you already use
 

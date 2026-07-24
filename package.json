@@ -1,7 +1,7 @@
 {
   "name": "@hairness/cli",
   "version": "0.5.0-alpha.0",
-  "description": "Source-owned, portable agent work environments.",
+  "description": "A lightweight framework for source-owned, portable agent work environments.",
   "keywords": [
     "ai-agents",
     "agentic-assets",

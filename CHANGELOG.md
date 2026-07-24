@@ -12,7 +12,13 @@
 - Add explicit model, user and combined invocation policies with
   provider-specific projection warnings.
 - Add generic Artifact creation, validation, publication and lineage.
+- Import multi-file Artifact results atomically from bounded staging.
 - Replace Prologue with an inspectable HUD and context footprint.
+- Project Desk Skills and Commands natively while keeping team outputs local.
+- Add explicit Desk overrides with stale-base protection before Home
+  publication.
+- Replace the active Target with named one-to-many Bindings, managed clones and
+  a native, read-only Target Map Artifact.
 - Bind executable approval to the full Asset digest and restrict filesystem
   access to Asset input and staging output.
 - Bundle Home, Targets, Integrations and Scratch in the single CLI tarball.

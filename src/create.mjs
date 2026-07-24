@@ -58,7 +58,7 @@ export async function initHome(root = process.cwd(), options = {}) {
     const required = ['.hairness/', '.DS_Store', ...(mode === 'team' ? ['.desk/'] : [])]
     const missing = required.filter((line) => !currentIgnore.split(/\r?\n/).includes(line))
     if (missing.length) await writeFileAtomic(ignorePath, `${currentIgnore.trimEnd()}${currentIgnore.trim() ? '\n' : ''}${missing.join('\n')}\n`, 0o644)
-    if (mode === 'solo') await initDesk(root, { id: options.deskId ?? 'owner' })
+    if (mode === 'solo') await initDesk(root, { id: options.deskId ?? 'owner', build: false })
     return { status: 'initialized', home: root, mode, providers: options.providers ?? ['codex', 'claude'], assets: [] }
   } catch (error) {
     await rm(join(root, 'hairness.json'), { force: true })
@@ -77,7 +77,14 @@ export async function initDesk(root, options = {}) {
   await writeJsonAtomic(join(directory, 'desk.json'), deskDocument({ id: options.id, settings: options.settings }), 0o644)
   await writeFileAtomic(join(directory, '.gitignore'), '/targets/\n', 0o644)
   if (home.mode === 'team' && options.git !== false) await git(['init', '--quiet', '--initial-branch=main'], { cwd: directory })
-  return { status: 'initialized', id: options.id ?? 'owner', mode: home.mode, repository: home.mode === 'team' && options.git !== false }
+  if (options.build !== false) await buildHome(root)
+  return {
+    status: 'initialized',
+    id: options.id ?? 'owner',
+    mode: home.mode,
+    repository: home.mode === 'team' && options.git !== false,
+    providerRefresh: 'Start a new provider session if newly projected Desk surfaces are not discovered.',
+  }
 }
 
 export async function cloneDesk(root, repository) {
@@ -89,7 +96,14 @@ export async function cloneDesk(root, repository) {
     await git(['clone', '--quiet', '--', repository, directory], { cwd: root })
     const desk = await loadDesk(root, { required: true })
     await writeFileAtomic(join(directory, '.gitignore'), ensureLine(await readFile(join(directory, '.gitignore'), 'utf8').catch((error) => error.code === 'ENOENT' ? '' : Promise.reject(error)), '/targets/'), 0o644)
-    return { status: 'cloned', id: desk.id, mode: home.mode, repository }
+    await buildHome(root)
+    return {
+      status: 'cloned',
+      id: desk.id,
+      mode: home.mode,
+      repository,
+      providerRefresh: 'Start a new provider session if newly projected Desk surfaces are not discovered.',
+    }
   } catch (error) {
     await rm(directory, { recursive: true, force: true })
     throw error

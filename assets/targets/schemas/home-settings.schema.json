@@ -8,7 +8,7 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["id", "repository"],
+        "required": ["id", "repository", "source"],
         "properties": {
           "id": {
             "type": "string",
@@ -18,6 +18,11 @@
             "type": "string",
             "minLength": 1,
             "maxLength": 512
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1024
           },
           "summary": {
             "type": "string",

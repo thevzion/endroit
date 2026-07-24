@@ -2,7 +2,7 @@
 import { join, relative } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createArtifact, inspectArtifact, listArtifacts, publishArtifact, validateArtifact } from './artifacts.mjs'
-import { addAssets, applyTransaction, diffAsset, publishAsset, removeAsset, statusAssets, syncAssets, validateAsset } from './assets.mjs'
+import { addAssets, applyTransaction, diffAsset, overrideAsset, publishAsset, removeAsset, statusAssets, syncAssets, validateAsset } from './assets.mjs'
 import { buildHome } from './build.mjs'
 import { cloneDesk, createHome, deskStatus, initDesk, initHome } from './create.mjs'
 import { doctorHome } from './doctor.mjs'
@@ -11,7 +11,7 @@ import { hudModel, renderHud, renderHudPrompt } from './hud.mjs'
 import { assertRuntime, findHome } from './home.mjs'
 import { addIntegration, bindIntegration, doctorIntegrations, listIntegrations, parseAccessors, removeIntegration, unbindIntegration } from './integrations.mjs'
 import { asHairnessError, HairnessError } from './lib/errors.mjs'
-import { addTarget, bindTarget, discoverTargets, doctorTargets, listTargets, removeTarget, unbindTarget, useTarget } from './targets.mjs'
+import { addTarget, bindTarget, cloneTarget, discoverTargets, doctorTargets, listTargets, mapTarget, removeTarget, unbindTarget } from './targets.mjs'
 import { publicPlan, resolveHome } from './resolved.mjs'
 
 export async function runCli(argv = process.argv.slice(2), io = process) {
@@ -75,8 +75,12 @@ async function assetRoute(root, action, rest, flags, io) {
     return syncAssets(root, rest[0], { all: booleanFlag(flags.all), check: booleanFlag(flags.check), to: flags.to, overwrite: booleanFlag(flags.overwrite), scope })
   }
   if (action === 'remove') return removeAsset(root, required(rest[0], 'Asset'), { overwrite: booleanFlag(flags.overwrite), scope })
-  if (action === 'publish') return publishAsset(root, required(rest[0], 'Asset'))
-  throw usage('hairness asset add|status|diff|sync|remove|validate|publish')
+  if (action === 'override') return overrideAsset(root, required(rest[0], 'Asset'))
+  if (action === 'publish') {
+    if (flags.to !== 'home') throw usage('hairness asset publish <id> --to home')
+    return publishAsset(root, required(rest[0], 'Asset'))
+  }
+  throw usage('hairness asset add|status|diff|sync|remove|validate|override|publish')
 }
 
 async function contributedRoute(root, command, action, rest, flags) {
@@ -108,16 +112,17 @@ async function runOperation(root, plan, route, args, flags) {
     case 'kernel:artifacts.list': return listArtifacts(root)
     case 'kernel:artifacts.inspect': return inspectArtifact(root, required(args[0], 'Artifact'))
     case 'kernel:artifacts.validate': return validateArtifact(root, required(args[0], 'Artifact'))
-    case 'kernel:artifacts.publish': return publishArtifact(root, required(args[0], 'Artifact'), { owner: options.owner, target: options.target })
+    case 'kernel:artifacts.publish': return publishArtifact(root, required(args[0], 'Artifact'), { owner: options.owner, target: options.target, binding: options.binding })
     case 'kernel:commands.render': return renderCommand(plan, required(args[0], 'Command'))
     case 'kernel:targets.list': return listTargets(root)
     case 'kernel:targets.discover': return discoverTargets(required(args[0], 'discovery root'))
     case 'kernel:targets.doctor': return doctorTargets(root)
-    case 'kernel:targets.add': return addTarget(root, required(args[0], 'repository'), { id: options.id, summary: options.summary })
-    case 'kernel:targets.bind': return bindTarget(root, required(args[0], 'Target id'), required(args[1], 'repository path'))
-    case 'kernel:targets.use': return useTarget(root, required(args[0], 'Target id'))
-    case 'kernel:targets.unbind': return unbindTarget(root, required(args[0], 'Target id'))
+    case 'kernel:targets.add': return addTarget(root, required(args[0], 'repository'), { id: options.id, summary: options.summary, binding: options.binding })
+    case 'kernel:targets.bind': return bindTarget(root, required(args[0], 'Target id'), required(args[1], 'repository path'), { binding: options.binding })
+    case 'kernel:targets.clone': return cloneTarget(root, required(args[0], 'Target id'), { binding: options.binding })
+    case 'kernel:targets.unbind': return unbindTarget(root, required(args[0], 'Target id'), options.binding, { delete: booleanFlag(options.delete) })
     case 'kernel:targets.remove': return removeTarget(root, required(args[0], 'Target id'))
+    case 'kernel:targets.map': return mapTarget(root, required(args[0], 'Target id'), { binding: options.binding, id: options.id })
     case 'kernel:integrations.list': return listIntegrations(root)
     case 'kernel:integrations.doctor': return doctorIntegrations(root)
     case 'kernel:integrations.add': return addIntegration(root, required(args[0], 'Integration id'), parseAccessors(options), options.summary)
@@ -142,9 +147,11 @@ function artifactOptions(options) {
   return {
     owner: options.owner,
     target: options.target,
+    binding: options.binding,
     state: options.state,
     createdBy: options['created-by'],
     derivedFrom: options['derived-from'],
+    from: options.from,
   }
 }
 
@@ -155,7 +162,7 @@ function help() {
     commands: [
       'create <home> [base-asset] [--mode solo|team]',
       'init [--mode solo|team]',
-      'asset add|status|diff|sync|remove|validate|publish',
+      'asset add|status|diff|sync|remove|validate|override|publish',
       'validate [--json]',
       'build [--check] [--allow-executable <id>]',
       'doctor [--json]',

@@ -99,6 +99,7 @@ export async function validateAsset(root, selector, options = {}) {
 export async function diffAsset(root, selector, options = {}) {
   const installed = await requireValid(await findInstalled(root, selector, options))
   const origin = requireOrigin(installed)
+  if (origin.kind === 'override') return diffOverride(root, installed)
   const local = await assetStatus(installed)
   const upstream = await resolveAsset(root, options.to ?? origin.source)
   assertSameAsset(installed, upstream)
@@ -129,7 +130,8 @@ export async function syncAssets(root, selector, options = {}) {
 export async function removeAsset(root, selector, options = {}) {
   const installed = await requireValid(await findInstalled(root, selector, options))
   const current = await assetStatus(installed)
-  if ((current.state !== 'clean' || !installed.manifest.origin) && !options.overwrite) {
+  const override = installed.manifest.origin?.kind === 'override'
+  if (!override && (current.state !== 'clean' || !installed.manifest.origin) && !options.overwrite) {
     throw new HairnessError('asset_customized', `${installed.scope} Asset ${installed.id} is not safely recoverable; pass --overwrite to remove its declared files.`, { details: current })
   }
   const paths = installed.manifest.origin ? Object.keys(installed.manifest.origin.baseDigests) : sourcePaths(installed.manifest)
@@ -139,10 +141,47 @@ export async function removeAsset(root, selector, options = {}) {
   return { status: 'removed', name: installed.id, scope: installed.scope, files: paths }
 }
 
+export async function overrideAsset(root, selector) {
+  const home = await requireValid(await findInstalled(root, selector, { scope: 'home' }))
+  const existing = (await installedAssets(root, { scope: 'desk' })).find((entry) => entry.id === home.id)
+  if (existing) throw new HairnessError('asset_override_exists', `Desk Asset ${home.id} already exists.`)
+  const snapshot = await snapshotAsset(home)
+  const destination = join(assetBase(root, 'desk'), home.id)
+  const writes = snapshot.files.map((file) => ({ path: join(destination, file.path), content: file.content }))
+  writes.push({
+    path: join(destination, 'asset.json'),
+    content: manifestBytes({
+      ...sourceManifest(home.manifest),
+      origin: {
+        kind: 'override',
+        source: `home:${home.id}`,
+        requestedRef: null,
+        resolvedCommit: null,
+        mobile: false,
+        baseManifestDigest: snapshot.manifestDigest,
+        baseDigests: snapshot.digests,
+      },
+    }),
+  })
+  await applyTransaction(root, writes, [])
+  return { status: 'overridden', name: home.id, from: 'home', to: 'desk', files: snapshot.files.map((file) => file.path) }
+}
+
 export async function publishAsset(root, selector) {
   const installed = await requireValid(await findInstalled(root, selector, { scope: 'desk' }))
   const destination = join(assetBase(root, 'home'), installed.id)
-  if (await exists(join(destination, 'asset.json'))) throw new HairnessError('asset_exists', `Home Asset ${installed.id} already exists.`)
+  const override = installed.manifest.origin?.kind === 'override'
+  const home = override ? await requireValid(await findInstalled(root, installed.id, { scope: 'home' })) : null
+  if (!override && await exists(join(destination, 'asset.json'))) throw new HairnessError('asset_exists', `Home Asset ${installed.id} already exists.`)
+  if (override) {
+    const current = await snapshotAsset(home)
+    const origin = installed.manifest.origin
+    if (current.manifestDigest !== origin.baseManifestDigest || !same(current.digests, origin.baseDigests)) {
+      throw new HairnessError('asset_override_stale', `Home Asset ${installed.id} changed after the Desk override was created.`, {
+        details: await diffOverride(root, installed),
+      })
+    }
+  }
   const paths = sourcePaths(installed.manifest)
   const writes = []
   for (const path of paths) {
@@ -150,7 +189,8 @@ export async function publishAsset(root, selector) {
     writes.push({ path: join(destination, path), content: await readFile(source) })
   }
   writes.push({ path: join(destination, 'asset.json'), content: manifestBytes(sourceManifest(installed.manifest)) })
-  const deletes = [...paths.map((path) => join(installed.root, path)), installed.path]
+  const replacedPaths = home ? sourcePaths(home.manifest).filter((path) => !paths.includes(path)).map((path) => join(home.root, path)) : []
+  const deletes = [...replacedPaths, ...paths.map((path) => join(installed.root, path)), installed.path]
   await applyTransaction(root, writes, deletes)
   await removeEmptyParents(installed.root, assetBase(root, 'desk'))
   return { status: 'published', name: installed.id, from: 'desk', to: 'home', files: paths }
@@ -196,6 +236,7 @@ export async function assetStatus(entry) {
 
 async function syncOne(root, installed, options) {
   const origin = requireOrigin(installed)
+  if (origin.kind === 'override') throw new HairnessError('asset_override_sync_unsupported', `${installed.id} overrides a Home Asset; publish, remove or recreate the override instead of syncing it.`)
   const status = await assetStatus(installed)
   const upstream = await resolveAsset(root, options.to ?? origin.source)
   assertSameAsset(installed, upstream)
@@ -309,6 +350,10 @@ async function loadInstalled(root, path, id, scope) {
 async function findInstalled(root, selector, options = {}) {
   const matches = (await installedAssets(root, options)).filter((entry) => entry.id === selector || entry.id.split('/').at(-1) === selector)
   if (!matches.length) throw new HairnessError('asset_not_installed', `${selector} is not installed.`)
+  if (!options.scope && matches.length === 2) {
+    const desk = matches.find((entry) => entry.scope === 'desk' && entry.manifest?.origin?.kind === 'override')
+    if (desk) return desk
+  }
   if (matches.length > 1) throw new HairnessError('asset_ambiguous', `${selector} matches multiple Assets; specify scope or full name.`)
   return matches[0]
 }
@@ -317,6 +362,7 @@ function installedManifest(asset) {
   return {
     ...asset.manifest,
     origin: {
+      kind: 'source',
       source: asset.source,
       requestedRef: asset.requestedRef,
       resolvedCommit: asset.resolvedCommit,
@@ -380,9 +426,61 @@ function assertAssetNames(entries) {
   const claims = new Map()
   for (const entry of entries) {
     const current = claims.get(entry.id)
-    if (current && current !== entry.scope) throw new HairnessError('asset_collision', `${entry.id} exists in both the Home and Desk; Assets compose additively and cannot shadow each other.`)
-    claims.set(entry.id, entry.scope)
+    if (current && current.scope !== entry.scope) {
+      const desk = entry.scope === 'desk' ? entry : current
+      if (desk.manifest?.origin?.kind !== 'override') {
+        throw new HairnessError('asset_collision', `${entry.id} exists in both the Home and Desk without an explicit override.`)
+      }
+    }
+    claims.set(entry.id, entry)
   }
+}
+
+async function snapshotAsset(entry) {
+  const manifest = sourceManifest(entry.manifest)
+  const files = []
+  for (const path of sourcePaths(manifest)) {
+    const source = await resolvePackageFile(entry.root, path, `${entry.id} source`)
+    files.push({ path, content: await readFile(source) })
+  }
+  return {
+    manifestDigest: manifestDigest(manifest),
+    digests: Object.fromEntries(files.map((file) => [file.path, digest(file.content)])),
+    files,
+  }
+}
+
+async function diffOverride(root, installed) {
+  const origin = installed.manifest.origin
+  const home = await requireValid(await findInstalled(root, installed.id, { scope: 'home' }))
+  const [currentHome, currentDesk, local] = await Promise.all([
+    snapshotAsset(home),
+    snapshotAsset(installed),
+    assetStatus(installed),
+  ])
+  const paths = [...new Set([...Object.keys(origin.baseDigests), ...Object.keys(currentHome.digests), ...Object.keys(currentDesk.digests)])].sort()
+  return {
+    name: installed.id,
+    scope: 'desk',
+    override: true,
+    local: local.state,
+    home: currentHome.manifestDigest === origin.baseManifestDigest && same(currentHome.digests, origin.baseDigests) ? 'unchanged' : 'changed',
+    files: paths.map((path) => ({
+      path,
+      home: changeFrom(origin.baseDigests[path], currentHome.digests[path]),
+      desk: changeFrom(origin.baseDigests[path], currentDesk.digests[path]),
+    })),
+  }
+}
+
+function changeFrom(base, current) {
+  if (base === undefined) return current === undefined ? 'absent' : 'added'
+  if (current === undefined) return 'removed'
+  return base === current ? 'unchanged' : 'changed'
+}
+
+function same(left, right) {
+  return JSON.stringify(stable(left)) === JSON.stringify(stable(right))
 }
 
 async function fetchDocument(url) {

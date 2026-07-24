@@ -7,7 +7,23 @@
   "capabilities": [
     {
       "id": "manage",
-      "source": "capabilities/manage.md"
+      "source": "capabilities/manage.md",
+      "contract": {
+        "inputs": ["home", "desk", "target", "binding", "arguments"],
+        "requires": ["desk"],
+        "produces": ["report"],
+        "effects": ["read-home", "read-desk", "read-target", "write-desk", "write-home"]
+      }
+    },
+    {
+      "id": "map",
+      "source": "capabilities/map.md",
+      "contract": {
+        "inputs": ["home", "desk", "target", "binding"],
+        "requires": ["desk", "target", "binding"],
+        "produces": ["artifact", "report"],
+        "effects": ["read-home", "read-desk", "read-target", "write-desk"]
+      }
     }
   ],
   "skills": [
@@ -15,6 +31,11 @@
       "id": "manage",
       "capability": "manage",
       "description": "Use when a repository must be declared, bound or inspected as a Hairness Target."
+    },
+    {
+      "id": "map",
+      "capability": "map",
+      "description": "Use when a Target needs an inspectable, evidence-backed structural map in the Desk."
     }
   ],
   "commands": [
@@ -22,6 +43,11 @@
       "id": "manage",
       "capability": "manage",
       "summary": "Declare, bind or inspect an independent Target."
+    },
+    {
+      "id": "map",
+      "capability": "map",
+      "summary": "Map a bound Target into a private, publishable Artifact."
     }
   ],
   "cli": [
@@ -49,8 +75,8 @@
           "operation": "kernel:targets.bind"
         },
         {
-          "name": "use",
-          "operation": "kernel:targets.use"
+          "name": "clone",
+          "operation": "kernel:targets.clone"
         },
         {
           "name": "unbind",
@@ -59,8 +85,36 @@
         {
           "name": "remove",
           "operation": "kernel:targets.remove"
+        },
+        {
+          "name": "map",
+          "operation": "kernel:targets.map"
         }
       ]
+    }
+  ],
+  "artifactKinds": [
+    {
+      "id": "target-map",
+      "template": "templates/target-map.md",
+      "requiredFiles": [
+        "STACK.md",
+        "INTEGRATIONS.md",
+        "ARCHITECTURE.md",
+        "STRUCTURE.md",
+        "CONVENTIONS.md",
+        "TESTING.md",
+        "CONCERNS.md"
+      ],
+      "owners": ["desk", "home"],
+      "states": ["current", "stale", "archived"]
+    }
+  ],
+  "references": [
+    {
+      "id": "gsd-attribution",
+      "source": "references/gsd-attribution.md",
+      "description": "Attribution for the Target Map focus areas."
     }
   ],
   "hud": [

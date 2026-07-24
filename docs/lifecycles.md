@@ -21,13 +21,17 @@ nothing. A normal sync updates an intact Asset in one transaction. Local
 divergence blocks the write unless the caller passes `--overwrite`. Undeclared
 files survive.
 
-`asset publish` moves a Desk Asset into the Home, removes source provenance and
-leaves review to Git. Hairness rejects Home and Desk Assets with the same name.
+`asset override <id>` copies one Home Asset into the Desk and records the Home
+digest as its base. The Desk variant becomes locally effective and
+provider-native. `asset publish <id> --to home` blocks if that base moved; otherwise it
+replaces the Home transactionally, removes Desk provenance and leaves review
+to Git. `asset remove <id>` abandons the Desk override and reveals the unchanged
+Home source. No automatic merge is attempted.
 
 ## Artifact lifecycle
 
 ```text
-template → Desk draft → validate → Home or Target publication
+template or staged files → Desk draft → validate → Home or Target publication
                    ↘ derive another Artifact with lineage
 ```
 
@@ -36,11 +40,17 @@ fields, states and owners. Publication copies the Artifact, preserves the Desk
 source and adds lineage. Transformation requires a Capability to create a new
 Artifact with `--derived-from`.
 
+`artifact create --from <directory>` imports a multi-file result atomically.
+Symlinks, escaping paths, reserved `artifact.md` and missing required files are
+rejected. A successful import removes a source under `.hairness/staging/`; a
+failed import preserves it for inspection.
+
 ## Build lifecycle
 
 `build` resolves the Home, asks provider projectors for outputs and reconciles
-them against `.hairness/build.json`. It rejects owner collisions and edits to
-generated output.
+them against `.hairness/build.json`. Each output retains its Home or Desk
+scope. Solo Desk projections are versionable; team Desk projections are
+provider-native but excluded locally from the Home repository.
 
 `build --check` writes nothing. It fails when projections or prior executable
 output no longer match the Resolved Home.
@@ -53,8 +63,23 @@ read-only input and a temporary output directory, then promotes declared files.
 The team commits `hairness.json`, shared Assets, Artifacts and provider
 projections. Each collaborator creates or clones `.desk/` during onboarding.
 The parent repository ignores the full Desk. The Desk repository ignores
-physical Target bindings.
+physical Target Bindings.
 
 A collaborator develops an Asset in `.desk/assets`, tests it against local
 Targets and publishes it into the Home. The resulting Git diff enters the
 team's normal review process.
+
+## Target lifecycle
+
+```text
+shared declaration → zero or more named Bindings → safe Git probes
+                                         └──────→ Target Map Artifact
+```
+
+A Target can remain declared, be cloned as a managed Binding or connect to an
+existing checkout as a bound Binding. There is no active Target. An operation
+infers the Binding when unique and otherwise requires `--binding`.
+
+`target map` reads one Binding and imports seven focused documents into a Desk
+Artifact. It never writes to the Target. Publishing the map to the Home is a
+separate, reviewable action.

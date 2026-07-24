@@ -27,12 +27,13 @@ const kernelOperations = new Set([
   'kernel:scratch.create',
   'kernel:targets.add',
   'kernel:targets.bind',
+  'kernel:targets.clone',
   'kernel:targets.discover',
   'kernel:targets.doctor',
   'kernel:targets.list',
+  'kernel:targets.map',
   'kernel:targets.remove',
   'kernel:targets.unbind',
-  'kernel:targets.use',
 ])
 const kernelNamespaces = new Set(['create', 'init', 'asset', 'validate', 'build', 'doctor'])
 
@@ -41,6 +42,7 @@ export async function resolveHome(root) {
   const invalid = installed.find((entry) => entry.invalid)
   if (invalid) throw new HairnessError('asset_invalid', `${invalid.scope} Asset ${invalid.id} is invalid: ${invalid.invalid.message}`)
   const statuses = await Promise.all(installed.map(assetStatus))
+  const effective = effectiveAssets(installed)
   const assets = []
   const instructions = []
   const capabilities = []
@@ -57,7 +59,7 @@ export async function resolveHome(root) {
   const cliClaims = new Map()
   const canonicalClaims = new Map()
 
-  for (const entry of installed) {
+  for (const entry of effective) {
     const manifest = entry.manifest
     await validateSettings(entry, home, desk)
     const asset = {
@@ -69,6 +71,7 @@ export async function resolveHome(root) {
       root: entry.root,
       status: statuses.find((status) => status.name === entry.id && status.scope === entry.scope)?.state,
       mobile: manifest.origin?.mobile ?? false,
+      ...(entry.override ? { override: entry.override } : {}),
     }
     assets.push(asset)
 
@@ -81,6 +84,7 @@ export async function resolveHome(root) {
     for (const item of manifest.capabilities ?? []) {
       const content = await text(entry, item.source)
       const value = material(entry, item, 'capability', content)
+      if (item.contract) value.contract = item.contract
       claim(canonicalClaims, `capability:${value.id}`, manifest.name)
       capabilities.push(value)
     }
@@ -154,6 +158,7 @@ export async function resolveHome(root) {
 
   const context = {
     instructionsBytes: byteCount(instructions.filter((item) => item.scope === 'home').map((item) => item.content).join('\n\n')),
+    deskInstructionsBytes: byteCount(instructions.filter((item) => item.scope === 'desk').map((item) => item.content).join('\n\n')),
     skillDescriptionsBytes: byteCount(skills.map((item) => item.description).join('\n')),
     hudPromptBytes: 0,
     byAsset: contextByAsset(instructions, skills),
@@ -221,13 +226,18 @@ export function renderSessionPrompt(plan) {
 export async function homeGitState(root) {
   try {
     const evidence = await inspectRepository(root)
-    const worktrees = await import('./git.mjs').then(({ git }) => git(['worktree', 'list', '--porcelain'], { cwd: root }))
     return {
       branch: evidence.branch,
       head: evidence.head,
       clean: evidence.clean,
       changes: evidence.changes.length,
-      worktrees: worktrees.split('\n').filter((line) => line.startsWith('worktree ')).length,
+      conflicts: evidence.conflicts,
+      upstream: evidence.upstream,
+      ahead: evidence.ahead,
+      behind: evidence.behind,
+      committedAt: evidence.committedAt,
+      operation: evidence.operation,
+      worktrees: evidence.worktrees,
     }
   } catch (error) {
     return { available: false, error: error.message }
@@ -323,6 +333,7 @@ function contextByAsset(instructions, skills) {
   const owners = new Set([...instructions.map((item) => item.owner), ...skills.map((item) => item.owner)])
   return Object.fromEntries([...owners].sort().map((owner) => [owner, {
     instructionsBytes: byteCount(instructions.filter((item) => item.owner === owner && item.scope === 'home').map((item) => item.content).join('\n\n')),
+    deskInstructionsBytes: byteCount(instructions.filter((item) => item.owner === owner && item.scope === 'desk').map((item) => item.content).join('\n\n')),
     skillDescriptionsBytes: byteCount(skills.filter((item) => item.owner === owner).map((item) => item.description).join('\n')),
   }]))
 }
@@ -362,6 +373,33 @@ function stable(value) {
   if (Array.isArray(value)) return value.map(stable)
   if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]))
   return value
+}
+
+function effectiveAssets(installed) {
+  const byId = new Map()
+  for (const entry of installed) {
+    const values = byId.get(entry.id) ?? []
+    values.push(entry)
+    byId.set(entry.id, values)
+  }
+  const effective = []
+  for (const values of byId.values()) {
+    const desk = values.find((entry) => entry.scope === 'desk' && entry.manifest.origin?.kind === 'override')
+    const home = values.find((entry) => entry.scope === 'home')
+    if (desk && home) {
+      effective.push({
+        ...desk,
+        override: {
+          asset: home.id,
+          version: home.manifest.version,
+          baseDigest: desk.manifest.origin.baseManifestDigest,
+        },
+      })
+    } else {
+      effective.push(...values)
+    }
+  }
+  return effective.sort((left, right) => `${left.scope}:${left.id}`.localeCompare(`${right.scope}:${right.id}`))
 }
 
 function escapeXml(value) {

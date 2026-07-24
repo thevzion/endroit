@@ -1,5 +1,5 @@
 Hairness is the provider-agnostic Home where agents work. The Home owns its
-canonical agentic assets and shared Artifacts. The active Desk owns personal
+canonical agentic assets and shared Artifacts. The collaborator's Desk owns personal
 continuity. Targets remain independent repositories.
 
 Use the injected Hairness HUD as orientation. Revalidate live evidence before

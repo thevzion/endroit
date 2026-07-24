@@ -34,12 +34,18 @@ Provider sessions and their tools remain outside Hairness authority.
   a failed promotion.
 - Sync and remove stop on local divergence unless the user passes
   `--overwrite`. Undeclared files survive.
+- Publishing a Desk override stops when its Home base digest changed.
+- Multi-file Artifact imports reject symlinks, escaping paths, reserved
+  metadata and incomplete required file sets.
 - `build --check` and `asset sync --check` write nothing.
 - Executable approval covers the current Asset tree. A change revokes approval.
 - Node's permission model limits executable filesystem reads to the Asset and
   writes to staging. Hairness also limits runtime and output size.
 - Promotion rejects undeclared, reserved, symbolic-link or colliding output.
-- Target binding verifies a Git remote before it creates a local symlink.
+- Target Bindings verify normalized Git remotes before connecting a checkout.
+  Managed clone deletion requires explicit consent and a clean worktree.
+- Target Map generation reads tracked paths and bounded package metadata,
+  secret-scans staged output and never writes into the Target.
 - Integration bindings select accessors and store no credentials.
 - Provider projections omit a surface when the provider cannot preserve its
   invocation policy. The user must record lossy consent to widen access.

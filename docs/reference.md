@@ -18,7 +18,8 @@ Hairness 0.5 is an alpha and a clean break from 0.4. JSON schemas under
 ```
 
 `projection.prefix` changes provider-facing names. Optional byte budgets cover
-`instructionsBytes`, `skillDescriptionsBytes` and `hudPromptBytes`.
+`instructionsBytes`, `deskInstructionsBytes`, `skillDescriptionsBytes` and
+`hudPromptBytes`.
 `settings` uses full Asset names as keys.
 
 The Home contains no machine path, Target or Integration field. Assets own
@@ -33,8 +34,9 @@ those settings.
   "$schema": "https://hairness.dev/schema/desk.json",
   "id": "alexis",
   "settings": {
-    "hairness/targets": {
-      "active": "api"
+    "hairness/home": {
+      "addressAs": "Alexis",
+      "responseLanguage": "fr"
     }
   }
 }
@@ -66,13 +68,14 @@ https://example.com/path/asset.json
 ```
 
 `asset add` validates and copies source files. It adds `origin` with the source,
-requested reference, resolved commit, mobility, source manifest digest and
-file digests. The lifecycle remains inert.
+requested reference, resolved commit, mobility, source manifest digest and file
+digests. `origin.kind` distinguishes a source installation from a Desk
+override. The lifecycle remains inert.
 
 Asset sections:
 
 - `instructions`: invariant session context;
-- `capabilities`: provider-neutral procedures;
+- `capabilities`: provider-neutral procedures with optional bounded contracts;
 - `skills` and `commands`: model and human invocation paths;
 - `references` and `files`: on-demand material;
 - `artifactKinds`: schemas, templates, states and owners;
@@ -109,7 +112,8 @@ asset diff <id> [--to <address>] [--desk]
 asset sync <id>|--all [--check] [--to <address>] [--overwrite]
 asset remove <id> [--overwrite] [--desk]
 asset validate <id> [--desk]
-asset publish <id>
+asset override <id>
+asset publish <id> --to home
 
 validate [--json]
 build [--check] [--allow-executable <canonical-id>]
@@ -121,9 +125,9 @@ Bundled Assets contribute:
 ```text
 hud [--full] [--json] [--prompt]
 desk init|clone|status
-artifact create|list|inspect|validate|publish
+artifact create|list|inspect|validate|publish [--from <directory>]
 command render
-target list|discover|doctor|add|bind|use|unbind|remove
+target list|discover|doctor|add|bind|clone|unbind|remove|map
 integration list|doctor|add|bind|unbind|remove
 scratch create
 ```
@@ -144,16 +148,36 @@ Claude receives model-facing Skills and command-only Skills with
 `disable-model-invocation: true`.
 
 Desk Instructions enter `hud --prompt`; they never enter shared managed
-regions.
+regions. Desk Skills and Commands remain provider-native. Solo projections are
+versionable with the Home. Team projections are generated into native paths
+and excluded locally from the parent Home repository.
 
 ## HUD and Doctor
 
-The compact HUD reports Home, Desk, providers, surface counts, Git state,
-Target bindings, active Target and health. `--full` adds every resolved surface,
-owner, projection, context footprint and warning. `--json` returns the HUD
-schema. `--prompt` renders bounded session orientation.
+The compact HUD reports Home, Desk, providers, surface counts, Artifacts, Git
+state, named Target Bindings, worktrees, meaningful commit dates, context and
+health. There is no active Target. `--full` adds every resolved surface, owner,
+projection, exact evidence, context footprint and warning. `--json` returns
+the HUD schema. `--prompt` renders XML session orientation.
 
 HUD probes call Kernel readers. They execute no Asset code.
 
 Doctor validates runtime, resolution, Asset state, projections, Targets and
 Integrations. It reports `ready` or `partial` and gives repair routes.
+
+## Targets and Bindings
+
+The `hairness/targets` settings store shared identities and clone sources
+without machine paths. A Target can be:
+
+- `declared`, with no local checkout;
+- `managed`, with a clone under `.desk/targets/<target>/<binding>`;
+- `bound`, with a symlink at that location pointing to an existing checkout.
+
+One Target can have several named Bindings. Commands infer a unique Binding and
+otherwise require `--binding`.
+
+`target map` reads tracked paths, Git evidence and bounded package metadata. It
+creates `hairness/targets:target-map` in the Desk with seven required mapping
+documents. Output is secret-scanned in staging and the Target remains
+unchanged.

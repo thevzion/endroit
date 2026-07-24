@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import test from 'node:test'
-import { addAssets, diffAsset, publishAsset, removeAsset, resolveAsset, statusAssets, syncAssets } from '../src/assets.mjs'
+import { addAssets, diffAsset, overrideAsset, publishAsset, removeAsset, resolveAsset, statusAssets, syncAssets } from '../src/assets.mjs'
 import { buildHome } from '../src/build.mjs'
 import { createHome } from '../src/create.mjs'
 import { executableApproved } from '../src/executables.mjs'
@@ -67,7 +67,37 @@ test('a Desk Asset publishes to the Home with origin removed', async () => {
   }
 })
 
-test('legacy manifests, Overlay, path escapes, symlinks and Home/Desk shadows are rejected', async () => {
+test('a Desk override replaces one Home Asset locally and publishes only from an unchanged base', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'hairness-override-'))
+  try {
+    const home = join(root, 'home')
+    await createHome(home)
+    const source = await writeAsset(join(root, 'source'), asset({ name: 'company/review' }), { 'capabilities/review.md': 'Shared review.\n' })
+    await addAssets(home, [source])
+    await overrideAsset(home, 'company/review')
+    const deskSource = join(home, '.desk/assets/company/review/capabilities/review.md')
+    await writeFile(deskSource, 'Improved review.\n')
+    const plan = await resolveHome(home)
+    assert.equal(plan.assets.filter((entry) => entry.name === 'company/review').length, 1)
+    assert.equal(plan.assets.find((entry) => entry.name === 'company/review').scope, 'desk')
+    assert.equal(plan.assets.find((entry) => entry.name === 'company/review').override.asset, 'company/review')
+    assert.equal((await diffAsset(home, 'company/review')).files.find((entry) => entry.path === 'capabilities/review.md').desk, 'changed')
+    await publishAsset(home, 'company/review')
+    assert.equal(await readFile(join(home, 'assets/company/review/capabilities/review.md'), 'utf8'), 'Improved review.\n')
+    await assert.rejects(readFile(join(home, '.desk/assets/company/review/asset.json')), (error) => error.code === 'ENOENT')
+
+    await overrideAsset(home, 'company/review')
+    await writeFile(join(home, 'assets/company/review/capabilities/review.md'), 'Concurrent Home change.\n')
+    await assert.rejects(() => publishAsset(home, 'company/review'), (error) => error.code === 'asset_override_stale')
+    const abandoned = await removeAsset(home, 'company/review')
+    assert.equal(abandoned.scope, 'desk')
+    assert.equal((await resolveHome(home)).assets.find((entry) => entry.name === 'company/review').scope, 'home')
+  } finally {
+    await rm(root, { recursive: true, force: true })
+  }
+})
+
+test('legacy manifests, Overlay, path escapes, symlinks and implicit Home/Desk shadows are rejected', async () => {
   const root = await mkdtemp(join(tmpdir(), 'hairness-safety-'))
   try {
     const home = join(root, 'home')
