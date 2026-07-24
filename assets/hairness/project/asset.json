@@ -3,6 +3,7 @@
   "name": "hairness/project",
   "version": "0.5.0-alpha.0",
   "description": "Maintain Hairness as an independent Target.",
+  "prefix": "hairness",
   "files": [
     "instructions/maintaining-hairness.md",
     "capabilities/review.md",
