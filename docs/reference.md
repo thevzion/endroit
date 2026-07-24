@@ -32,6 +32,10 @@ Asset.
 `desk init`, `desk clone` and `desk status` are Kernel commands. A team Home is
 valid without a Desk.
 
+`hairness/onboarding` owns the optional personal `name`, `addressAs` and
+`responseLanguage` settings it collects. The HUD exposes accepted values to
+Ness; the Kernel gives them no business meaning.
+
 ## Asset
 
 An installed Asset lives at `assets/<namespace>/<name>/asset.json` or, for a

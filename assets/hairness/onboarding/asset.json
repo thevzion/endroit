@@ -6,7 +6,8 @@
   "prefix": "hairness",
   "files": [
     "instructions/home.md",
-    "capabilities/onboard.md"
+    "capabilities/onboard.md",
+    "schemas/desk-settings.schema.json"
   ],
   "instructions": [
     {
@@ -27,5 +28,8 @@
       "capability": "onboard",
       "description": "Configure this Home and your Desk through a consent-first conversation."
     }
-  ]
+  ],
+  "settings": {
+    "desk": "schemas/desk-settings.schema.json"
+  }
 }

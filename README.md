@@ -43,7 +43,7 @@ Maps are stale, and what needs attention. Ness can ask for the full HUD later.
 
 ```text
 HAIRNESS    agentic-tools · team · codex+claude · @hairness/cli@0.5.0-alpha.0
-DESK        alexis · recent:5
+DESK        alexis · Alexis · fr · recent:5
 SURFACES    7 assets · 9 skills · 12 commands · artifact,hud,target
 ARTIFACTS   4 · active:2 current:2
 GIT         main · clean · 51b88db1 · 1 worktree · 2026-07-24

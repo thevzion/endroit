@@ -18,6 +18,9 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
   try {
     const home = join(temporary, 'home')
     await createHome(home)
+    const desk = JSON.parse(await readFile(join(home, '.desk/desk.json'), 'utf8'))
+    desk.settings = { 'hairness/onboarding': { addressAs: 'Alexis', responseLanguage: 'fr' } }
+    await writeFile(join(home, '.desk/desk.json'), `${JSON.stringify(desk, null, 2)}\n`)
     for (let index = 0; index < 7; index += 1) {
       const path = join(home, '.desk', `note-${index}.md`)
       await writeFile(path, `${index}\n`)
@@ -32,6 +35,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.equal(await dispatchRuntime(home, 'hud', ['--json'], json.io), 0)
     const model = JSON.parse(json.stdout())
     assert.equal(model.home.name, 'home')
+    assert.deepEqual(model.desk.preferences, { addressAs: 'Alexis', responseLanguage: 'fr' })
     assert.equal(model.recentDesk.length, 5)
     assert.deepEqual(model.recentDesk.map((entry) => entry.path), ['note-6.md', 'note-5.md', 'note-4.md', 'note-3.md', 'note-2.md'])
     assert.equal(model.recentDesk.some((entry) => entry.path === 'outside-link'), false)
@@ -39,6 +43,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     const prompt = captureIo()
     await dispatchRuntime(home, 'hud', ['--prompt'], prompt.io)
     assert.match(prompt.stdout(), /^<hairness-hud /)
+    assert.match(prompt.stdout(), /address-as="Alexis" response-language="fr"/)
     assert.match(prompt.stdout(), /<targets>/)
     const human = captureIo()
     await dispatchRuntime(home, 'hud', [], human.io)
