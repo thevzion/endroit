@@ -1,0 +1,176 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hairness.dev/schema/asset.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "name", "version", "description", "files"],
+  "properties": {
+    "$schema": { "const": "https://hairness.dev/schema/asset.json" },
+    "name": { "$ref": "#/$defs/name" },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "description": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "prefix": { "$ref": "#/$defs/id" },
+    "files": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/path" }
+    },
+    "instructions": { "$ref": "#/$defs/materials" },
+    "capabilities": { "$ref": "#/$defs/capabilities" },
+    "skills": { "$ref": "#/$defs/accessors" },
+    "commands": { "$ref": "#/$defs/accessors" },
+    "references": { "$ref": "#/$defs/materials" },
+    "artifactKinds": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "schema", "template", "owners"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "schema": { "$ref": "#/$defs/path" },
+          "template": { "$ref": "#/$defs/path" },
+          "owners": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "enum": ["desk", "home", "target"] }
+          },
+          "states": {
+            "type": "array",
+            "minItems": 1,
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/id" }
+          },
+          "targetPath": { "$ref": "#/$defs/path" },
+          "requiredFiles": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "$ref": "#/$defs/path" }
+          }
+        }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "home": { "$ref": "#/$defs/path" },
+        "desk": { "$ref": "#/$defs/path" }
+      }
+    },
+    "setup": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    },
+    "runtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["namespace", "entry", "commands"],
+      "properties": {
+        "namespace": { "$ref": "#/$defs/id" },
+        "entry": { "$ref": "#/$defs/path" },
+        "commands": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "description"],
+            "properties": {
+              "name": { "$ref": "#/$defs/id" },
+              "description": { "type": "string", "minLength": 1, "maxLength": 240 }
+            }
+          }
+        }
+      }
+    },
+    "origin": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "kind",
+        "source",
+        "requestedRef",
+        "resolvedCommit",
+        "mobile",
+        "baseManifestDigest",
+        "baseDigests"
+      ],
+      "properties": {
+        "kind": { "enum": ["source", "override"] },
+        "source": { "type": "string", "minLength": 1, "maxLength": 2048 },
+        "requestedRef": { "type": ["string", "null"], "maxLength": 240 },
+        "resolvedCommit": { "type": ["string", "null"], "maxLength": 64 },
+        "mobile": { "type": "boolean" },
+        "baseManifestDigest": { "$ref": "#/$defs/digest" },
+        "baseDigests": {
+          "type": "object",
+          "propertyNames": { "$ref": "#/$defs/path" },
+          "additionalProperties": { "$ref": "#/$defs/digest" }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}/[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "path": {
+      "type": "string",
+      "pattern": "^(?!/)(?!.*(?:^|/)\\.\\.(?:/|$))(?!.*\\\\)(?!.*//)[^\\u0000]+$"
+    },
+    "digest": {
+      "type": "string",
+      "pattern": "^sha256:[a-f0-9]{64}$"
+    },
+    "materials": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "path": { "$ref": "#/$defs/path" },
+          "description": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "path"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "path": { "$ref": "#/$defs/path" },
+          "description": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    },
+    "accessors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "capability", "description"],
+        "properties": {
+          "id": { "$ref": "#/$defs/id" },
+          "capability": { "$ref": "#/$defs/id" },
+          "description": { "type": "string", "minLength": 1, "maxLength": 500 }
+        }
+      }
+    }
+  }
+}

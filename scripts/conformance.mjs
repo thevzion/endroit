@@ -14,14 +14,15 @@ try {
   const manifest = {
     $schema: 'https://hairness.dev/schema/asset.json',
     name: 'conformance/proof', version: '1.0.0', description: 'Conformance proof.',
-    files: [{ path: 'proof.md', type: 'hairness:file' }],
+    files: ['proof.md'],
+    instructions: [{ id: 'proof', path: 'proof.md' }],
   }
-  await writeFile(join(source, 'hairness.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+  await writeFile(join(source, 'asset.json'), `${JSON.stringify(manifest, null, 2)}\n`)
   await writeFile(join(source, 'proof.md'), 'one\n')
-  await addAssets(home, [join(source, 'hairness.json')])
+  await addAssets(home, [join(source, 'asset.json')])
   assert.equal((await statusAssets(home, 'proof'))[0].state, 'clean')
   manifest.version = '2.0.0'
-  await writeFile(join(source, 'hairness.json'), `${JSON.stringify(manifest, null, 2)}\n`)
+  await writeFile(join(source, 'asset.json'), `${JSON.stringify(manifest, null, 2)}\n`)
   await writeFile(join(source, 'proof.md'), 'two\n')
   assert.equal((await syncAssets(home, 'proof', { check: true }))[0].status, 'available')
   await syncAssets(home, 'proof')

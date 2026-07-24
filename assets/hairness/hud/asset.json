@@ -1,0 +1,42 @@
+{
+  "$schema": "https://hairness.dev/schema/asset.json",
+  "name": "hairness/hud",
+  "version": "0.5.0-alpha.0",
+  "description": "Dense local orientation for Ness at session start and on demand.",
+  "prefix": "hairness",
+  "files": [
+    "capabilities/orient.md",
+    "runtime.mjs"
+  ],
+  "capabilities": [
+    {
+      "id": "orient",
+      "path": "capabilities/orient.md",
+      "description": "Inspect the current Home, Desk, Targets and anomalies before acting."
+    }
+  ],
+  "skills": [
+    {
+      "id": "home",
+      "capability": "orient",
+      "description": "Use when orientation, current Home state or the next safe route is needed."
+    }
+  ],
+  "commands": [
+    {
+      "id": "home",
+      "capability": "orient",
+      "description": "Show and interpret the current Hairness Home."
+    }
+  ],
+  "runtime": {
+    "namespace": "hud",
+    "entry": "runtime.mjs",
+    "commands": [
+      {
+        "name": "show",
+        "description": "Render the compact, full, JSON or agent-prompt HUD."
+      }
+    ]
+  }
+}

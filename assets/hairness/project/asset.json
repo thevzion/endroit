@@ -1,0 +1,41 @@
+{
+  "$schema": "https://hairness.dev/schema/asset.json",
+  "name": "hairness/project",
+  "version": "0.5.0-alpha.0",
+  "description": "Maintain Hairness as an independent Target.",
+  "files": [
+    "instructions/maintaining-hairness.md",
+    "capabilities/review.md",
+    "capabilities/release.md"
+  ],
+  "instructions": [
+    {
+      "id": "maintenance",
+      "path": "instructions/maintaining-hairness.md"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "review",
+      "path": "capabilities/review.md",
+      "description": "Review Hairness against its public contracts and qualification gates."
+    },
+    {
+      "id": "release",
+      "path": "capabilities/release.md",
+      "description": "Prepare a resumable Hairness prerelease without crossing approval checkpoints."
+    }
+  ],
+  "skills": [
+    {
+      "id": "project-review",
+      "capability": "review",
+      "description": "Use when a Hairness change must be reviewed against public contracts and qualification gates."
+    },
+    {
+      "id": "project-release",
+      "capability": "release",
+      "description": "Use when preparing a resumable Hairness prerelease without crossing approval checkpoints."
+    }
+  ]
+}

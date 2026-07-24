@@ -9,7 +9,7 @@ const root = new URL('../', import.meta.url).pathname
 async function files(directory) {
   const values = []
   for (const entry of await readdir(directory, { withFileTypes: true })) {
-    if (['.git', '.overlay', 'node_modules'].includes(entry.name)) continue
+    if (['.git', '.desk', 'node_modules'].includes(entry.name)) continue
     const path = join(directory, entry.name)
     if (entry.isDirectory()) values.push(...await files(path))
     else values.push(path)
@@ -17,12 +17,16 @@ async function files(directory) {
   return values
 }
 
-assert.deepEqual(await compileSchemas(), ['home', 'asset', 'prologue'])
-for (const name of ['onboarding', 'scratch', 'project']) {
-  await validateDocument(JSON.parse(await readFile(join(root, 'assets', name, 'hairness.json'), 'utf8')), 'asset')
+assert.deepEqual(await compileSchemas(), ['home', 'desk', 'asset', 'runtime'])
+for (const name of ['onboarding', 'hud', 'artifacts', 'targets', 'scratch']) {
+  await validateDocument(JSON.parse(await readFile(join(root, 'assets', 'hairness', name, 'asset.json'), 'utf8')), 'asset')
 }
 await validateDocument({
-  $schema: 'https://hairness.dev/schema/home.json', name: 'check', runtime: '@hairness/cli@0.4.0-alpha.1', providers: ['codex'],
+  $schema: 'https://hairness.dev/schema/home.json',
+  name: 'check',
+  runtime: '@hairness/cli@0.5.0-alpha.0',
+  mode: 'solo',
+  providers: ['codex'],
 }, 'home')
 const all = await files(root)
 assert.equal(all.some((path) => path.endsWith('hairness.lock.json')), false)
@@ -30,10 +34,14 @@ assert.equal(all.some((path) => /packages\/(?:native|starter)/.test(path)), fals
 for (const path of all.filter((path) => path.endsWith('.mjs'))) execFileSync(process.execPath, ['--check', path], { stdio: 'pipe' })
 for (const path of all) {
   const name = relative(root, path)
-  assert.ok(!/(^|\/)(?:\.overlay|node_modules)(?:\/|$)/.test(name), `tracked runtime path: ${name}`)
+  assert.ok(!/(^|\/)(?:\.overlay|native|node_modules)(?:\/|$)/.test(name), `tracked legacy path: ${name}`)
   if (!/\.(?:md|mjs|json|yml|yaml)$/.test(name)) continue
   const body = await readFile(path, 'utf8')
   assert.ok(!/AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC )?PRIVATE KEY/.test(body), `${name} contains secret-like material`)
-  if (name.startsWith('src/')) for (const removed of ['HomeLock', 'Distribution', 'package-owned', '@hairness/native', '@hairness/starter', 'registryDependencies']) assert.equal(body.includes(removed), false, `${name} contains removed model ${removed}`)
+  if (name.startsWith('src/')) {
+    for (const removed of ['HomeLock', 'Distribution', 'package-owned', '@hairness/native', '@hairness/starter', 'registryDependencies', 'Prologue', 'Adapter']) {
+      assert.equal(body.includes(removed), false, `${name} contains removed model ${removed}`)
+    }
+  }
 }
 console.log(`check passed (${all.length} files)`)

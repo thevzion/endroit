@@ -1,51 +1,41 @@
-import { join } from 'node:path'
+import { statusAssets } from './assets.mjs'
 import { buildHome } from './build.mjs'
-import { assetStatus, installedAssets } from './assets.mjs'
-import { RUNTIME, loadHome, loadLocalConfig } from './home.mjs'
-import { doctorIntegrations } from './integrations.mjs'
-import { exists } from './lib/io.mjs'
-import { doctorTargets } from './targets.mjs'
+import { loadDesk } from './desk.mjs'
+import { HairnessError } from './lib/errors.mjs'
+import { resolveHome } from './resolved.mjs'
+import { runtimeTrustState } from './runtime.mjs'
 
-export async function doctorHome(root, options = {}) {
-  const [home, local, targets, integrations, installed] = await Promise.all([
-    loadHome(root),
-    loadLocalConfig(root),
-    doctorTargets(root),
-    doctorIntegrations(root),
-    installedAssets(root),
-  ])
-  const assets = await Promise.all(installed.map(assetStatus))
-  const limits = [...targets.limits, ...integrations.limits]
-  if (home.runtime !== RUNTIME) limits.push(`runtime-mismatch:${home.runtime}`)
-  if (await exists(join(root, 'hairness.lock.json'))) limits.push('legacy-home-lock-present')
-  for (const asset of assets) if (['missing', 'invalid'].includes(asset.state)) limits.push(`asset-${asset.state}:${asset.name}`)
+export async function doctorHome(root) {
+  const plan = await resolveHome(root)
+  const desk = await loadDesk(root)
+  const statuses = [
+    ...await statusAssets(root, undefined, { scope: 'home' }),
+    ...await statusAssets(root, undefined, { scope: 'desk' }),
+  ]
+  const limits = statuses.filter((entry) => entry.state !== 'clean').map((entry) => `asset-${entry.state}:${entry.name}`)
+  const runtimes = []
+  for (const runtime of plan.runtimes) {
+    const trust = await runtimeTrustState(root, runtime.owner, plan)
+    runtimes.push({ name: runtime.owner, namespace: runtime.namespace, ...trust })
+    if (!trust.trusted) limits.push(`runtime-untrusted:${runtime.owner}`)
+  }
   let build = 'ready'
   try {
-    await buildHome(root, { check: true, adapterHomeRoot: options.adapterHomeRoot })
+    await buildHome(root, { check: true })
   } catch (error) {
-    build = 'stale'
-    limits.push(`build:${error.code ?? 'invalid'}`)
+    if (!(error instanceof HairnessError)) throw error
+    build = error.code
+    limits.push(`build:${error.code}`)
   }
   return {
     status: limits.length ? 'partial' : 'ready',
-    home: { name: home.name, providers: home.providers },
-    profile: local.preferences,
-    kernel: { runtime: home.runtime, current: RUNTIME },
-    assets,
-    targets: targets.targets,
-    integrations: integrations.integrations,
+    home: { name: plan.home.name, mode: plan.home.mode, runtime: plan.home.runtime, providers: plan.home.providers },
+    desk: desk ? { id: desk.id, configured: true } : { configured: false },
+    assets: plan.assets.map((entry) => ({ id: entry.id, scope: entry.scope, version: entry.version, overridden: entry.overridden })),
+    runtimes,
+    context: plan.context,
     build,
     limits,
-    routes: repairRoutes(limits),
+    warnings: !desk && plan.home.mode === 'team' ? ['desk-missing: invoke hairness-onboarding to clone, initialize or skip a private Desk.'] : [],
   }
-}
-
-function repairRoutes(limits) {
-  const routes = []
-  if (limits.some((limit) => limit.startsWith('build:'))) routes.push('hairness build')
-  if (limits.some((limit) => limit.startsWith('target-'))) routes.push('hairness target doctor')
-  if (limits.some((limit) => limit.startsWith('integration-'))) routes.push('hairness integration doctor')
-  if (limits.some((limit) => limit.startsWith('asset-'))) routes.push('hairness status')
-  if (limits.some((limit) => limit.startsWith('runtime-'))) routes.push('use hairness.json#runtime')
-  return [...new Set(routes)]
 }

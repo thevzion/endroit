@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://hairness.dev/schema/artifact.json",
+  "type": "object",
+  "required": ["$schema", "id", "kind", "owner", "state", "createdBy", "createdAt"],
+  "properties": {
+    "$schema": { "const": "https://hairness.dev/schema/artifact.json" },
+    "id": { "type": "string" },
+    "kind": { "type": "string" },
+    "owner": { "type": "string" },
+    "state": { "type": "string" },
+    "createdBy": { "type": "string" },
+    "createdAt": { "type": "string" },
+    "derivedFrom": { "type": "string" },
+    "targets": { "type": "array", "items": { "type": "string" } }
+  }
+}

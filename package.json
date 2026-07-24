@@ -1,7 +1,7 @@
 {
   "name": "@hairness/cli",
-  "version": "0.4.0-alpha.1",
-  "description": "Source-owned agentic assets for any agent runtime.",
+  "version": "0.5.0-alpha.0",
+  "description": "A lightweight framework for source-owned, portable agent work environments.",
   "keywords": [
     "ai-agents",
     "agentic-assets",
@@ -35,9 +35,12 @@
   "files": [
     "bin/",
     "docs/reference.md",
-    "assets/onboarding/",
-    "assets/scratch/",
-    "schemas/v4/",
+    "assets/hairness/onboarding/",
+    "assets/hairness/hud/",
+    "assets/hairness/artifacts/",
+    "assets/hairness/targets/",
+    "assets/hairness/scratch/",
+    "schemas/v5/",
     "src/",
     "LICENSE",
     "README.md"
