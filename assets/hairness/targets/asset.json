@@ -8,6 +8,7 @@
     "capabilities/configure.md",
     "capabilities/manage.md",
     "capabilities/map.md",
+    "references/gsd-attribution.md",
     "schemas/home-settings.schema.json",
     "schemas/desk-settings.schema.json",
     "schemas/target-map.schema.json",
@@ -36,6 +37,13 @@
       "id": "map",
       "path": "capabilities/map.md",
       "description": "Create an evidence-backed structural map without writing into the Target."
+    }
+  ],
+  "references": [
+    {
+      "id": "gsd-attribution",
+      "path": "references/gsd-attribution.md",
+      "description": "Attribution for the Target Map method adapted from GSD Core."
     }
   ],
   "skills": [

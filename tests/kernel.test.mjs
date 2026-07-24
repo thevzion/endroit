@@ -107,6 +107,21 @@ test('a clone is immediately usable from tracked projections without local build
   }
 })
 
+test('doctor reports a missing runtime as a limit instead of crashing', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-doctor-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home)
+    await rm(join(home, 'assets/hairness/hud/runtime.mjs'))
+    const report = await doctorHome(home)
+    assert.equal(report.status, 'partial')
+    assert.equal(report.runtimes.find((entry) => entry.name === 'hairness/hud').error, 'ENOENT')
+    assert.ok(report.limits.includes('runtime-invalid:hairness/hud:ENOENT'))
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
 test('team Desk projections remain local while Desk sources stay in the nested repository', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'hairness-team-projection-'))
   try {

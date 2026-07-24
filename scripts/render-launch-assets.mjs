@@ -22,7 +22,7 @@ await exec('magick', [
   '-fill', '#d8996a',
   '-pointsize', '22',
   '-kerning', '4',
-  '-annotate', '+72+84', '0.4 ALPHA',
+  '-annotate', '+72+84', '0.5 ALPHA',
   '-fill', '#f1eee8',
   '-pointsize', '86',
   '-kerning', '-2',

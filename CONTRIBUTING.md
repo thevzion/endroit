@@ -18,5 +18,5 @@ npm run check:lab
 ```
 
 Use Conventional Commits and keep changes focused. A new dependency, executable
-Adapter or public contract change needs a concrete consumer and maintainer
+Asset runtime or public contract change needs a concrete consumer and maintainer
 agreement.

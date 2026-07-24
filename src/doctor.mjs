@@ -15,9 +15,15 @@ export async function doctorHome(root) {
   const limits = statuses.filter((entry) => entry.state !== 'clean').map((entry) => `asset-${entry.state}:${entry.name}`)
   const runtimes = []
   for (const runtime of plan.runtimes) {
-    const trust = await runtimeTrustState(root, runtime.owner, plan)
-    runtimes.push({ name: runtime.owner, namespace: runtime.namespace, ...trust })
-    if (!trust.trusted) limits.push(`runtime-untrusted:${runtime.owner}`)
+    try {
+      const trust = await runtimeTrustState(root, runtime.owner, plan)
+      runtimes.push({ name: runtime.owner, namespace: runtime.namespace, ...trust })
+      if (!trust.trusted) limits.push(`runtime-untrusted:${runtime.owner}`)
+    } catch (error) {
+      const code = error instanceof HairnessError ? error.code : error.code ?? 'runtime-invalid'
+      runtimes.push({ name: runtime.owner, namespace: runtime.namespace, trusted: false, source: null, error: code })
+      limits.push(`runtime-invalid:${runtime.owner}:${code}`)
+    }
   }
   let build = 'ready'
   try {
