@@ -1,7 +1,7 @@
 {
   "name": "@hairness/cli",
-  "version": "0.4.0-alpha.1",
-  "description": "Source-owned agentic assets for any agent runtime.",
+  "version": "0.5.0-alpha.0",
+  "description": "A lightweight framework for source-owned, portable agent work environments.",
   "keywords": [
     "ai-agents",
     "agentic-assets",
@@ -35,9 +35,13 @@
   "files": [
     "bin/",
     "docs/reference.md",
-    "assets/onboarding/",
-    "assets/scratch/",
-    "schemas/v4/",
+    "assets/hairness/onboarding/",
+    "assets/hairness/hud/",
+    "assets/hairness/artifacts/",
+    "assets/hairness/targets/",
+    "assets/hairness/scratch/",
+    "templates/",
+    "schemas/v5/",
     "src/",
     "LICENSE",
     "README.md"
@@ -51,6 +55,10 @@
     "check:providers": "node scripts/check-providers.mjs",
     "check:pack": "node scripts/check-pack.mjs",
     "check:lab": "node scripts/lab-dogfood.mjs",
+    "dev:home": "node scripts/development-home.mjs ensure",
+    "dev:home:recreate": "node scripts/development-home.mjs recreate",
+    "dev:session": "node scripts/development-home.mjs session",
+    "dev:verify": "node scripts/development-home.mjs verify",
     "launch:render": "node scripts/render-launch-assets.mjs",
     "release:pack": "node scripts/release-packages.mjs",
     "release:dry-run": "node scripts/release-publish.mjs --dry-run"

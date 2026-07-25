@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "name": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "addressAs": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 120
+    },
+    "responseLanguage": {
+      "type": "string",
+      "minLength": 2,
+      "maxLength": 60
+    }
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["id", "kind", "owner", "state", "createdBy", "createdAt", "derivedFrom", "targets"],
+  "properties": {
+    "kind": { "const": "hairness/targets:target-map" },
+    "owner": { "const": "desk" },
+    "state": { "enum": ["current", "stale"] }
+  }
+}

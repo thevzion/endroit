@@ -6,10 +6,11 @@ import { HairnessError } from './lib/errors.mjs'
 export const API = Object.freeze({
   home: 'https://hairness.dev/schema/home.json',
   asset: 'https://hairness.dev/schema/asset.json',
-  prologue: 'hairness.dev/prologue/v1alpha1',
+  desk: 'https://hairness.dev/schema/desk.json',
+  runtime: 'hairness.dev/runtime/v1alpha1',
 })
 
-const schemaFiles = ['home.schema.json', 'asset.schema.json', 'prologue.schema.json']
+const schemaFiles = ['home.schema.json', 'desk.schema.json', 'asset.schema.json', 'runtime.schema.json']
 let validatorsPromise
 
 async function validators() {
@@ -17,7 +18,7 @@ async function validators() {
     const ajv = new Ajv2020({ allErrors: true, strict: true, strictRequired: false })
     const values = new Map()
     for (const file of schemaFiles) {
-      const path = fileURLToPath(new URL(`../schemas/v4/${file}`, import.meta.url))
+      const path = fileURLToPath(new URL(`../schemas/v5/${file}`, import.meta.url))
       const schema = JSON.parse(await readFile(path, 'utf8'))
       values.set(file.replace('.schema.json', ''), ajv.compile(schema))
     }
@@ -38,23 +39,4 @@ export async function validateDocument(document, type) {
 
 export async function compileSchemas() {
   return [...(await validators()).keys()]
-}
-
-export function validateLocalConfig(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value) || value.version !== 1) {
-    throw new HairnessError('config_invalid', '.overlay/config.json must be an object with version 1.')
-  }
-  const allowed = new Set(['version', 'preferences', 'integrationBindings'])
-  const extra = Object.keys(value).filter((key) => !allowed.has(key))
-  if (extra.length) throw new HairnessError('config_invalid', `Unknown local config fields: ${extra.join(', ')}.`)
-  const preferences = value.preferences ?? {}
-  const limits = { name: 120, addressAs: 120, responseLanguage: 32, note: 500 }
-  for (const [key, entry] of Object.entries(preferences)) {
-    if (!(key in limits) || typeof entry !== 'string' || entry.length > limits[key]) throw new HairnessError('config_invalid', `Invalid preference ${key}.`)
-  }
-  const integrationBindings = value.integrationBindings ?? {}
-  if (!integrationBindings || typeof integrationBindings !== 'object' || Array.isArray(integrationBindings)) {
-    throw new HairnessError('config_invalid', 'integrationBindings must be an object.')
-  }
-  return { version: 1, preferences, integrationBindings }
 }

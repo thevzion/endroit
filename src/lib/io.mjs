@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { cp, lstat, mkdir, readFile, readdir, realpath, rename, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
 import { HairnessError } from './errors.mjs'
 
@@ -62,39 +62,4 @@ export async function resolvePackageFile(root, path, label = 'package path') {
   const resolved = await realpath(target)
   assertInside(base, resolved, label)
   return resolved
-}
-
-export async function copyTree(source, destination) {
-  for (const entry of await readdir(source, { withFileTypes: true })) {
-    if (['.git', 'node_modules'].includes(entry.name)) continue
-    const from = resolve(source, entry.name)
-    if ((await lstat(from)).isSymbolicLink()) throw new HairnessError('symlink_forbidden', `Template contains symbolic link ${entry.name}.`)
-    await cp(from, resolve(destination, entry.name), {
-      recursive: true,
-      errorOnExist: true,
-      force: false,
-      filter: async (path) => {
-        const rel = relative(source, path)
-        if (rel.split(sep).some((part) => ['.git', 'node_modules'].includes(part))) return false
-        if ((await lstat(path)).isSymbolicLink()) throw new HairnessError('symlink_forbidden', `Template contains symbolic link ${rel}.`)
-        return true
-      },
-    })
-  }
-}
-
-export async function treeFiles(root) {
-  const base = await realpath(root)
-  const files = []
-  async function visit(directory) {
-    for (const entry of (await readdir(directory, { withFileTypes: true })).sort((a, b) => a.name.localeCompare(b.name))) {
-      const path = resolve(directory, entry.name)
-      const rel = relative(base, path).split(sep).join('/')
-      if (entry.isSymbolicLink()) throw new HairnessError('symlink_forbidden', `Generated output contains symbolic link ${rel}.`)
-      if (entry.isDirectory()) await visit(path)
-      else if (entry.isFile()) files.push({ path: rel, content: await readFile(path) })
-    }
-  }
-  await visit(base)
-  return files
 }

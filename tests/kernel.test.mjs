@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -9,125 +9,360 @@ import { buildHome } from '../src/build.mjs'
 import { runCli } from '../src/cli.mjs'
 import { compileSchemas, validateDocument } from '../src/contracts.mjs'
 import { createHome, initHome } from '../src/create.mjs'
+import { cloneDesk, initDesk, loadDesk } from '../src/desk.mjs'
 import { doctorHome } from '../src/doctor.mjs'
+import { renderFloorPlan, sessionWrapper } from '../src/front-door.mjs'
 import { assertRuntime } from '../src/home.mjs'
-import { prologueModel } from '../src/prologue.mjs'
-import { addTarget, listTargets } from '../src/targets.mjs'
+import { resolveHome } from '../src/resolved.mjs'
+import { addAssets } from '../src/assets.mjs'
+import { asset, captureIo, writeAsset } from './helpers.mjs'
 
 const exec = promisify(execFile)
 
-test('create produces a Git-ready Home with onboarding and tracked projections', async () => {
-  assert.deepEqual(await compileSchemas(), ['home', 'asset', 'prologue'])
+test('create builds a source-owned Home and tracks shared provider projections', async () => {
+  assert.deepEqual(await compileSchemas(), ['home', 'desk', 'asset', 'runtime'])
   const help = captureIo()
   assert.equal(await runCli([], help.io), 0)
-  assert.doesNotMatch(help.stdout(), /\b(?:registry|catalog|view|search)\b/i)
-  const root = await mkdtemp(join(tmpdir(), 'hairness-kernel-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-kernel-'))
   try {
-    const home = join(root, 'my-home')
-    await createHome(home, { providers: ['codex', 'claude'] })
+    const home = join(temporary, 'home')
+    await createHome(home, { providers: ['codex', 'claude'], prefix: 'acme' })
     const document = JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8'))
     await validateDocument(document, 'home')
     assert.deepEqual(document, {
       $schema: 'https://hairness.dev/schema/home.json',
-      name: 'my-home',
-      runtime: '@hairness/cli@0.4.0-alpha.1',
+      name: 'home',
+      runtime: '@hairness/cli@0.5.0-alpha.0',
+      mode: 'solo',
       providers: ['codex', 'claude'],
+      prefix: 'acme',
+      frontDoor: { wakeUp: 'hairness/hud:prompt' },
     })
-    for (const absent of ['package.json', 'package-lock.json', 'hairness.lock.json', '.overlay/config.json']) {
-      await assert.rejects(readFile(join(home, absent)), (error) => error.code === 'ENOENT')
+    for (const name of ['artifacts', 'hud', 'onboarding', 'targets']) {
+      const manifest = JSON.parse(await readFile(join(home, `assets/hairness/${name}/asset.json`), 'utf8'))
+      assert.equal(manifest.origin.source, `@hairness/${name}`)
+      assert.match(manifest.origin.baseManifestDigest, /^sha256:[a-f0-9]{64}$/)
     }
+    await assert.rejects(readFile(join(home, 'assets/hairness/scratch/asset.json')), (error) => error.code === 'ENOENT')
     const tracked = (await exec('git', ['ls-files'], { cwd: home })).stdout
     for (const path of [
-      'assets/hairness/onboarding/hairness.json',
-      '.agents/skills/hairness/SKILL.md',
-      '.agents/skills/hairness-onboarding/SKILL.md',
-      '.claude/skills/hairness/SKILL.md',
-      '.claude/skills/hairness-onboarding/SKILL.md',
-      'AGENTS.md', 'CLAUDE.md', '.codex/hooks.json', '.claude/settings.json',
-    ]) assert.match(tracked, new RegExp(`^${path.replaceAll('.', '\\.')}$`, 'm'))
+      'HOME.md',
+      '.desk/DESK.md',
+      'AGENTS.md',
+      'CLAUDE.md',
+      '.agents/skills/acme-hairness-onboarding/SKILL.md',
+      '.agents/skills/acme-hairness-artifacts/SKILL.md',
+      '.agents/skills/acme-hairness-target-manage/SKILL.md',
+      '.claude/settings.json',
+      '.claude/hooks/hairness-session-start.mjs',
+      '.codex/hooks.json',
+      '.codex/hooks/hairness-session-start.mjs',
+      'hairness.mjs',
+      'assets/hairness/hud/runtime.mjs',
+    ]) assert.match(tracked, new RegExp(`^${escape(path)}$`, 'm'))
+    assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /^# home$/m)
+    assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /^# local's Desk$/m)
+    const agents = await readFile(join(home, 'AGENTS.md'), 'utf8')
+    assert.match(agents, /<!-- source: HOME\.md -->/)
+    assert.match(agents, /## Hairness Floor Plan/)
+    assert.match(agents, /node \.\/hairness\.mjs <namespace> <command>/)
+    assert.match(agents, /## hairness\/hud:orientation/)
+    assert.doesNotMatch(agents, /If no Hairness HUD was injected/)
+    assert.doesNotMatch(agents, /## hairness\/onboarding:home/)
     assert.doesNotMatch(tracked, /^\.hairness\//m)
     assert.equal((await doctorHome(home)).status, 'ready')
     await buildHome(home, { check: true })
-    const onboarding = JSON.parse(await readFile(join(home, 'assets/hairness/onboarding/hairness.json'), 'utf8'))
-    assert.equal(onboarding.name, 'hairness/onboarding')
-    assert.equal(onboarding.installation.source, '@hairness/onboarding')
-    assert.match(onboarding.installation.baseManifestDigest, /^sha256:[a-f0-9]{64}$/)
-    assert.equal(Object.keys(onboarding.installation.baseDigests).length, onboarding.files.length)
-    const prologue = await prologueModel(home)
-    assert.equal(prologue.facts.find((fact) => fact.id === 'home.name').value, 'my-home')
+    const plan = await resolveHome(home)
+    assert.deepEqual(plan.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'target'])
+    assert.deepEqual(plan.frontDoor, {
+      route: 'hairness/hud:prompt',
+      owner: 'hairness/hud',
+      namespace: 'hud',
+      command: 'prompt',
+    })
+    assert.ok(plan.context.floorPlanBytes > 0)
+    const floorPlan = renderFloorPlan(plan)
+    assert.equal(floorPlan, renderFloorPlan(plan))
+    assert.doesNotMatch(floorPlan, new RegExp(escape(home)))
+    assert.doesNotMatch(floorPlan, /\b(?:branch|commit|sha256|generated-at)\b/i)
+
     document.runtime = '@hairness/cli@9.0.0'
     await writeFile(join(home, 'hairness.json'), `${JSON.stringify(document, null, 2)}\n`)
-    await assert.rejects(() => assertRuntime(home), (error) => error.code === 'runtime_mismatch' && /npx --yes/.test(error.message))
+    await assert.rejects(() => assertRuntime(home), (error) => error.code === 'runtime_mismatch' && /node \.\/hairness\.mjs/.test(error.message))
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await rm(temporary, { recursive: true, force: true })
   }
 })
 
-test('init creates a bare Home and preserves an existing Overlay byte-for-byte', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'hairness-init-'))
+test('provider session wrappers inject exact transport and fail closed without leaking stderr', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-session-'))
   try {
-    await mkdir(join(root, '.overlay'))
-    const config = '{\n  "version": 1,\n  "preferences": { "name": "Existing" },\n  "integrationBindings": {}\n}\n'
-    await writeFile(join(root, '.overlay/config.json'), config)
-    const rejected = captureIo()
-    assert.equal(await runCli(['init', '@hairness/scratch', '--home', root], rejected.io), 2)
-    assert.match(rejected.stderr(), /bare Home/)
-    await initHome(root, { name: 'bare-home', providers: ['codex'] })
-    assert.equal(await readFile(join(root, '.overlay/config.json'), 'utf8'), config)
-    await assert.rejects(readFile(join(root, 'assets/hairness/onboarding/hairness.json')), (error) => error.code === 'ENOENT')
-    await buildHome(root)
-    assert.equal((await doctorHome(root)).status, 'ready')
+    const home = join(temporary, 'home')
+    await createHome(home)
+    const local = join(home, '.hairness/dev-cli')
+    await mkdir(join(home, '.hairness'), { recursive: true })
+    await executable(local, `#!/usr/bin/env node
+process.stdout.write('<wake-up source="' + process.env.HAIRNESS_RUNTIME_SOURCE + '" kind="' + process.env.HAIRNESS_INVOCATION_KIND + '"/>\\n')
+`)
+
+    const codexPath = join(home, '.codex/hooks/hairness-session-start.mjs')
+    const claudePath = join(home, '.claude/hooks/hairness-session-start.mjs')
+    const codex = JSON.parse((await exec('node', [codexPath], { cwd: home })).stdout)
+    assert.deepEqual(codex, {
+      hookSpecificOutput: {
+        hookEventName: 'SessionStart',
+        additionalContext: '<wake-up source="development" kind="wake-up"/>',
+      },
+    })
+    assert.equal((await exec('node', [claudePath], { cwd: home })).stdout, '<wake-up source="development" kind="wake-up"/>\n')
+
+    await executable(local, `#!/usr/bin/env node
+process.stderr.write('private-downstream-secret\\n')
+process.exitCode = 4
+`)
+    await assert.rejects(
+      () => exec(process.execPath, [join(home, 'hairness.mjs'), 'hud', 'prompt'], { cwd: home }),
+      (error) => error.code === 4 && /private-downstream-secret/.test(error.stderr),
+    )
+    const failed = (await exec('node', [codexPath], { cwd: home })).stdout
+    assert.deepEqual(JSON.parse(failed), {
+      hookSpecificOutput: {
+        hookEventName: 'SessionStart',
+        additionalContext: '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />',
+      },
+    })
+    assert.doesNotMatch(failed, /private-downstream-secret/)
+
+    await rm(local)
+    await symlink('missing-cli', local)
+    assert.equal((await exec('node', [claudePath], { cwd: home })).stdout, '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
+
+    await rm(local)
+    const boundedPath = join(home, '.claude/hooks/hairness-session-bounded.mjs')
+    await writeFile(boundedPath, sessionWrapper('claude', { namespace: 'hud', command: 'prompt' }, { timeoutMs: 20, maxBytes: 32 }))
+    await executable(local, '#!/usr/bin/env node\nsetInterval(() => {}, 1_000)\n')
+    assert.equal((await exec('node', [boundedPath], { cwd: home })).stdout, '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
+    await executable(local, "#!/usr/bin/env node\nprocess.stdout.write('x'.repeat(33))\n")
+    assert.equal((await exec('node', [boundedPath], { cwd: home })).stdout, '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
+    await rm(local)
+
+    const fakeBin = join(temporary, 'bin')
+    const argsPath = join(temporary, 'npx-args.json')
+    await mkdir(fakeBin)
+    await executable(join(fakeBin, 'npx'), `#!/usr/bin/env node
+import { writeFileSync } from 'node:fs'
+writeFileSync(process.env.HAIRNESS_TEST_ARGS, JSON.stringify(process.argv.slice(2)))
+process.stdout.write('<wake-up source="' + process.env.HAIRNESS_RUNTIME_SOURCE + '"/>\\n')
+`)
+    const npm = await exec('node', [claudePath], {
+      cwd: home,
+      env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HAIRNESS_TEST_ARGS: argsPath },
+    })
+    assert.equal(npm.stdout, '<wake-up source="npm"/>\n')
+    assert.deepEqual(JSON.parse(await readFile(argsPath, 'utf8')), [
+      '--yes',
+      '@hairness/cli@0.5.0-alpha.0',
+      'hud',
+      'prompt',
+    ])
+
+    const hooks = JSON.parse(await readFile(join(home, '.codex/hooks.json'), 'utf8'))
+    hooks.hooks.SessionStart.unshift({
+      matcher: 'startup',
+      hooks: [
+        { type: 'command', command: 'node user-session-hook.mjs' },
+        { type: 'command', command: 'node another-user-hook.mjs' },
+      ],
+    })
+    await writeFile(join(home, '.codex/hooks.json'), `${JSON.stringify(hooks, null, 2)}\n`)
+    await buildHome(home)
+    const rebuilt = JSON.parse(await readFile(join(home, '.codex/hooks.json'), 'utf8'))
+    assert.deepEqual(rebuilt.hooks.SessionStart, [
+      {
+        matcher: 'startup',
+        hooks: [
+          { type: 'command', command: 'node user-session-hook.mjs' },
+          { type: 'command', command: 'node another-user-hook.mjs' },
+        ],
+      },
+      {
+        matcher: 'startup|resume|clear|compact',
+        hooks: [{ type: 'command', command: 'node .codex/hooks/hairness-session-start.mjs' }],
+      },
+    ])
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await rm(temporary, { recursive: true, force: true })
   }
 })
 
-function captureIo() {
-  const out = []
-  const err = []
-  return {
-    io: { stdout: { write: (value) => out.push(value) }, stderr: { write: (value) => err.push(value) } },
-    stdout: () => out.join(''),
-    stderr: () => err.join(''),
-  }
-}
-
-test('a cloned Home is immediately healthy without local build state', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'hairness-clone-'))
+test('the Home Console is a fully owned regular projection', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-console-'))
   try {
-    const source = join(root, 'source')
-    const clone = join(root, 'clone')
+    const home = join(temporary, 'home')
+    await createHome(home)
+    const path = join(home, 'hairness.mjs')
+    await rm(path)
+    await assert.rejects(() => buildHome(home, { check: true }), (error) => error.code === 'build_stale')
+    await buildHome(home)
+    const outside = join(temporary, 'outside.mjs')
+    await writeFile(outside, await readFile(path))
+    await rm(path)
+    await symlink(outside, path)
+    await assert.rejects(() => buildHome(home, { check: true }), (error) => error.code === 'generated_output_invalid')
+    assert.equal((await doctorHome(home)).status, 'partial')
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('team Homes remain usable before a private Desk exists', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-team-'))
+  try {
+    const home = join(temporary, 'team-home')
+    await mkdir(home)
+    await initHome(home, { name: 'team-home', mode: 'team', providers: ['codex'] })
+    assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /team-home/)
+    assert.equal(await loadDesk(home), null)
+    await buildHome(home)
+    assert.equal((await readFile(join(home, 'AGENTS.md'), 'utf8')).includes('Wake-up: not configured.'), true)
+    await assert.rejects(readFile(join(home, '.codex/hooks/hairness-session-start.mjs')), (error) => error.code === 'ENOENT')
+    assert.equal((await doctorHome(home)).status, 'ready')
+    assert.equal((await initDesk(home, { id: 'alexis', git: true })).repository, true)
+    assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /alexis/)
+
+    await exec('git', ['-C', join(home, '.desk'), 'add', '--all'])
+    await exec('git', ['-C', join(home, '.desk'), '-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'desk'])
+    const second = join(temporary, 'second-home')
+    await mkdir(second)
+    await initHome(second, { name: 'second-home', mode: 'team', providers: ['codex'] })
+    await cloneDesk(second, join(home, '.desk'))
+    assert.equal((await loadDesk(second)).id, 'alexis')
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('canonical Home and Desk instructions are required, source-owned and fully projected', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-instructions-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home, { providers: ['codex'] })
+    const homePath = join(home, 'HOME.md')
+    const agentsPath = join(home, 'AGENTS.md')
+    await writeFile(homePath, '# Custom Home\n\nShared constitution for {{home.name}}.\n')
+    await assert.rejects(() => buildHome(home, { check: true }), (error) => error.code === 'build_stale')
+    await buildHome(home)
+    assert.match(await readFile(agentsPath, 'utf8'), /^<!-- source: HOME\.md -->\n\n# Custom Home/m)
+    assert.match(await readFile(agentsPath, 'utf8'), /\{\{home\.name\}\}/)
+    await writeFile(agentsPath, `${await readFile(agentsPath, 'utf8')}\nProvider-only rule.\n`)
+    await assert.rejects(() => buildHome(home), (error) => error.code === 'generated_output_diverged')
+
+    const missing = join(temporary, 'missing')
+    await createHome(missing)
+    await rm(join(missing, 'HOME.md'))
+    const report = await doctorHome(missing)
+    assert.equal(report.status, 'partial')
+    assert.deepEqual(report.limits, ['home_instruction_missing'])
+
+    const linked = join(temporary, 'linked')
+    await createHome(linked)
+    await rm(join(linked, 'HOME.md'))
+    await symlink(join(home, 'HOME.md'), join(linked, 'HOME.md'))
+    await assert.rejects(() => resolveHome(linked), (error) => error.code === 'home_instruction_symlink')
+
+    const empty = join(temporary, 'empty')
+    await createHome(empty)
+    await writeFile(join(empty, 'HOME.md'), ' \n')
+    await assert.rejects(() => resolveHome(empty), (error) => error.code === 'home_instruction_empty')
+
+    const invalid = join(temporary, 'invalid')
+    await createHome(invalid)
+    await writeFile(join(invalid, 'HOME.md'), Buffer.from([0xc3, 0x28]))
+    await assert.rejects(() => resolveHome(invalid), (error) => error.code === 'home_instruction_encoding')
+
+    const directory = join(temporary, 'directory')
+    await createHome(directory)
+    await rm(join(directory, 'HOME.md'))
+    await mkdir(join(directory, 'HOME.md'))
+    await assert.rejects(() => resolveHome(directory), (error) => error.code === 'home_instruction_type')
+
+    const emptyDesk = join(temporary, 'empty-desk')
+    await mkdir(emptyDesk)
+    await initHome(emptyDesk, { mode: 'team' })
+    const deskRepository = join(temporary, 'desk-repository')
+    await exec('git', ['init', '--quiet', '--initial-branch=main', deskRepository])
+    await writeFile(join(deskRepository, 'desk.json'), '{"$schema":"https://hairness.dev/schema/desk.json","id":"alexis"}\n')
+    await exec('git', ['add', 'desk.json'], { cwd: deskRepository })
+    await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'desk'], { cwd: deskRepository })
+    await assert.rejects(() => cloneDesk(emptyDesk, deskRepository), (error) => error.code === 'desk_instruction_missing')
+    await assert.rejects(readFile(join(emptyDesk, '.desk/desk.json')), (error) => error.code === 'ENOENT')
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('a clone is immediately usable from tracked projections without local build state', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-clone-'))
+  try {
+    const source = join(temporary, 'source')
+    const clone = join(temporary, 'clone')
     await createHome(source)
     await exec('git', ['clone', '--quiet', source, clone])
     await assert.rejects(readFile(join(clone, '.hairness/build.json')), (error) => error.code === 'ENOENT')
     assert.equal((await doctorHome(clone)).status, 'ready')
     await buildHome(clone, { check: true })
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await rm(temporary, { recursive: true, force: true })
   }
 })
 
-test('a Home binds an independent Git Target and exposes bounded repository state', async () => {
-  const root = await mkdtemp(join(tmpdir(), 'hairness-target-'))
+test('doctor reports a missing runtime as a limit instead of crashing', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-doctor-'))
   try {
-    const home = join(root, 'home')
-    const target = join(root, 'target')
-    await createHome(home, { providers: ['codex'] })
-    await exec('git', ['init', '--quiet', '--initial-branch=main', target])
-    await writeFile(join(target, 'README.md'), '# Target\n')
-    await exec('git', ['add', 'README.md'], { cwd: target })
-    await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'initial'], { cwd: target })
-    await exec('git', ['remote', 'add', 'origin', 'git@github.com:acme/target.git'], { cwd: target })
-    await addTarget(home, target, { id: 'target' })
-    const [entry] = await listTargets(home)
-    assert.equal(entry.binding, await realpath(target))
-    assert.equal(entry.matches, true)
-    assert.equal(entry.evidence.branch, 'main')
-    assert.equal(entry.evidence.clean, true)
-    const prologue = await prologueModel(home)
-    assert.equal(prologue.facts.find((fact) => fact.id === 'target.target.branch').value, 'main')
-    assert.equal((await exec('git', ['status', '--short'], { cwd: home })).stdout.includes('targets/'), false)
+    const home = join(temporary, 'home')
+    await createHome(home)
+    await rm(join(home, 'assets/hairness/hud/runtime.mjs'))
+    const report = await doctorHome(home)
+    assert.equal(report.status, 'partial')
+    assert.equal(report.runtimes.find((entry) => entry.name === 'hairness/hud').error, 'ENOENT')
+    assert.ok(report.limits.includes('runtime-invalid:hairness/hud:ENOENT'))
   } finally {
-    await rm(root, { recursive: true, force: true })
+    await rm(temporary, { recursive: true, force: true })
   }
 })
+
+test('team Desk projections remain local while Desk sources stay in the nested repository', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-team-projection-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home, { mode: 'team', providers: ['codex'] })
+    await initDesk(home, { id: 'alexis', git: true })
+    const source = await writeAsset(join(temporary, 'personal'), asset({
+      name: 'alexis/review',
+      files: ['capabilities/review.md', 'instructions/personal.md'],
+      instructions: [{ id: 'personal', path: 'instructions/personal.md' }],
+    }), {
+      'capabilities/review.md': 'Review from my Desk.\n',
+      'instructions/personal.md': 'Reply in French.\n',
+    })
+    await addAssets(home, [source], { scope: 'desk' })
+    await buildHome(home)
+    const projection = '.agents/skills/review-review/SKILL.md'
+    assert.match(await readFile(join(home, projection), 'utf8'), /my Desk/)
+    assert.equal((await exec('git', ['check-ignore', '-q', projection], { cwd: home }).then(() => true, () => false)), true)
+    const prompt = captureIo()
+    assert.equal(await runCli(['hud', 'prompt', '--home', home], prompt.io), 0, prompt.stderr())
+    assert.match(prompt.stdout(), /Reply in French/)
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+async function executable(path, content) {
+  await writeFile(path, content)
+  await chmod(path, 0o755)
+}
+
+function escape(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}

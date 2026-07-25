@@ -7,6 +7,25 @@ Change canonical source under `src/`, `schemas/` or `assets/`. Keep the
 README, reference, schemas, CLI and tests aligned. Add a durable test for a
 recurring correction.
 
+Hairness owns the recipe for its separate Development Home:
+
+```bash
+npm run dev:home
+npm run dev:session -- --provider codex
+npm run dev:verify
+```
+
+The default Home is `../hairness-development-home`. It is a team Home whose
+`hairness/main` Binding points back to this repository. Use
+`npm run dev:home:recreate` for a clean rebuild; it refuses dirty Home or Desk
+repositories and rolls back a failed replacement. The scripts never create a
+remote, commit or push.
+
+Edit `HOME.md`, `DESK.md` or the relevant Asset Instruction as canonical
+source. Never edit `AGENTS.md` or `CLAUDE.md`; they are fully owned provider
+projections. The development reconciler preserves these source-owned
+instructions and refuses an incomplete Desk.
+
 ```bash
 npm ci --ignore-scripts
 npm run check
@@ -17,6 +36,10 @@ npm run check:pack
 npm run check:lab
 ```
 
+Run `npm run dev:verify -- --full` before a merge checkpoint. It adds the
+Node 22/24, conformance, security, pack and lab gates to the persistent Home
+checks.
+
 Use Conventional Commits and keep changes focused. A new dependency, executable
-Adapter or public contract change needs a concrete consumer and maintainer
+Asset runtime or public contract change needs a concrete consumer and maintainer
 agreement.

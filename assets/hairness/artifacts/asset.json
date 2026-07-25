@@ -1,0 +1,44 @@
+{
+  "$schema": "https://hairness.dev/schema/asset.json",
+  "name": "hairness/artifacts",
+  "version": "0.5.0-alpha.0",
+  "description": "The generic lifecycle for inspectable Artifacts owned by a Desk, Home or Target.",
+  "prefix": "hairness",
+  "files": [
+    "capabilities/manage.md",
+    "schemas/artifact.schema.json",
+    "runtime.mjs"
+  ],
+  "capabilities": [
+    {
+      "id": "manage",
+      "path": "capabilities/manage.md",
+      "description": "Create, inspect, validate and publish source-owned Artifacts."
+    }
+  ],
+  "skills": [
+    {
+      "id": "artifacts",
+      "capability": "manage",
+      "description": "Use when work should become an explicit, inspectable Artifact."
+    }
+  ],
+  "commands": [
+    {
+      "id": "artifacts",
+      "capability": "manage",
+      "description": "Manage Hairness Artifacts."
+    }
+  ],
+  "runtime": {
+    "namespace": "artifact",
+    "entry": "runtime.mjs",
+    "commands": [
+      { "name": "create", "description": "Create an Artifact, optionally importing a directory." },
+      { "name": "list", "description": "List Artifacts across Desk, Home and bound Targets." },
+      { "name": "inspect", "description": "Inspect one Artifact." },
+      { "name": "validate", "description": "Validate one Artifact against its owning kind." },
+      { "name": "publish", "description": "Publish a Desk Artifact to the Home or a Target." }
+    ]
+  }
+}

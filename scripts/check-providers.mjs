@@ -13,7 +13,7 @@ try {
   await createHome(home)
   await addAssets(home, ['@hairness/scratch'])
   await buildHome(home)
-  for (const id of ['hairness', 'hairness-onboarding', 'hairness-scratch']) {
+  for (const id of ['hairness-home', 'hairness-onboarding', 'hairness-artifacts', 'hairness-target-manage', 'hairness-target-map', 'hairness-scratch']) {
     const codex = await readFile(join(home, '.agents/skills', id, 'SKILL.md'), 'utf8')
     const claude = await readFile(join(home, '.claude/skills', id, 'SKILL.md'), 'utf8')
     assert.equal(codex.replaceAll(`$${id}`, id).replaceAll('.agents', '.provider'), claude.replaceAll(`/${id}`, id).replaceAll('.claude', '.provider'))
