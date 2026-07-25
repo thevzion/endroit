@@ -8,18 +8,24 @@
 - Preserve Skills and Commands as distinct access paths to Capabilities.
 - Add deterministic Resolved Home composition and context footprints.
 - Add digest-bound runtime trust and transparent stdio dispatch.
-- Add source-owned Asset review, override and guarded publication.
+- Add source-owned Asset validation, override and guarded publication.
 - Add typed Artifact creation, import, validation, publication and lineage.
 - Add named Target Bindings and evidence-backed Target Map Artifacts.
-- Replace Prologue with the session-start and on-demand HUD.
-- Add fail-closed Codex and Claude SessionStart wrappers with exact runtime
-  resolution.
+- Replace Prologue with a fail-closed, provider-neutral Front Door.
 - Add a repository-owned, rollback-safe Development Home recipe and Project
   plan Artifact.
 - Add canonical `HOME.md` and `DESK.md` instruction sources with one-shot
   templates and fully owned provider projections.
-- Expand the HUD into an operational boot contract with exact paths, invocation,
-  surfaces, local evidence and severity-separated attention.
+- Introduce the Front Door and Progressive Orientation: a static Floor Plan,
+  one optional Home-selected Wake-up route, generic provider Bridges and the
+  tracked `hairness.mjs` Home Console.
+- Expand the HUD into an optional operational Wake-up with exact paths,
+  invocation, surfaces, local evidence and severity-separated attention.
+- Replace HUD flags with explicit `hud show|prompt|json` routes.
+- Replace `asset review`, `asset diff` and installed-only validation with
+  standalone `asset validate <source>`, offline status digests and detailed
+  `asset sync --check`.
+- Remove public `init` and `desk status`.
 - Remove Overlay, Integrations, public Adapters, Registry and all 0.4 aliases.
 
 This is a clean break with 0.4.

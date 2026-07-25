@@ -1,9 +1,12 @@
 # Orient in the Home
 
-Use the HUD already injected for this session. Its `<kernel invoke>` value is
-the exact CLI prefix for this Home. Append `hud --prompt` to refresh the agent
-contract, `hud --full` for a complete human inventory or `hud --json` for
-stable tool-facing data.
+Start with the generated Floor Plan. It contains the stable Home layout, the
+tracked Console and every declared route. When live evidence matters, run:
 
-Treat HUD evidence as a local snapshot. Revalidate a Target immediately before
-mutating it.
+    node ./hairness.mjs hud prompt
+
+Use `hud json` for stable data or `hud show --full` for the complete human
+inventory.
+
+Treat HUD evidence as a local snapshot. Refresh once when relevant state may
+have changed, then revalidate a Target immediately before mutating it.

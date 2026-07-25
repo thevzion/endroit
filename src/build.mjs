@@ -1,6 +1,7 @@
-import { readFile } from 'node:fs/promises'
+import { lstat, readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { applyTransaction } from './assets.mjs'
+import { homeConsole, renderFloorPlan, sessionWrapper } from './front-door.mjs'
 import { git } from './git.mjs'
 import { HairnessError } from './lib/errors.mjs'
 import { digest, exists, readJson, resolvePackageFile, writeFileAtomic } from './lib/io.mjs'
@@ -23,7 +24,7 @@ export async function buildHome(root, options = {}) {
 
   for (const id of ['codex', 'claude']) {
     const projector = provider(id)
-    const active = plan.home.providers.includes(id)
+    const active = plan.home.providers.includes(id) && Boolean(plan.frontDoor)
     const hookPath = join(root, projector.hookPath)
     const hook = await planHookConfig(hookPath, active, projector, options.check)
     if (hook.managed) managed.push(relativeManaged(root, hook.managed))
@@ -51,6 +52,13 @@ async function providerOutputs(plan) {
   for (const item of plan.commands) mergeSurface(surfaces, item, 'command')
 
   const values = []
+  values.push({
+    path: 'hairness.mjs',
+    content: Buffer.from(homeConsole()),
+    provider: null,
+    owner: 'hairness/kernel',
+    scope: 'home',
+  })
   for (const providerId of plan.home.providers) {
     const projector = provider(providerId)
     values.push({
@@ -60,13 +68,15 @@ async function providerOutputs(plan) {
       owner: 'hairness/instructions',
       scope: 'home',
     })
-    values.push({
-      path: projector.sessionPath,
-      content: Buffer.from(sessionWrapper(providerId)),
-      provider: providerId,
-      owner: 'hairness/kernel',
-      scope: 'home',
-    })
+    if (plan.frontDoor) {
+      values.push({
+        path: projector.sessionPath,
+        content: Buffer.from(sessionWrapper(providerId, plan.frontDoor)),
+        provider: providerId,
+        owner: 'hairness/kernel',
+        scope: 'home',
+      })
+    }
     for (const surface of [...surfaces.values()].sort((left, right) => left.projectedId.localeCompare(right.projectedId))) {
       const capability = capabilities.get(surface.capability)
       if (!capability) throw new HairnessError('capability_missing', `${surface.id} references missing ${surface.capability}.`)
@@ -96,6 +106,7 @@ async function renderAgentContract(plan) {
   const home = await readFile(await resolvePackageFile(plan.homeInstruction.root, plan.homeInstruction.path, 'Home Instruction'), 'utf8')
   const entries = [
     `<!-- source: ${plan.homeInstruction.path} -->\n\n${home.trim()}`,
+    renderFloorPlan(plan),
   ]
   for (const instruction of plan.instructions.filter((entry) => entry.scope === 'home')) {
     const content = await readFile(await resolvePackageFile(instruction.root, instruction.path, `${instruction.owner} Instruction`), 'utf8')
@@ -110,8 +121,9 @@ async function reconcileOutputs(root, previous, wanted, check) {
   for (const prior of previous) {
     if (wantedPaths.has(prior.path)) continue
     const path = join(root, prior.path)
-    if (!await exists(path)) continue
-    if (digest(await readFile(path)) !== prior.digest) throw diverged(prior.path)
+    const current = await generatedFile(path, prior.path)
+    if (!current) continue
+    if (digest(current) !== prior.digest) throw diverged(prior.path)
     if (check) throw stale(`${prior.path} is a stale generated output.`)
     deletes.push(path)
   }
@@ -120,7 +132,7 @@ async function reconcileOutputs(root, previous, wanted, check) {
   for (const entry of wanted) {
     const path = join(root, entry.path)
     const prior = previous.find((item) => item.path === entry.path)
-    const current = await readFile(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+    const current = await generatedFile(path, entry.path)
     if (current && prior && digest(current) !== prior.digest) throw diverged(entry.path)
     if (current && !prior && digest(current) !== digest(entry.content)) throw new HairnessError('generated_output_collision', `${entry.path} already exists and Hairness does not own it.`, { exitCode: 5 })
     if (check && (!current || digest(current) !== digest(entry.content))) throw stale(`${entry.path} needs a rebuild.`)
@@ -128,6 +140,19 @@ async function reconcileOutputs(root, previous, wanted, check) {
     outputs.push({ path: entry.path, provider: entry.provider, owner: entry.owner, scope: entry.scope, digest: digest(entry.content) })
   }
   return { outputs, writes, deletes }
+}
+
+async function generatedFile(path, label) {
+  try {
+    const info = await lstat(path)
+    if (info.isSymbolicLink() || !info.isFile()) {
+      throw new HairnessError('generated_output_invalid', `${label} must be a regular non-symlink file.`, { exitCode: 5 })
+    }
+    return readFile(path)
+  } catch (error) {
+    if (error.code === 'ENOENT') return null
+    throw error
+  }
 }
 
 async function planHookConfig(path, active, projector, check) {
@@ -152,85 +177,7 @@ async function planHookConfig(path, active, projector, check) {
 }
 
 function hairnessSessionHook(command = '') {
-  return /hairness.* hud --prompt$/.test(command) || /hairness-session-start\.mjs$/.test(command)
-}
-
-function sessionWrapper(providerId) {
-  return `#!/usr/bin/env node
-import { spawn } from 'node:child_process'
-import { lstatSync, readFileSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const provider = ${JSON.stringify(providerId)}
-const homeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const unavailable = '<hairness-hud status="unavailable" reason="runtime-unavailable"/>'
-
-try {
-  const home = JSON.parse(readFileSync(join(homeRoot, 'hairness.json'), 'utf8'))
-  if (!/^@hairness\\/cli@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(home.runtime)) throw new Error('Invalid runtime.')
-  const development = join(homeRoot, '.hairness', 'dev-cli')
-  let local = false
-  try { lstatSync(development); local = true }
-  catch (error) { if (error.code !== 'ENOENT') throw error }
-  const command = local ? development : process.platform === 'win32' ? 'npx.cmd' : 'npx'
-  const args = local
-    ? ['hud', '--prompt', '--home', homeRoot]
-    : ['--yes', home.runtime, 'hud', '--prompt', '--home', homeRoot]
-  const result = await execute(command, args, local ? 'development' : 'registry')
-  const context = result.code === 0 && /^<hairness-hud(?:\\s|>)/.test(result.stdout.trim())
-    ? result.stdout.trim()
-    : unavailable
-  emit(context)
-} catch {
-  emit(unavailable)
-}
-
-function emit(context) {
-  if (provider === 'codex') {
-    process.stdout.write(JSON.stringify({
-      hookSpecificOutput: {
-        hookEventName: 'SessionStart',
-        additionalContext: context,
-      },
-    }) + '\\n')
-  } else {
-    process.stdout.write(context + '\\n')
-  }
-}
-
-function execute(command, args, source) {
-  return new Promise((resolvePromise) => {
-    let output = ''
-    let settled = false
-    let timer
-    const child = spawn(command, args, {
-      cwd: homeRoot,
-      env: { ...process.env, HAIRNESS_RUNTIME_SOURCE: source, HAIRNESS_HUD_EVENT: 'session-start' },
-      stdio: ['ignore', 'pipe', 'ignore'],
-    })
-    const finish = (value) => {
-      if (settled) return
-      settled = true
-      clearTimeout(timer)
-      resolvePromise(value)
-    }
-    timer = setTimeout(() => {
-      child.kill('SIGTERM')
-      finish({ code: null, stdout: '' })
-    }, 30_000)
-    child.on('error', () => finish({ code: null, stdout: '' }))
-    child.stdout.on('data', (chunk) => {
-      output += chunk
-      if (Buffer.byteLength(output) > 256 * 1024) {
-        child.kill('SIGTERM')
-        finish({ code: null, stdout: '' })
-      }
-    })
-    child.on('close', (code) => finish({ code, stdout: output }))
-  })
-}
-`
+  return /hairness-session-start\.mjs$/.test(command)
 }
 
 async function reconcileDeskExcludes(root, plan, outputs, check) {

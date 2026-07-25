@@ -3,6 +3,7 @@ import { readFile } from 'node:fs/promises'
 import { basename, join, relative } from 'node:path'
 import { allInstalledAssets } from './assets.mjs'
 import { loadDesk } from './desk.mjs'
+import { renderFloorPlan } from './front-door.mjs'
 import { loadHome } from './home.mjs'
 import { DESK_INSTRUCTION, HOME_INSTRUCTION, readInstructionFile } from './instructions.mjs'
 import { HairnessError } from './lib/errors.mjs'
@@ -54,6 +55,7 @@ export async function resolveHome(root) {
     artifactKinds: [],
     setup: [],
     runtimes: [],
+    frontDoor: null,
   }
 
   for (const entry of assets) {
@@ -103,6 +105,7 @@ export async function resolveHome(root) {
   assertUnique(plan.runtimes, (entry) => entry.namespace, 'runtime namespace')
   assertUnique(plan.artifactKinds, (entry) => entry.id, 'Artifact kind')
   assertAccessors(plan.skills, plan.commands)
+  plan.frontDoor = resolveFrontDoor(home.frontDoor, plan)
   plan.context = await contextFootprint(plan)
   enforceBudgets(home.budgets ?? {}, plan.context)
   return plan
@@ -127,6 +130,7 @@ export function publicPlan(plan) {
     artifactKinds: plan.artifactKinds.map(withoutRoot),
     setup: plan.setup,
     runtimes: plan.runtimes.map(withoutRoot),
+    frontDoor: plan.frontDoor,
     context: plan.context,
   }
 }
@@ -177,10 +181,29 @@ async function validateSetting(entry, path, value, scope) {
 }
 
 async function contextFootprint(plan) {
-  const instructionBytes = await sumFiles([plan.homeInstruction, ...plan.instructions.filter((item) => item.scope === 'home')])
+  const floorPlanBytes = Buffer.byteLength(renderFloorPlan(plan))
+  const instructionBytes = floorPlanBytes + await sumFiles([plan.homeInstruction, ...plan.instructions.filter((item) => item.scope === 'home')])
   const deskInstructionBytes = await sumFiles([...(plan.deskInstruction ? [plan.deskInstruction] : []), ...plan.instructions.filter((item) => item.scope === 'desk')])
   const modelDescriptionBytes = Buffer.byteLength(plan.skills.map((item) => item.description).join('\n'))
-  return { instructionBytes, deskInstructionBytes, modelDescriptionBytes }
+  return { instructionBytes, floorPlanBytes, deskInstructionBytes, modelDescriptionBytes }
+}
+
+function resolveFrontDoor(frontDoor, plan) {
+  if (!frontDoor) return null
+  const separator = frontDoor.wakeUp.lastIndexOf(':')
+  const owner = frontDoor.wakeUp.slice(0, separator)
+  const command = frontDoor.wakeUp.slice(separator + 1)
+  const runtime = plan.runtimes.find((entry) => entry.owner === owner)
+  if (!runtime) throw new HairnessError('front_door_runtime_missing', `${frontDoor.wakeUp} references an Asset without an effective runtime.`)
+  if (!runtime.commands.some((entry) => entry.name === command)) {
+    throw new HairnessError('front_door_command_missing', `${frontDoor.wakeUp} references an undeclared runtime command.`)
+  }
+  return {
+    route: frontDoor.wakeUp,
+    owner,
+    namespace: runtime.namespace,
+    command,
+  }
 }
 
 async function sumFiles(entries) {

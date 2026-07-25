@@ -11,7 +11,7 @@ export async function doctorHome(root) {
   try {
     plan = await resolveHome(root)
   } catch (error) {
-    if (!(error instanceof HairnessError) || !/^(?:home|desk)_instruction_/.test(error.code)) throw error
+    if (!(error instanceof HairnessError)) throw error
     const [home, desk] = await Promise.all([loadHome(root), loadDesk(root)])
     return {
       status: 'partial',
@@ -20,6 +20,7 @@ export async function doctorHome(root) {
       assets: [],
       runtimes: [],
       context: null,
+      frontDoor: null,
       build: error.code,
       limits: [error.code],
       warnings: [error.message],
@@ -58,8 +59,12 @@ export async function doctorHome(root) {
     assets: plan.assets.map((entry) => ({ id: entry.id, scope: entry.scope, version: entry.version, overridden: entry.overridden })),
     runtimes,
     context: plan.context,
+    frontDoor: plan.frontDoor,
     build,
     limits,
-    warnings: !desk && plan.home.mode === 'team' ? ['desk-missing: invoke hairness-onboarding to clone, initialize or skip a private Desk.'] : [],
+    warnings: [
+      ...(!desk && plan.home.mode === 'team' ? ['desk-missing: invoke hairness-onboarding to clone, initialize or skip a private Desk.'] : []),
+      ...(!plan.frontDoor ? ['front-door-static-only: no Wake-up route is configured.'] : []),
+    ],
   }
 }

@@ -50,6 +50,10 @@ export async function ensureDevelopmentHome(options = {}) {
     await hairness(['asset', 'sync', 'hairness/project', '--to', projectAsset, '--home', home])
   }
   await hairness(['asset', 'sync', '--all', '--home', home])
+  if (config.frontDoor?.wakeUp !== 'hairness/hud:prompt') {
+    config.frontDoor = { wakeUp: 'hairness/hud:prompt' }
+    await writeFile(document, `${JSON.stringify(config, null, 2)}\n`)
+  }
   await ensureDevelopmentLauncher(home)
   await hairness(['build', '--home', home])
   const doctor = await hairnessJson(['doctor', '--home', home, '--json'])
@@ -153,9 +157,9 @@ async function verifyHome(home) {
   if (doctor.status !== 'ready') throw new Error(`Development Home is ${doctor.status}: ${doctor.limits.join(', ')}`)
   const codex = JSON.parse((await run(process.execPath, [join(home, '.codex/hooks/hairness-session-start.mjs')], { cwd: home })).stdout)
   const codexHud = codex.hookSpecificOutput?.additionalContext
-  if (!codexHud?.startsWith('<hairness-hud ') || /status="unavailable"/.test(codexHud)) throw new Error('Codex SessionStart HUD is unavailable.')
+  if (!codexHud?.startsWith('<hairness-hud ') || /status="degraded"/.test(codexHud)) throw new Error('Codex Front Door Wake-up is unavailable.')
   const claudeHud = (await run(process.execPath, [join(home, '.claude/hooks/hairness-session-start.mjs')], { cwd: home })).stdout.trim()
-  if (!claudeHud.startsWith('<hairness-hud ') || /status="unavailable"/.test(claudeHud)) throw new Error('Claude SessionStart HUD is unavailable.')
+  if (!claudeHud.startsWith('<hairness-hud ') || /status="degraded"/.test(claudeHud)) throw new Error('Claude Front Door Wake-up is unavailable.')
   if (!/<kernel [^>]*source="development"/.test(codexHud) || !/<kernel [^>]*source="development"/.test(claudeHud)) {
     throw new Error('Development Home did not use the local Hairness Target runtime.')
   }
@@ -177,8 +181,7 @@ async function ensureDevelopmentLauncher(home) {
   const directory = join(home, '.hairness')
   const path = join(directory, 'dev-cli')
   await mkdir(directory, { recursive: true })
-  const content = `#!/usr/bin/env node
-process.env.HAIRNESS_RUNTIME_SOURCE = 'development'
+const content = `#!/usr/bin/env node
 await import(new URL(${JSON.stringify(devCliTarget)}, import.meta.url))
 `
   try {

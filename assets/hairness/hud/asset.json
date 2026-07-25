@@ -42,7 +42,15 @@
     "commands": [
       {
         "name": "show",
-        "description": "Render the compact, full, JSON or agent-prompt HUD."
+        "description": "Render the compact human HUD; pass --full for its complete inventory."
+      },
+      {
+        "name": "prompt",
+        "description": "Render the deterministic agent-facing HUD selected by the Front Door."
+      },
+      {
+        "name": "json",
+        "description": "Render the stable machine-readable HUD."
       }
     ]
   }

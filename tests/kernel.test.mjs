@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -11,6 +11,7 @@ import { compileSchemas, validateDocument } from '../src/contracts.mjs'
 import { createHome, initHome } from '../src/create.mjs'
 import { cloneDesk, deskStatus, initDesk } from '../src/desk.mjs'
 import { doctorHome } from '../src/doctor.mjs'
+import { renderFloorPlan, sessionWrapper } from '../src/front-door.mjs'
 import { assertRuntime } from '../src/home.mjs'
 import { resolveHome } from '../src/resolved.mjs'
 import { addAssets } from '../src/assets.mjs'
@@ -36,6 +37,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
       mode: 'solo',
       providers: ['codex', 'claude'],
       prefix: 'acme',
+      frontDoor: { wakeUp: 'hairness/hud:prompt' },
     })
     for (const name of ['artifacts', 'hud', 'onboarding', 'targets']) {
       const manifest = JSON.parse(await readFile(join(home, `assets/hairness/${name}/asset.json`), 'utf8'))
@@ -56,12 +58,15 @@ test('create builds a source-owned Home and tracks shared provider projections',
       '.claude/hooks/hairness-session-start.mjs',
       '.codex/hooks.json',
       '.codex/hooks/hairness-session-start.mjs',
+      'hairness.mjs',
       'assets/hairness/hud/runtime.mjs',
     ]) assert.match(tracked, new RegExp(`^${escape(path)}$`, 'm'))
     assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /^# home$/m)
     assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /^# local's Desk$/m)
     const agents = await readFile(join(home, 'AGENTS.md'), 'utf8')
     assert.match(agents, /<!-- source: HOME\.md -->/)
+    assert.match(agents, /## Hairness Floor Plan/)
+    assert.match(agents, /node \.\/hairness\.mjs <namespace> <command>/)
     assert.match(agents, /## hairness\/hud:orientation/)
     assert.doesNotMatch(agents, /If no Hairness HUD was injected/)
     assert.doesNotMatch(agents, /## hairness\/onboarding:home/)
@@ -70,10 +75,32 @@ test('create builds a source-owned Home and tracks shared provider projections',
     await buildHome(home, { check: true })
     const plan = await resolveHome(home)
     assert.deepEqual(plan.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'target'])
+    assert.deepEqual(plan.frontDoor, {
+      route: 'hairness/hud:prompt',
+      owner: 'hairness/hud',
+      namespace: 'hud',
+      command: 'prompt',
+    })
+    assert.ok(plan.context.floorPlanBytes > 0)
+    const floorPlan = renderFloorPlan(plan)
+    assert.equal(floorPlan, renderFloorPlan(plan))
+    assert.doesNotMatch(floorPlan, new RegExp(escape(home)))
+    assert.doesNotMatch(floorPlan, /\b(?:branch|commit|sha256|generated-at)\b/i)
+
+    for (const args of [
+      ['init'],
+      ['desk', 'status'],
+      ['asset', 'review', 'hud'],
+      ['asset', 'diff', 'hud'],
+      ['asset', 'validate', 'hud'],
+    ]) {
+      const removed = captureIo()
+      assert.notEqual(await runCli([...args, '--home', home], removed.io), 0, args.join(' '))
+    }
 
     document.runtime = '@hairness/cli@9.0.0'
     await writeFile(join(home, 'hairness.json'), `${JSON.stringify(document, null, 2)}\n`)
-    await assert.rejects(() => assertRuntime(home), (error) => error.code === 'runtime_mismatch' && /npx --yes/.test(error.message))
+    await assert.rejects(() => assertRuntime(home), (error) => error.code === 'runtime_mismatch' && /node \.\/hairness\.mjs/.test(error.message))
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }
@@ -87,7 +114,7 @@ test('provider session wrappers inject exact transport and fail closed without l
     const local = join(home, '.hairness/dev-cli')
     await mkdir(join(home, '.hairness'), { recursive: true })
     await executable(local, `#!/usr/bin/env node
-process.stdout.write('<hairness-hud source="' + process.env.HAIRNESS_RUNTIME_SOURCE + '"/>\\n')
+process.stdout.write('<wake-up source="' + process.env.HAIRNESS_RUNTIME_SOURCE + '" kind="' + process.env.HAIRNESS_INVOCATION_KIND + '"/>\\n')
 `)
 
     const codexPath = join(home, '.codex/hooks/hairness-session-start.mjs')
@@ -96,49 +123,59 @@ process.stdout.write('<hairness-hud source="' + process.env.HAIRNESS_RUNTIME_SOU
     assert.deepEqual(codex, {
       hookSpecificOutput: {
         hookEventName: 'SessionStart',
-        additionalContext: '<hairness-hud source="development"/>',
+        additionalContext: '<wake-up source="development" kind="wake-up"/>',
       },
     })
-    assert.equal((await exec('node', [claudePath], { cwd: home })).stdout, '<hairness-hud source="development"/>\n')
+    assert.equal((await exec('node', [claudePath], { cwd: home })).stdout, '<wake-up source="development" kind="wake-up"/>\n')
 
     await executable(local, `#!/usr/bin/env node
 process.stderr.write('private-downstream-secret\\n')
 process.exitCode = 4
 `)
+    await assert.rejects(
+      () => exec(process.execPath, [join(home, 'hairness.mjs'), 'hud', 'prompt'], { cwd: home }),
+      (error) => error.code === 4 && /private-downstream-secret/.test(error.stderr),
+    )
     const failed = (await exec('node', [codexPath], { cwd: home })).stdout
     assert.deepEqual(JSON.parse(failed), {
       hookSpecificOutput: {
         hookEventName: 'SessionStart',
-        additionalContext: '<hairness-hud status="unavailable" reason="runtime-unavailable"/>',
+        additionalContext: '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />',
       },
     })
     assert.doesNotMatch(failed, /private-downstream-secret/)
 
     await rm(local)
     await symlink('missing-cli', local)
-    assert.equal((await exec('node', [claudePath], { cwd: home })).stdout, '<hairness-hud status="unavailable" reason="runtime-unavailable"/>\n')
+    assert.equal((await exec('node', [claudePath], { cwd: home })).stdout, '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
 
     await rm(local)
+    const boundedPath = join(home, '.claude/hooks/hairness-session-bounded.mjs')
+    await writeFile(boundedPath, sessionWrapper('claude', { namespace: 'hud', command: 'prompt' }, { timeoutMs: 20, maxBytes: 32 }))
+    await executable(local, '#!/usr/bin/env node\nsetInterval(() => {}, 1_000)\n')
+    assert.equal((await exec('node', [boundedPath], { cwd: home })).stdout, '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
+    await executable(local, "#!/usr/bin/env node\nprocess.stdout.write('x'.repeat(33))\n")
+    assert.equal((await exec('node', [boundedPath], { cwd: home })).stdout, '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
+    await rm(local)
+
     const fakeBin = join(temporary, 'bin')
     const argsPath = join(temporary, 'npx-args.json')
     await mkdir(fakeBin)
     await executable(join(fakeBin, 'npx'), `#!/usr/bin/env node
 import { writeFileSync } from 'node:fs'
 writeFileSync(process.env.HAIRNESS_TEST_ARGS, JSON.stringify(process.argv.slice(2)))
-process.stdout.write('<hairness-hud source="' + process.env.HAIRNESS_RUNTIME_SOURCE + '"/>\\n')
+process.stdout.write('<wake-up source="' + process.env.HAIRNESS_RUNTIME_SOURCE + '"/>\\n')
 `)
     const registry = await exec('node', [claudePath], {
       cwd: home,
       env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HAIRNESS_TEST_ARGS: argsPath },
     })
-    assert.equal(registry.stdout, '<hairness-hud source="registry"/>\n')
+    assert.equal(registry.stdout, '<wake-up source="registry"/>\n')
     assert.deepEqual(JSON.parse(await readFile(argsPath, 'utf8')), [
       '--yes',
       '@hairness/cli@0.5.0-alpha.0',
       'hud',
-      '--prompt',
-      '--home',
-      await realpath(home),
+      'prompt',
     ])
 
     const hooks = JSON.parse(await readFile(join(home, '.codex/hooks.json'), 'utf8'))
@@ -146,19 +183,45 @@ process.stdout.write('<hairness-hud source="' + process.env.HAIRNESS_RUNTIME_SOU
       matcher: 'startup',
       hooks: [
         { type: 'command', command: 'node user-session-hook.mjs' },
-        { type: 'command', command: 'npx --yes @hairness/cli@0.5.0-alpha.0 hud --prompt' },
+        { type: 'command', command: 'node another-user-hook.mjs' },
       ],
     })
     await writeFile(join(home, '.codex/hooks.json'), `${JSON.stringify(hooks, null, 2)}\n`)
     await buildHome(home)
     const rebuilt = JSON.parse(await readFile(join(home, '.codex/hooks.json'), 'utf8'))
     assert.deepEqual(rebuilt.hooks.SessionStart, [
-      { matcher: 'startup', hooks: [{ type: 'command', command: 'node user-session-hook.mjs' }] },
+      {
+        matcher: 'startup',
+        hooks: [
+          { type: 'command', command: 'node user-session-hook.mjs' },
+          { type: 'command', command: 'node another-user-hook.mjs' },
+        ],
+      },
       {
         matcher: 'startup|resume|clear|compact',
         hooks: [{ type: 'command', command: 'node .codex/hooks/hairness-session-start.mjs' }],
       },
     ])
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('the Home Console is a fully owned regular projection', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-console-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home)
+    const path = join(home, 'hairness.mjs')
+    await rm(path)
+    await assert.rejects(() => buildHome(home, { check: true }), (error) => error.code === 'build_stale')
+    await buildHome(home)
+    const outside = join(temporary, 'outside.mjs')
+    await writeFile(outside, await readFile(path))
+    await rm(path)
+    await symlink(outside, path)
+    await assert.rejects(() => buildHome(home, { check: true }), (error) => error.code === 'generated_output_invalid')
+    assert.equal((await doctorHome(home)).status, 'partial')
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }
@@ -173,6 +236,8 @@ test('init stays bare and team Homes remain usable before a private Desk exists'
     assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /team-home/)
     assert.equal((await deskStatus(home)).status, 'missing')
     await buildHome(home)
+    assert.equal((await readFile(join(home, 'AGENTS.md'), 'utf8')).includes('Wake-up: not configured.'), true)
+    await assert.rejects(readFile(join(home, '.codex/hooks/hairness-session-start.mjs')), (error) => error.code === 'ENOENT')
     assert.equal((await doctorHome(home)).status, 'ready')
     await initDesk(home, { id: 'alexis', git: true })
     assert.equal((await deskStatus(home)).repository, true)
@@ -299,7 +364,7 @@ test('team Desk projections remain local while Desk sources stay in the nested r
     assert.match(await readFile(join(home, projection), 'utf8'), /my Desk/)
     assert.equal((await exec('git', ['check-ignore', '-q', projection], { cwd: home }).then(() => true, () => false)), true)
     const prompt = captureIo()
-    assert.equal(await runCli(['hud', '--prompt', '--home', home], prompt.io), 0)
+    assert.equal(await runCli(['hud', 'prompt', '--home', home], prompt.io), 0, prompt.stderr())
     assert.match(prompt.stdout(), /Reply in French/)
   } finally {
     await rm(temporary, { recursive: true, force: true })

@@ -2,7 +2,7 @@ import { spawn } from 'node:child_process'
 import { realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { allInstalledAssets, assetDigest, installedAssetDigest, resolveAsset } from './assets.mjs'
-import { API } from './contracts.mjs'
+import { API, validateDocument } from './contracts.mjs'
 import { loadDesk } from './desk.mjs'
 import { HairnessError } from './lib/errors.mjs'
 import { readJson, resolvePackageFile, writeJsonAtomic } from './lib/io.mjs'
@@ -53,6 +53,10 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
   const homeRoot = await realpath(root)
   const deskRoot = desk ? await realpath(join(root, '.desk')) : null
   const runtimeSource = process.env.HAIRNESS_RUNTIME_SOURCE === 'development' ? 'development' : 'registry'
+  const invocationKind = process.env.HAIRNESS_INVOCATION_KIND === 'wake-up' ? 'wake-up' : 'command'
+  const invocationProvider = ['codex', 'claude'].includes(process.env.HAIRNESS_INVOCATION_PROVIDER)
+    ? process.env.HAIRNESS_INVOCATION_PROVIDER
+    : undefined
   const trustStates = []
   for (const candidate of plan.runtimes) {
     try {
@@ -71,10 +75,15 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
     kernel: {
       runtime: plan.home.runtime,
       source: runtimeSource,
-      invoke: runtimeSource === 'development' ? '.hairness/dev-cli' : `npx --yes ${plan.home.runtime}`,
+      invoke: 'node ./hairness.mjs',
     },
     runtimeTrust: trustStates,
+    invocation: {
+      kind: invocationKind,
+      ...(invocationProvider ? { provider: invocationProvider } : {}),
+    },
   }
+  await validateDocument(input, 'runtime')
   return run(entry, input, io)
 }
 

@@ -12,7 +12,7 @@ flowchart LR
   source["Untrusted Asset source"] --> validate["Schema · path · symlink checks"]
   validate --> copy["Inert transactional copy"]
   copy --> home["Source-owned Home"]
-  home --> review["Runtime review + digest"]
+  home --> review["Source inspection + offline digest"]
   review --> approval["Local approval"]
   approval --> execute["Runtime with user rights"]
 ```
@@ -32,7 +32,11 @@ Hairness does not claim to sandbox them.
 - Local divergence blocks sync, remove and override publication unless the
   explicit lifecycle permits replacement.
 - Unknown local files survive sync and remove.
-- `add`, `sync`, `build`, `doctor`, HUD and resolution execute no Asset runtime.
+- `asset validate`, `add`, `sync`, `build`, `doctor` and resolution execute no
+  Asset runtime.
+- Front Door routes are resolved from the effective composition; Asset
+  mutations that would break the selected runtime or command fail before
+  writing.
 - Runtime approval is local and keyed by the complete installed Asset digest.
   A changed byte invalidates approval.
 - Exact first-party runtime trust requires byte equality with the Asset bundled
@@ -46,9 +50,12 @@ Hairness does not claim to sandbox them.
 - Desk recent-file discovery does not follow symbolic links.
 - HUD probes use local evidence only, execute no other Asset runtime and
   separate blocking, warning and advisory attention.
-- SessionStart wrappers cap output, discard runtime stderr, expire after
-  30 seconds and never fall back to npm when a local development launcher is
-  present but broken.
+- The tracked Home Console accepts a development launcher only as a regular,
+  non-symlink file and never falls back to npm when that launcher is broken.
+- SessionStart Bridges execute only the Home-selected Wake-up route, cap stdout
+  at 256 KiB, discard runtime stderr and expire after 30 seconds.
+- Wake-up failure yields a bounded degraded marker; the static Floor Plan
+  remains available.
 
 ## Runtime boundary
 
@@ -66,7 +73,9 @@ projected files, not the provider's global consent state.
 ## User responsibilities
 
 Commit before changing shared Assets. Prefer pinned Git sources for
-reproducibility. Inspect `asset review`, source diffs and runtime entrypoints.
+reproducibility. Run `asset validate` before installation, inspect source-owned
+runtime files, use offline `asset status` for the effective digest and
+`asset sync --check` for upstream diffs.
 Protect Home and Desk repositories according to the sensitivity of their
 agentic assets and Artifacts. Never commit credentials to an Asset, Home, Desk,
 Artifact or Target Map.

@@ -19,6 +19,17 @@
       "items": { "enum": ["codex", "claude"] }
     },
     "prefix": { "$ref": "#/$defs/id" },
+    "frontDoor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wakeUp"],
+      "properties": {
+        "wakeUp": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*:[a-z0-9][a-z0-9._-]*$"
+        }
+      }
+    },
     "budgets": {
       "type": "object",
       "additionalProperties": false,

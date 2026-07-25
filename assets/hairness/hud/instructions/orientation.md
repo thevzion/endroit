@@ -1,16 +1,15 @@
-At SessionStart, Hairness injects a `<hairness-hud>` describing the resolved
-environment available to you. It is your operational map: locations,
-ownership, continuity, installed surfaces, live evidence and attention.
+The generated Floor Plan is the static, authoritative entrypoint to this Home.
+The optional Wake-up adds a live HUD: locations, continuity, installed
+surfaces, local evidence and attention.
 
-The HUD exposes an exact Kernel invocation and the runtime namespaces declared
-by installed Assets. Execute a route as:
+Use the tracked Home Console shown in the Floor Plan for every route:
 
-    <kernel invoke> <runtime namespace> <command> [...arguments]
+    node ./hairness.mjs <runtime namespace> <command> [...arguments]
 
-Use the paths and routes supplied by the HUD instead of guessing a global
-binary or searching for the Home layout. A HUD is a local snapshot; revalidate
-the relevant Binding immediately before mutation.
+Use `hud show` for a human view, `hud prompt` for the agent-facing view and
+`hud json` for tools. A HUD is a local snapshot; revalidate the relevant
+Binding immediately before mutation.
 
-If SessionStart reports `status="unavailable"`, tell the collaborator that
-orientation is unavailable. Do not silently switch runtimes or compensate by
-exploring unrelated directories.
+If Wake-up is absent or degraded, keep operating from the Floor Plan. Report
+that live orientation is unavailable; do not guess another runtime or explore
+outside the Home to compensate.

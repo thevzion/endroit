@@ -33,7 +33,7 @@ export async function loadHome(root) {
 export async function assertRuntime(root) {
   const home = await loadHome(root)
   if (home.runtime !== RUNTIME) {
-    throw new HairnessError('runtime_mismatch', `This Home requires ${home.runtime}; run npx --yes ${home.runtime} instead.`, { exitCode: 3 })
+    throw new HairnessError('runtime_mismatch', `This Home requires ${home.runtime}; run node ./hairness.mjs instead.`, { exitCode: 3 })
   }
   return home
 }
@@ -53,6 +53,7 @@ export function homeDocument(options = {}) {
     mode: options.mode ?? 'solo',
     providers: [...new Set(options.providers ?? ['codex', 'claude'])],
     ...(options.prefix ? { prefix: assertId(options.prefix, 'Home prefix') } : {}),
+    ...(options.frontDoor ? { frontDoor: options.frontDoor } : {}),
     ...(Object.keys(budgets).length ? { budgets } : {}),
     ...(Object.keys(settings).length ? { settings } : {}),
   }

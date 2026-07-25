@@ -10,18 +10,18 @@ const exec = promisify(execFile)
 try {
   const input = JSON.parse(await stdin())
   const model = await hud(input)
-  const args = input.argv.filter((value) => value !== 'show')
-  if (args.includes('--json')) process.stdout.write(`${JSON.stringify(model, null, 2)}\n`)
-  else if (args.includes('--prompt')) {
+  const [command, ...args] = input.argv
+  if (command === 'json' && args.length === 0) process.stdout.write(`${JSON.stringify(model, null, 2)}\n`)
+  else if (command === 'prompt' && args.length === 0) {
     const prompt = await xml(model, input)
     const budget = input.resolvedHome.home.budgets?.hudPromptBytes
     if (budget !== undefined && Buffer.byteLength(prompt) > budget) {
       throw failure('hud_budget_exceeded', `HUD prompt is ${Buffer.byteLength(prompt)} bytes, over the ${budget} byte budget.`)
     }
     process.stdout.write(`${prompt}\n`)
-  } else {
+  } else if (command === 'show' && args.every((value) => value === '--full')) {
     process.stdout.write(`${human(model, args.includes('--full'))}\n`)
-  }
+  } else throw failure('usage', 'Use hud show [--full], hud prompt or hud json.', 2)
 } catch (error) {
   process.stderr.write(`${error.code ?? 'hud_failed'}: ${error.message}\n`)
   process.exitCode = error.exitCode ?? 4
@@ -81,7 +81,7 @@ async function hud(input) {
     apiVersion: 'hairness.dev/hud/v1alpha1',
     generatedAt: new Date().toISOString(),
     status: severity,
-    event: process.env.HAIRNESS_HUD_EVENT ?? 'on-demand',
+    event: input.invocation?.kind ?? 'command',
     home: {
       name: plan.home.name,
       mode: plan.home.mode,
@@ -89,11 +89,7 @@ async function hud(input) {
       providers: plan.home.providers,
       git: homeGit,
     },
-    kernel: input.kernel ?? {
-      runtime: plan.home.runtime,
-      source: process.env.HAIRNESS_RUNTIME_SOURCE === 'development' ? 'development' : 'registry',
-      invoke: process.env.HAIRNESS_RUNTIME_SOURCE === 'development' ? '.hairness/dev-cli' : `npx --yes ${plan.home.runtime}`,
-    },
+    kernel: input.kernel,
     collaborator: plan.desk ? { id: plan.desk.id, ...preferences } : null,
     desk: plan.desk ? { configured: true, id: plan.desk.id, root: deskRoot, preferences, git: deskGit } : { configured: false },
     projections,

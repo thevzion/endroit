@@ -27,11 +27,15 @@ await validateDocument({
   runtime: '@hairness/cli@0.5.0-alpha.0',
   mode: 'solo',
   providers: ['codex'],
+  frontDoor: { wakeUp: 'hairness/hud:prompt' },
 }, 'home')
 const all = await files(root)
 assert.equal(all.some((path) => path.endsWith('hairness.lock.json')), false)
 assert.equal(all.some((path) => /packages\/(?:native|starter)/.test(path)), false)
 for (const path of all.filter((path) => path.endsWith('.mjs'))) execFileSync(process.execPath, ['--check', path], { stdio: 'pipe' })
+for (const path of ['src/build.mjs', 'src/runtime.mjs', 'src/resolved.mjs']) {
+  assert.doesNotMatch(await readFile(join(root, path), 'utf8'), /<hairness-hud|hud --prompt|HAIRNESS_HUD/, `${path} contains HUD-specific Kernel behavior`)
+}
 for (const path of all) {
   const name = relative(root, path)
   assert.ok(!/(^|\/)(?:\.overlay|native|node_modules)(?:\/|$)/.test(name), `tracked legacy path: ${name}`)

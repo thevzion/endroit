@@ -2,18 +2,16 @@
 import { pathToFileURL } from 'node:url'
 import {
   addAssets,
-  diffAsset,
   overrideAsset,
   publishAsset,
   removeAsset,
-  reviewAsset,
   statusAssets,
   syncAssets,
-  validateAsset,
+  validateAssetSource,
 } from './assets.mjs'
 import { buildHome } from './build.mjs'
-import { createHome, initHome } from './create.mjs'
-import { cloneDesk, deskStatus, initDesk } from './desk.mjs'
+import { createHome } from './create.mjs'
+import { cloneDesk, initDesk } from './desk.mjs'
 import { doctorHome } from './doctor.mjs'
 import { assertRuntime, findHome } from './home.mjs'
 import { asHairnessError, HairnessError } from './lib/errors.mjs'
@@ -45,15 +43,8 @@ async function route(command, action, rest, flags, argv, io) {
     deskId: flags.desk,
     prefix: flags.prefix,
   })
-  if (command === 'init') {
-    if (action || rest.length) throw usage('hairness init creates a bare Home; add Assets after initialization.')
-    return initHome(flags.home ?? process.cwd(), {
-      providers: csv(flags.providers),
-      name: flags.name,
-      mode: flags.mode,
-      deskId: flags.desk,
-      prefix: flags.prefix,
-    })
+  if (command === 'asset' && action === 'validate') {
+    return validateAssetSource(flags.home ?? process.cwd(), required(rest[0], 'Asset source'))
   }
   const root = await findHome(flags.home ?? process.cwd())
   await assertRuntime(root)
@@ -62,20 +53,18 @@ async function route(command, action, rest, flags, argv, io) {
   if (command === 'validate') return publicPlan(await resolveHome(root))
   if (command === 'build') return buildHome(root, { check: booleanFlag(flags.check) })
   if (command === 'doctor') return doctorHome(root)
-  const runtimeArgs = argv.slice(argv.indexOf(command) + 1)
+  const runtimeArgs = withoutHomeFlag(argv.slice(argv.indexOf(command) + 1))
   return { passthrough: true, exitCode: await dispatchRuntime(root, command, runtimeArgs, io) }
 }
 
 async function deskRoute(root, action, rest, flags) {
   if (action === 'init') return initDesk(root, { id: flags.id ?? rest[0], git: !booleanFlag(flags['no-git']) })
   if (action === 'clone') return cloneDesk(root, required(rest[0], 'Desk repository'))
-  if (action === 'status') return deskStatus(root)
-  throw usage('hairness desk init|clone|status')
+  throw usage('hairness desk init|clone')
 }
 
 async function assetRoute(root, action, rest, flags, io) {
   const scope = booleanFlag(flags.desk) ? 'desk' : flags.scope
-  if (action === 'review') return reviewAsset(root, required(rest[0], 'Asset'), { scope })
   if (action === 'add') {
     if (!rest.length) throw usage('At least one Asset is required.')
     const overwrite = booleanFlag(flags.overwrite)
@@ -85,8 +74,6 @@ async function assetRoute(root, action, rest, flags, io) {
     return addAssets(root, rest, { overwrite, scope })
   }
   if (action === 'status') return statusAssets(root, rest[0], { scope })
-  if (action === 'validate') return validateAsset(root, required(rest[0], 'Asset'), { scope })
-  if (action === 'diff') return diffAsset(root, required(rest[0], 'Asset'), { to: flags.to, scope })
   if (action === 'sync') {
     if (!rest[0] && !booleanFlag(flags.all)) throw usage('An Asset or --all is required.')
     return syncAssets(root, rest[0], {
@@ -104,7 +91,7 @@ async function assetRoute(root, action, rest, flags, io) {
     return publishAsset(root, required(rest[0], 'Asset'))
   }
   if (action === 'trust') return runtimeTrust(root, required(rest[0], 'Asset'), { digest: flags.digest, revoke: booleanFlag(flags.revoke) })
-  throw usage('hairness asset review|add|status|diff|sync|remove|validate|override|publish|trust')
+  throw usage('hairness asset validate|add|status|sync|remove|override|publish|trust')
 }
 
 function help() {
@@ -112,8 +99,8 @@ function help() {
     summary: 'Hairness gives agents a provider-agnostic Home you own.',
     next: ['hairness create <home>', 'open an agent in <home>', 'invoke hairness-onboarding'],
     commands: [
-      'create <home>', 'init', 'desk init|clone|status',
-      'asset review|add|status|diff|sync|remove|validate|override|publish|trust',
+      'create <home>', 'desk init|clone',
+      'asset validate|add|status|sync|remove|override|publish|trust',
       'validate', 'build [--check]', 'doctor',
       '<Asset runtime namespace> <command...>',
     ],
@@ -153,6 +140,15 @@ async function confirm(io, preview) {
 }
 
 function csv(value) { return value === undefined ? undefined : String(value).split(',').map((entry) => entry.trim()).filter(Boolean) }
+function withoutHomeFlag(argv) {
+  const values = []
+  for (let index = 0; index < argv.length; index += 1) {
+    if (argv[index] === '--home') { index += 1; continue }
+    if (argv[index].startsWith('--home=')) continue
+    values.push(argv[index])
+  }
+  return values
+}
 function booleanFlag(value) { return value === true || value === 'true' || value === 'yes' || value === '1' }
 function required(value, label) { if (!value) throw usage(`${label} is required.`); return value }
 function usage(message) { return new HairnessError('usage', message, { exitCode: 2 }) }

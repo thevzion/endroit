@@ -19,7 +19,11 @@ export async function createHome(destination, options = {}) {
   const stage = await mkdtemp(join(dirname(target), '.hairness-create-'))
   try {
     await git(['init', '--quiet', '--initial-branch=main'], { cwd: stage })
-    await initHome(stage, { ...options, name: options.name ?? homeId(target) })
+    await initHome(stage, {
+      ...options,
+      name: options.name ?? homeId(target),
+      frontDoor: { wakeUp: 'hairness/hud:prompt' },
+    })
     const result = await addAssets(stage, bootstrapAssets)
     await buildHome(stage)
     const doctor = await doctorHome(stage)
@@ -54,7 +58,14 @@ export async function initHome(root = process.cwd(), options = {}) {
   if (await exists(instructionPath)) throw new HairnessError('home_instruction_exists', `${instructionPath} already exists.`)
   if (await exists(deskPath)) throw new HairnessError('desk_exists', `${deskPath} already exists.`)
   try {
-    const home = homeDocument({ destination: root, name: options.name, providers: options.providers, mode, prefix: options.prefix })
+    const home = homeDocument({
+      destination: root,
+      name: options.name,
+      providers: options.providers,
+      mode,
+      prefix: options.prefix,
+      frontDoor: options.frontDoor,
+    })
     await writeJsonAtomic(join(root, 'hairness.json'), home, 0o644)
     await writeFileAtomic(instructionPath, await renderInstructionTemplate('home', {
       'home.name': home.name,

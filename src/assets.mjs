@@ -1,9 +1,11 @@
+import Ajv2020 from 'ajv/dist/2020.js'
 import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { validateDocument } from './contracts.mjs'
 import { git } from './git.mjs'
+import { loadHome } from './home.mjs'
 import { HairnessError } from './lib/errors.mjs'
 import { assertInside, digest, exists, resolvePackageFile } from './lib/io.mjs'
 
@@ -50,6 +52,11 @@ export async function addAssets(root, addresses, options = {}) {
     if (await exists(manifestPath) && !options.overwrite) throw new HairnessError('file_collision', `${relative(root, manifestPath)} already exists.`)
     writes.push({ path: manifestPath, content: manifestBytes(installedManifest(asset, 'source')) })
   }
+  await assertFrontDoorAfter(root, resolved.map((entry) => ({
+    id: entry.manifest.name,
+    scope,
+    manifest: entry.manifest,
+  })))
   const preview = plan(root, writes, [])
   if (options.dryRun) return { status: 'planned', assets: ids, ...preview }
   await applyTransaction(root, writes, [])
@@ -85,42 +92,30 @@ export async function allInstalledAssets(root) {
   return [...home, ...desk]
 }
 
-export async function reviewAsset(root, selector, options = {}) {
-  let asset
-  let installed = false
-  try {
-    asset = await requireValid(await findInstalled(root, selector, options))
-    installed = true
-  } catch (error) {
-    if (error.code !== 'asset_not_installed') throw error
-    asset = await resolveAsset(root, selector)
+export async function validateAssetSource(root, source) {
+  const asset = await resolveAsset(root, source)
+  const files = new Map(asset.files.map((entry) => [entry.path, entry.content]))
+  for (const path of [
+    ...(asset.manifest.artifactKinds ?? []).map((entry) => entry.schema),
+    ...Object.values(asset.manifest.settings ?? {}),
+  ]) {
+    try {
+      new Ajv2020({ allErrors: true, strict: false }).compile(JSON.parse(files.get(path).toString('utf8')))
+    } catch (error) {
+      throw new HairnessError('asset_schema_invalid', `${asset.manifest.name} contains an invalid schema at ${path}: ${error.message}`)
+    }
   }
-  const manifest = sourceManifest(asset.manifest)
-  const files = installed
-    ? await Promise.all(manifest.files.map(async (path) => ({ path, content: await readFile(join(asset.root, path)) })))
-    : asset.files
-  const local = installed ? await assetStatus(asset) : null
+  for (const kind of asset.manifest.artifactKinds ?? []) {
+    if (!files.get(kind.template)?.length) throw new HairnessError('asset_template_invalid', `${asset.manifest.name} has an empty template at ${kind.template}.`)
+  }
   return {
-    status: 'reviewed',
-    installed,
-    scope: asset.scope ?? null,
-    name: manifest.name,
-    version: manifest.version,
-    description: manifest.description,
-    source: asset.manifest.origin?.source ?? asset.source,
-    digest: assetDigest({ manifest, files }),
-    files: files.map((file) => file.path),
-    fileDigests: Object.fromEntries(files.map((file) => [file.path, digest(file.content)])),
-    ...(local ? { local: { state: local.state, manifest: local.manifest, files: local.files.map(({ path, state }) => ({ path, state })) } } : {}),
-    runtime: manifest.runtime ?? null,
-    setup: manifest.setup ?? [],
+    status: 'valid',
+    name: asset.manifest.name,
+    version: asset.manifest.version,
+    digest: assetDigest(asset),
+    source: asset.source,
+    mobile: asset.mobile,
   }
-}
-
-export async function validateAsset(root, selector, options = {}) {
-  const entry = await requireValid(await findInstalled(root, selector, options))
-  validateManifest(sourceManifest(entry.manifest))
-  return { status: 'valid', name: entry.id, scope: entry.scope, digest: await installedAssetDigest(entry) }
 }
 
 export async function overrideAsset(root, selector) {
@@ -140,6 +135,7 @@ export async function overrideAsset(root, selector) {
   }
   const writes = files.map((file) => ({ path: join(destination, file.path), content: file.content }))
   writes.push({ path: join(destination, 'asset.json'), content: manifestBytes(installedManifest(source, 'override')) })
+  await assertFrontDoorAfter(root, [{ id: home.id, scope: 'desk', manifest }])
   await applyTransaction(root, writes, [])
   return { status: 'overridden', name: home.id, path: relative(root, destination) }
 }
@@ -170,6 +166,10 @@ export async function publishAsset(root, selector) {
   const next = new Set(manifest.files)
   const deletes = Object.keys(home.manifest.origin.baseDigests).filter((path) => !next.has(path)).map((path) => join(home.root, path))
   deletes.push(...Object.keys(desk.manifest.origin.baseDigests).map((path) => join(desk.root, path)), desk.path)
+  await assertFrontDoorAfter(root, [
+    { id: home.id, scope: 'home', manifest },
+    { id: desk.id, scope: 'desk', manifest: null },
+  ])
   await applyTransaction(root, writes, deletes)
   await removeEmptyParents(desk.root, join(root, '.desk', 'assets'))
   return { status: 'published', name: desk.id, path: relative(root, home.root) }
@@ -180,11 +180,8 @@ export async function statusAssets(root, selector, options = {}) {
   return Promise.all(entries.map(assetStatus))
 }
 
-export async function diffAsset(root, selector, options = {}) {
-  const installed = await requireValid(await findInstalled(root, selector, options))
+async function upstreamDiff(installed, upstream) {
   const local = await assetStatus(installed)
-  const upstream = await resolveAsset(root, options.to ?? installed.manifest.origin.source)
-  assertSameAsset(installed, upstream)
   const base = installed.manifest.origin.baseDigests
   const next = new Map(upstream.files.map((file) => [file.path, digest(file.content)]))
   const paths = [...new Set([...Object.keys(base), ...next.keys()])].sort()
@@ -215,6 +212,7 @@ export async function removeAsset(root, selector, options = {}) {
     throw new HairnessError('asset_customized', `${installed.id} has customized, missing or invalid source-owned files.`, { details: current })
   }
   const deletes = [...Object.keys(installed.manifest.origin.baseDigests).map((path) => join(installed.root, path)), installed.path]
+  await assertFrontDoorAfter(root, [{ id: installed.id, scope: installed.scope, manifest: null }])
   await applyTransaction(root, [], deletes)
   await removeEmptyParents(installed.root, installed.scope === 'desk' ? join(root, '.desk', 'assets') : join(root, 'assets'))
   return { status: 'removed', name: installed.id, files: Object.keys(installed.manifest.origin.baseDigests) }
@@ -253,6 +251,7 @@ export async function assetStatus(entry) {
     mobile: installation.mobile,
     state,
     manifest,
+    effectiveDigest: await installedAssetDigest(entry).catch(() => null),
     files,
   }
 }
@@ -263,17 +262,18 @@ async function syncOne(root, installed, options) {
   assertSameAsset(installed, upstream)
   const others = (await installedAssets(root, { scope: installed.scope })).filter((entry) => !entry.invalid && entry.id !== installed.id).map((entry) => entry.manifest)
   assertCapabilityCollisions([...others, upstream.manifest])
+  const result = await upstreamDiff(installed, upstream)
   if (status.state !== 'clean' && !options.overwrite) {
-    const result = await diffAsset(root, installed.id, { to: options.to })
     if (options.check) return { status: 'blocked', reason: 'customized', ...result }
-    throw new HairnessError('sync_customized', `${installed.id} has local changes; inspect hairness diff or pass --overwrite.`, { details: result })
+    throw new HairnessError('sync_customized', `${installed.id} has local changes; run asset sync --check or pass --overwrite.`, { details: result })
   }
   const writes = upstream.files.map((file) => ({ path: join(installed.root, file.path), content: file.content }))
   writes.push({ path: installed.path, content: manifestBytes(installedManifest(upstream, 'source')) })
   const nextPaths = new Set(upstream.files.map((file) => file.path))
   const deletes = Object.keys(installed.manifest.origin.baseDigests).filter((path) => !nextPaths.has(path)).map((path) => join(installed.root, path))
   const changed = deletes.length > 0 || await anyWriteChanged(writes)
-  if (options.check) return { status: changed ? 'available' : 'current', name: installed.id, version: upstream.manifest.version, commit: upstream.resolvedCommit }
+  await assertFrontDoorAfter(root, [{ id: installed.id, scope: installed.scope, manifest: upstream.manifest }])
+  if (options.check) return { status: changed ? 'available' : 'current', ...result }
   await applyTransaction(root, writes, deletes)
   return { status: 'synced', name: installed.id, version: upstream.manifest.version, commit: upstream.resolvedCommit }
 }
@@ -552,6 +552,32 @@ async function assertNoSymlink(root, path) {
     try { if ((await lstat(current)).isSymbolicLink()) throw new HairnessError('symlink_forbidden', `${relative(root, current)} is a symbolic link.`) }
     catch (error) { if (error.code !== 'ENOENT') throw error }
     current = dirname(current)
+  }
+}
+
+async function assertFrontDoorAfter(root, changes) {
+  const home = await loadHome(root)
+  if (!home.frontDoor) return
+  const [homeAssets, deskAssets] = await Promise.all([
+    installedAssets(root, { scope: 'home' }),
+    installedAssets(root, { scope: 'desk' }),
+  ])
+  const homeManifests = new Map(homeAssets.filter((entry) => !entry.invalid).map((entry) => [entry.id, sourceManifest(entry.manifest)]))
+  const deskManifests = new Map(deskAssets.filter((entry) => !entry.invalid).map((entry) => [entry.id, sourceManifest(entry.manifest)]))
+  for (const change of changes) {
+    const manifests = change.scope === 'desk' ? deskManifests : homeManifests
+    if (change.manifest) manifests.set(change.id, sourceManifest(change.manifest))
+    else manifests.delete(change.id)
+  }
+  const separator = home.frontDoor.wakeUp.lastIndexOf(':')
+  const owner = home.frontDoor.wakeUp.slice(0, separator)
+  const command = home.frontDoor.wakeUp.slice(separator + 1)
+  const manifest = deskManifests.get(owner) ?? homeManifests.get(owner)
+  if (!manifest?.runtime) {
+    throw new HairnessError('front_door_runtime_missing', `${home.frontDoor.wakeUp} would no longer reference an effective Asset runtime.`)
+  }
+  if (!manifest.runtime.commands.some((entry) => entry.name === command)) {
+    throw new HairnessError('front_door_command_missing', `${home.frontDoor.wakeUp} would no longer reference a declared runtime command.`)
   }
 }
 

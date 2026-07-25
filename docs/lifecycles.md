@@ -3,7 +3,7 @@
 ## Home and Desk instructions
 
 ```text
-create or init → render HOME.md once → source-owned constitution
+create          → render HOME.md once → source-owned constitution
 solo Desk      → render DESK.md once → versionable personal conventions
 team Desk      → init or clone       → private repository with DESK.md
 ```
@@ -13,27 +13,36 @@ Rendering happens once. Later edits are canonical source changes and are never
 re-templated. A team Home remains valid without a Desk; an existing Desk is
 valid only with both `desk.json` and `DESK.md`.
 
+The Kernel retains a bare initializer internally for transactional creation and
+tests; `init` is not a public 0.5 command.
+
 ## Asset source
 
 ```text
-review → add → clean
-                  ├─ edit Home source → customized → sync blocked
-                  └─ override → Desk variant → publish → Home diff/PR
+validate source → add → clean
+                         ├─ edit Home source → customized → sync --check blocks
+                         └─ override → Desk variant → publish → Home diff/PR
 ```
 
-`review` resolves and inventories a source without installation. `add` previews
-and transactionally copies files. `status` is offline. `diff` and `sync` resolve
-the recorded or selected source. `remove` deletes only declared source-owned
-files and preserves unknown files.
+`asset validate <source>` works outside a Home and validates the manifest,
+referenced files, schemas, templates and digest without installation. `add`
+previews and transactionally copies files. `status` is offline and exposes the
+effective digest. `sync --check` resolves the recorded or selected source and
+returns the complete upstream diff without writing. `remove` deletes only
+declared source-owned files and preserves unknown files.
 
 An override records the Home base digests. Publishing replaces the Home Asset
 only if those bytes are unchanged; no automatic merge occurs.
+
+If the Home selected an Asset command for `frontDoor.wakeUp`, add, sync, remove,
+override and publish compute the effective post-mutation composition first.
+They refuse any write that would remove its runtime or command.
 
 ## Runtime trust
 
 ```text
 installed static source
-  → review entrypoint, namespace, commands and digest
+  → inspect source + offline status and digest
   → trust exact digest locally
   → dispatch runtime
   → any byte changes
@@ -72,24 +81,42 @@ ambiguity requires `--binding`. Mapping reads tracked files and local Git
 evidence, caps inspection at 5,000 paths, rejects secret-like output and never
 writes into the Target.
 
-## Session
+## Front Door
 
-The provider Bridge invokes `hud --prompt` at session start, resume, clear and
-compaction. The HUD reads local evidence and the Resolved Home, prepends
-`DESK.md` and Desk Asset Instructions, then emits an operational XML contract
-for Ness. It executes no other Asset runtime.
+```text
+build
+  → HOME.md
+  → static Floor Plan
+  → Home Asset Instructions
+  → provider entrypoint
+  → optional SessionStart Bridge
+  → Home Console
+  → selected Wake-up route
+```
 
-The generated wrapper uses the executable `.hairness/dev-cli` launcher when it
-exists; otherwise it invokes the exact `hairness.json#runtime` through `npx`.
-The launcher marks its own source as `development`. A present but failing
-launcher never falls back to npm. Failure or a 30-second timeout returns a
-bounded unavailable HUD and lets the provider session continue.
+The Floor Plan is immediately usable from tracked projections. A Home without a
+Wake-up route has no Hairness SessionStart wrapper and remains valid.
+
+When configured, the provider Bridge invokes the route through
+`node ./hairness.mjs`. The Console uses a regular non-symlink
+`.hairness/dev-cli` when present; otherwise it invokes the exact
+`hairness.json#runtime` through `npx`. A present but failing development
+launcher never falls back to npm.
+
+The Bridge treats output as opaque. It discards stderr, caps stdout at 256 KiB
+and expires after 30 seconds. Failure yields a bounded
+`<hairness-front-door status="degraded" … />` marker while the Floor Plan
+continues to orient the session.
+
+The first-party default is `hairness/hud:prompt`. HUD reads local evidence and
+the Resolved Home, includes `DESK.md` and Desk Asset Instructions, then emits
+XML for Ness. It executes no other Asset runtime.
 
 ## Hairness development
 
 ```text
 dev:home → reconcile sibling team Home → bind repository → build → doctor
-dev:session → open provider inside that Home → SessionStart HUD
+dev:session → open provider inside that Home → static Floor Plan + Wake-up
 dev:verify → contracts + persistent Home
 dev:verify --full → release qualification
 ```

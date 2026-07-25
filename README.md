@@ -33,22 +33,28 @@ codex -C studio-home
 
 Invoke `$hairness-onboarding` in Codex or `/hairness-onboarding` in Claude.
 Ness explains the proposed setup, asks for consent and completes it through the
-runtime pinned by the Home.
+tracked Home Console and runtime pinned by the Home.
 
 `HOME.md` is the shared constitution. `.desk/DESK.md` holds one collaborator’s
 preferences and conventions. Both are ordinary Markdown, owned in Git and
 editable after bootstrap. Assets add reusable capabilities without taking
 ownership away from the Home.
 
-## Ness wakes up oriented
+## Ness enters through the Front Door
 
-When a session starts, Hairness gives Ness a compact HUD: a live map of the
-environment before any work begins.
+Every provider first loads the same static Floor Plan. It names the Home,
+ownership boundaries, canonical relative paths, the exact Console and every
+available route. It works from the first clone and remains usable when hooks or
+runtimes do not.
+
+When Wake-up is configured and approved, the provider Bridge then asks the
+selected Asset route for live context. The default `hairness/hud:prompt` route
+gives Ness a dense local snapshot before any work begins:
 
 ```text
 HAIRNESS    studio-home · team · codex+claude · ready
 ROOT        /workspace/studio-home
-KERNEL      registry · npx --yes @hairness/cli@0.5.0-alpha.0
+KERNEL      registry · node ./hairness.mjs
 DESK        maya · /workspace/studio-home/.desk · clean
 SURFACES    6 assets · 8 skills · 9 commands · artifact,hud,target
 TARGETS     2 declared · 3 bindings · payments:clean · website:dirty
@@ -57,9 +63,10 @@ CONTEXT     instructions:1712B · desk:386B · model:742B
 ATTENTION   0 blocking · 1 warning · 2 advisory
 ```
 
-The CLI is primarily Ness’s execution channel. Humans can use it directly, but
-the canonical path is conversation: the HUD tells Ness which exact Kernel
-invocation and Asset namespaces are available.
+This is **Progressive Orientation**: the Floor Plan is the reliable static
+entrypoint; Wake-up improves it without becoming a single point of failure.
+The Console is primarily Ness’s execution channel. Humans can use it directly,
+but the canonical path is conversation.
 
 <details>
 <summary><strong>What did Ness receive?</strong></summary>
@@ -67,17 +74,18 @@ invocation and Asset namespaces are available.
 The provider Bridge invoked:
 
 ```bash
-npx --yes @hairness/cli@0.5.0-alpha.0 hud --prompt
+node ./hairness.mjs hud prompt
 ```
 
-It injected a deterministic agent-facing contract. A representative excerpt:
+It transported stdout without interpreting HUD or XML. A representative
+agent-facing response:
 
 ```xml
-<hairness-hud version="1" status="ready" event="session-start">
+<hairness-hud version="1" status="ready" event="wake-up">
   <home name="studio-home" mode="team" root="/workspace/studio-home"
         providers="codex,claude" />
   <kernel runtime="@hairness/cli@0.5.0-alpha.0" source="registry"
-          invoke="npx --yes @hairness/cli@0.5.0-alpha.0" />
+          invoke="node ./hairness.mjs" />
   <desk configured="true" id="maya"
         root="/workspace/studio-home/.desk" git="clean" />
   <surfaces assets="6" skills="8" commands="9"
@@ -87,8 +95,16 @@ It injected a deterministic agent-facing contract. A representative excerpt:
 </hairness-hud>
 ```
 
-Ness can request the same state on demand. `hud --full` expands the inventory;
-`hud --json` exposes stable data for tools.
+If Wake-up fails, the Bridge adds only:
+
+```xml
+<hairness-front-door version="1" status="degraded"
+  reason="wake-up-unavailable" />
+```
+
+The Floor Plan is still present, so Ness can use the Console, explain the
+missing live evidence and continue safely. On demand, `hud show --full` expands
+the human inventory and `hud json` exposes stable data for tools.
 
 </details>
 
@@ -99,7 +115,7 @@ Ness can request the same state on demand. `hud --full` expands the inventory;
 Hairness separates canonical sources, generated provider views and the
 repositories where real work happens.
 
-**1. The canonical Home — yours**
+**1. The canonical Home: yours**
 
 ```text
 studio-home/
@@ -121,10 +137,11 @@ In a solo Home, the Desk can be versioned with the Home. In a team Home,
 `.desk/` can be a private nested Git repository: the shared environment stays
 governed while each collaborator keeps personal continuity.
 
-**2. Generated provider views — reconstructible**
+**2. Generated provider views: reconstructible**
 
 ```text
 studio-home/
+├── hairness.mjs                 # tracked Home Console
 ├── AGENTS.md
 ├── CLAUDE.md
 ├── .agents/skills/
@@ -137,11 +154,12 @@ studio-home/
     └── hooks.json
 ```
 
-These files are complete projections of `HOME.md`, Asset Instructions, Skills
-and Commands. Editing a projection is a detectable divergence; canonical
+These files contain the Floor Plan and complete projections of `HOME.md`, Asset
+Instructions, Skills and Commands. `hairness.mjs` is the single documented
+execution channel. Editing a projection is a detectable divergence; canonical
 material remains provider-neutral.
 
-**3. An independent Target — unchanged**
+**3. An independent Target: unchanged**
 
 ```text
 payments-api/
@@ -168,7 +186,7 @@ Target → work → Artifact → recurring pattern → Asset → better future w
 
 Ness works through a named Binding to an independent Target. A Target Map can
 capture its stack, architecture, conventions, tests, concerns and source SHA as
-a Desk Artifact—without writing into that Target. Useful outcomes can then be
+a Desk Artifact without writing into that Target. Useful outcomes can then be
 validated and published to the Home while their Desk source remains intact.
 
 When a pattern proves reusable, it can become an Asset:
@@ -185,19 +203,20 @@ An installed Asset is copied source, not a remote black box. The short
 lifecycle is inspectable:
 
 ```bash
-npx --yes @hairness/cli@0.5.0-alpha.0 asset add ./security/asset.json
+node ./hairness.mjs asset validate ./security/asset.json
+node ./hairness.mjs asset add ./security/asset.json
 $EDITOR assets/company/security/capabilities/review.md
 git diff
-npx --yes @hairness/cli@0.5.0-alpha.0 asset status company/security
-npx --yes @hairness/cli@0.5.0-alpha.0 asset sync company/security
+node ./hairness.mjs asset status company/security
+node ./hairness.mjs asset sync company/security --check
 # sync stops: the installed source was customized
 ```
 
 Ness can map and publish work through the same pinned runtime:
 
 ```bash
-npx --yes @hairness/cli@0.5.0-alpha.0 target map payments --binding refactor
-npx --yes @hairness/cli@0.5.0-alpha.0 artifact publish api-redesign --to home
+node ./hairness.mjs target map payments --binding refactor
+node ./hairness.mjs artifact publish api-redesign --to home
 ```
 
 Git diff and an ordinary pull request provide governance. Hairness does not
@@ -223,7 +242,11 @@ and trust. Assets own meaning, capabilities, surfaces and runtime behavior.
 | **Artifact** | Inspectable outcome with kind, owner, state and lineage |
 | **Target** | Independent repository where real work remains sovereign |
 | **Projection** | Generated provider-native view; never canonical source |
-| **HUD** | Live boot contract generated at wake-up and on demand |
+| **Front Door** | Static Floor Plan plus one optional Home-selected Wake-up route |
+| **Floor Plan** | Deterministic static orientation projected into every provider |
+| **Home Console** | Tracked `hairness.mjs` channel for Kernel and Asset routes |
+| **Wake-up** | Optional dynamic enrichment delivered by a provider Bridge |
+| **HUD** | First-party Asset that can provide Wake-up and on-demand local evidence |
 
 An Asset can expose both a Skill and a Command for the same Capability.
 Hairness preserves that distinction. When a provider cannot, the projection
@@ -247,17 +270,19 @@ loops.
 
 Hairness 0.5 does not ship every integration in this table. Providers keep
 their native surfaces, methods keep their own loops and Targets keep their
-repositories. Projection is one brick in the framework—not its definition.
+repositories. Projection is one brick in the framework, not its definition.
 
 ## Trust, alpha boundaries and next steps
 
-Static Assets execute no code. Before a third-party Asset runtime runs, Hairness
-can show its source, digest, entrypoint, namespace, commands and diff:
+Static Assets execute no code. Before trusting a third-party Asset runtime,
+inspect its source-owned files and offline status, then approve its exact
+digest:
 
 ```bash
-npx --yes @hairness/cli@0.5.0-alpha.0 asset review company/security
-npx --yes @hairness/cli@0.5.0-alpha.0 asset trust company/security --digest sha256:…
-npx --yes @hairness/cli@0.5.0-alpha.0 security audit
+node ./hairness.mjs asset status company/security --json
+$EDITOR assets/company/security/runtime.mjs
+node ./hairness.mjs asset trust company/security --digest sha256:…
+node ./hairness.mjs security audit
 ```
 
 Trust is local and bound to the complete Asset digest; changing any byte

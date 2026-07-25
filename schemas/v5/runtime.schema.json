@@ -3,13 +3,33 @@
   "$id": "https://hairness.dev/schema/runtime.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["protocol", "argv", "homeRoot", "assetRoot", "resolvedHome"],
+  "required": ["protocol", "argv", "homeRoot", "assetRoot", "resolvedHome", "kernel", "runtimeTrust", "invocation"],
   "properties": {
     "protocol": { "const": "hairness.dev/runtime/v1alpha1" },
     "argv": { "type": "array", "items": { "type": "string" } },
     "homeRoot": { "type": "string", "minLength": 1 },
     "deskRoot": { "type": ["string", "null"] },
     "assetRoot": { "type": "string", "minLength": 1 },
-    "resolvedHome": { "type": "object" }
+    "resolvedHome": { "type": "object" },
+    "kernel": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["runtime", "source", "invoke"],
+      "properties": {
+        "runtime": { "type": "string" },
+        "source": { "enum": ["development", "registry"] },
+        "invoke": { "const": "node ./hairness.mjs" }
+      }
+    },
+    "runtimeTrust": { "type": "array", "items": { "type": "object" } },
+    "invocation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind"],
+      "properties": {
+        "kind": { "enum": ["command", "wake-up"] },
+        "provider": { "enum": ["codex", "claude"] }
+      }
+    }
   }
 }
