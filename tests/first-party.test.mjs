@@ -35,6 +35,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.equal(await dispatchRuntime(home, 'hud', ['--json'], json.io), 0)
     const model = JSON.parse(json.stdout())
     assert.equal(model.home.name, 'home')
+    assert.equal(model.home.runtimeSource, 'registry')
     assert.deepEqual(model.desk.preferences, { addressAs: 'Alexis', responseLanguage: 'fr' })
     assert.equal(model.recentDesk.length, 5)
     assert.deepEqual(model.recentDesk.map((entry) => entry.path), ['note-6.md', 'note-5.md', 'note-4.md', 'note-3.md', 'note-2.md'])
@@ -42,12 +43,28 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
 
     const prompt = captureIo()
     await dispatchRuntime(home, 'hud', ['--prompt'], prompt.io)
-    assert.match(prompt.stdout(), /^<hairness-hud /)
-    assert.match(prompt.stdout(), /address-as="Alexis" response-language="fr"/)
-    assert.match(prompt.stdout(), /<targets>/)
+    assert.equal(prompt.stdout(), [
+      '<hairness-hud version="1">',
+      `  <home name="home" mode="solo" runtime="@hairness/cli@0.5.0-alpha.0" runtime-source="registry" providers="codex,claude"/>`,
+      '  <desk configured="true" id="local" address-as="Alexis" response-language="fr"/>',
+      '  <surfaces assets="4" skills="4" commands="5" runtimes="3" namespaces="artifact,hud,target"/>',
+      `  <git available="true" branch="${model.git.branch}" head="${model.git.head}" clean="${model.git.clean}" changes="${model.git.changes}" conflicts="${model.git.conflicts}" worktrees="${model.git.worktrees}" committed-at="${model.git.committedAt}"/>`,
+      '  <targets>',
+      '  </targets>',
+      '  <artifacts count="0"/>',
+      '  <recent-desk>',
+      ...model.recentDesk.map((entry) => `    <file path="${entry.path}" modified-at="${entry.modifiedAt}"/>`),
+      '  </recent-desk>',
+      '  <desk-instructions>',
+      '  </desk-instructions>',
+      '  <warnings>',
+      '  </warnings>',
+      '</hairness-hud>',
+      '',
+    ].join('\n'))
     const human = captureIo()
     await dispatchRuntime(home, 'hud', [], human.io)
-    assert.match(human.stdout(), /^HAIRNESS\s+/)
+    assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.5.0-alpha.0 · registry')
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

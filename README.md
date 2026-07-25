@@ -40,6 +40,11 @@ When a session starts, the provider Bridge injects a compact XML HUD into
 Ness’s context. Ness wakes up knowing which Home and Desk exist, which Assets
 are available, what the Git state is, which Targets are bound, which Target
 Maps are stale, and what needs attention. Ness can ask for the full HUD later.
+The generated wrapper uses the exact runtime pinned by the Home. A local
+development launcher takes precedence; if it exists but fails, Hairness reports
+an unavailable HUD instead of silently switching code or sending Ness exploring.
+Codex asks you to trust the Home and review its hook through `/hooks` before the
+first injection; changed hook bytes require review again.
 
 ```text
 HAIRNESS    agentic-tools · team · codex+claude · @hairness/cli@0.5.0-alpha.0
@@ -321,6 +326,17 @@ Git provides history and restoration.
 Read the [architecture](docs/architecture.md),
 [lifecycles](docs/lifecycles.md), [technical reference](docs/reference.md) and
 [security policy](SECURITY.md).
+
+Hairness develops itself through a separate Development Home rather than
+putting provider files in this repository:
+
+```bash
+npm run dev:home
+npm run dev:session -- --provider codex
+npm run dev:verify
+```
+
+See [Contributing](CONTRIBUTING.md) for the self-hosted workflow.
 
 ## License
 

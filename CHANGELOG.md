@@ -12,6 +12,10 @@
 - Add typed Artifact creation, import, validation, publication and lineage.
 - Add named Target Bindings and evidence-backed Target Map Artifacts.
 - Replace Prologue with the session-start and on-demand HUD.
+- Add fail-closed Codex and Claude SessionStart wrappers with exact runtime
+  resolution.
+- Add a repository-owned, rollback-safe Development Home recipe and Project
+  plan Artifact.
 - Remove Overlay, Integrations, public Adapters, Registry and all 0.4 aliases.
 
 This is a clean break with 0.4.

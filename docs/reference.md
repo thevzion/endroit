@@ -96,6 +96,12 @@ Desk projections in a team Home are excluded locally by exact paths.
 `.hairness/build.json` records output owners and digests but is not required
 after clone. `build --check` recomputes desired bytes without writing.
 
+Each Bridge also writes a tracked SessionStart wrapper. The wrapper prefers
+`.hairness/dev-cli` when present and otherwise invokes the exact Home runtime
+with `npx`. Codex receives its official JSON hook envelope; Claude receives the
+raw XML HUD. Errors, oversized output and a 30-second timeout collapse to a
+bounded `status="unavailable"` HUD without stderr.
+
 ## Runtime
 
 An Asset runtime receives one JSON document on stdin:
@@ -144,3 +150,20 @@ doctor
 
 Use `--home <path>` when invoking a Kernel command outside the Home. Use
 `--json` for Kernel responses. Runtime flags pass through unchanged.
+
+## Repository development commands
+
+These commands are available only from a Hairness source checkout:
+
+```text
+npm run dev:home
+npm run dev:home:recreate
+npm run dev:session -- --provider codex|claude
+npm run dev:verify
+npm run dev:verify -- --full
+```
+
+`--home <path>` selects a disposable or alternate Development Home.
+`--desk <id>` initializes its Desk and `--desk-repository <path-or-url>` clones
+one. `--downstream <home>` is repeatable during full verification. No command
+creates a remote, commit or push.

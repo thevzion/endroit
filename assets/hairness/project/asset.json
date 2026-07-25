@@ -6,8 +6,11 @@
   "prefix": "hairness",
   "files": [
     "instructions/maintaining-hairness.md",
+    "capabilities/develop.md",
     "capabilities/review.md",
-    "capabilities/release.md"
+    "capabilities/release.md",
+    "schemas/plan.schema.json",
+    "templates/plan.md"
   ],
   "instructions": [
     {
@@ -16,6 +19,11 @@
     }
   ],
   "capabilities": [
+    {
+      "id": "develop",
+      "path": "capabilities/develop.md",
+      "description": "Develop Hairness through its self-hosted Development Home."
+    },
     {
       "id": "review",
       "path": "capabilities/review.md",
@@ -29,6 +37,11 @@
   ],
   "skills": [
     {
+      "id": "project-develop",
+      "capability": "develop",
+      "description": "Use when developing or locally qualifying Hairness through its Development Home."
+    },
+    {
       "id": "project-review",
       "capability": "review",
       "description": "Use when a Hairness change must be reviewed against public contracts and qualification gates."
@@ -38,5 +51,22 @@
       "capability": "release",
       "description": "Use when preparing a resumable Hairness prerelease without crossing approval checkpoints."
     }
-  ]
+  ],
+  "commands": [
+    {
+      "id": "project-develop",
+      "capability": "develop",
+      "description": "Develop Hairness through its reference Development Home."
+    }
+  ],
+  "artifactKinds": [
+    {
+      "id": "plan",
+      "schema": "schemas/plan.schema.json",
+      "template": "templates/plan.md",
+      "owners": ["desk", "home"],
+      "states": ["draft", "accepted", "qualified"]
+    }
+  ],
+  "setup": ["develop"]
 }

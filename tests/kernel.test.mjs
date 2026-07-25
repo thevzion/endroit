@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -51,7 +51,9 @@ test('create builds a source-owned Home and tracks shared provider projections',
       '.agents/skills/acme-hairness-artifacts/SKILL.md',
       '.agents/skills/acme-hairness-target-manage/SKILL.md',
       '.claude/settings.json',
+      '.claude/hooks/hairness-session-start.mjs',
       '.codex/hooks.json',
+      '.codex/hooks/hairness-session-start.mjs',
       'assets/hairness/hud/runtime.mjs',
     ]) assert.match(tracked, new RegExp(`^${escape(path)}$`, 'm'))
     assert.doesNotMatch(tracked, /^\.hairness\//m)
@@ -63,6 +65,91 @@ test('create builds a source-owned Home and tracks shared provider projections',
     document.runtime = '@hairness/cli@9.0.0'
     await writeFile(join(home, 'hairness.json'), `${JSON.stringify(document, null, 2)}\n`)
     await assert.rejects(() => assertRuntime(home), (error) => error.code === 'runtime_mismatch' && /npx --yes/.test(error.message))
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('provider session wrappers inject exact transport and fail closed without leaking stderr', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-session-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home)
+    const local = join(home, '.hairness/dev-cli')
+    await mkdir(join(home, '.hairness'), { recursive: true })
+    await executable(local, `#!/usr/bin/env node
+process.stdout.write('<hairness-hud source="' + process.env.HAIRNESS_RUNTIME_SOURCE + '"/>\\n')
+`)
+
+    const codexPath = join(home, '.codex/hooks/hairness-session-start.mjs')
+    const claudePath = join(home, '.claude/hooks/hairness-session-start.mjs')
+    const codex = JSON.parse((await exec('node', [codexPath], { cwd: home })).stdout)
+    assert.deepEqual(codex, {
+      hookSpecificOutput: {
+        hookEventName: 'SessionStart',
+        additionalContext: '<hairness-hud source="development"/>',
+      },
+    })
+    assert.equal((await exec('node', [claudePath], { cwd: home })).stdout, '<hairness-hud source="development"/>\n')
+
+    await executable(local, `#!/usr/bin/env node
+process.stderr.write('private-downstream-secret\\n')
+process.exitCode = 4
+`)
+    const failed = (await exec('node', [codexPath], { cwd: home })).stdout
+    assert.deepEqual(JSON.parse(failed), {
+      hookSpecificOutput: {
+        hookEventName: 'SessionStart',
+        additionalContext: '<hairness-hud status="unavailable" reason="runtime-unavailable"/>',
+      },
+    })
+    assert.doesNotMatch(failed, /private-downstream-secret/)
+
+    await rm(local)
+    await symlink('missing-cli', local)
+    assert.equal((await exec('node', [claudePath], { cwd: home })).stdout, '<hairness-hud status="unavailable" reason="runtime-unavailable"/>\n')
+
+    await rm(local)
+    const fakeBin = join(temporary, 'bin')
+    const argsPath = join(temporary, 'npx-args.json')
+    await mkdir(fakeBin)
+    await executable(join(fakeBin, 'npx'), `#!/usr/bin/env node
+import { writeFileSync } from 'node:fs'
+writeFileSync(process.env.HAIRNESS_TEST_ARGS, JSON.stringify(process.argv.slice(2)))
+process.stdout.write('<hairness-hud source="' + process.env.HAIRNESS_RUNTIME_SOURCE + '"/>\\n')
+`)
+    const registry = await exec('node', [claudePath], {
+      cwd: home,
+      env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HAIRNESS_TEST_ARGS: argsPath },
+    })
+    assert.equal(registry.stdout, '<hairness-hud source="registry"/>\n')
+    assert.deepEqual(JSON.parse(await readFile(argsPath, 'utf8')), [
+      '--yes',
+      '@hairness/cli@0.5.0-alpha.0',
+      'hud',
+      '--prompt',
+      '--home',
+      await realpath(home),
+    ])
+
+    const hooks = JSON.parse(await readFile(join(home, '.codex/hooks.json'), 'utf8'))
+    hooks.hooks.SessionStart.unshift({
+      matcher: 'startup',
+      hooks: [
+        { type: 'command', command: 'node user-session-hook.mjs' },
+        { type: 'command', command: 'npx --yes @hairness/cli@0.5.0-alpha.0 hud --prompt' },
+      ],
+    })
+    await writeFile(join(home, '.codex/hooks.json'), `${JSON.stringify(hooks, null, 2)}\n`)
+    await buildHome(home)
+    const rebuilt = JSON.parse(await readFile(join(home, '.codex/hooks.json'), 'utf8'))
+    assert.deepEqual(rebuilt.hooks.SessionStart, [
+      { matcher: 'startup', hooks: [{ type: 'command', command: 'node user-session-hook.mjs' }] },
+      {
+        matcher: 'startup|resume|clear|compact',
+        hooks: [{ type: 'command', command: 'node .codex/hooks/hairness-session-start.mjs' }],
+      },
+    ])
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }
@@ -148,6 +235,11 @@ test('team Desk projections remain local while Desk sources stay in the nested r
     await rm(temporary, { recursive: true, force: true })
   }
 })
+
+async function executable(path, content) {
+  await writeFile(path, content)
+  await chmod(path, 0o755)
+}
 
 test('legacy Overlay and Extensions layouts are rejected as a clean break', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'hairness-legacy-'))

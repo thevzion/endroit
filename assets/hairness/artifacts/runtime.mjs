@@ -78,11 +78,12 @@ async function listArtifacts(input) {
       const key = await realpath(path).catch(() => path)
       if (seen.has(key)) continue
       seen.add(key)
+      const directory = await realpath(dirname(path)).catch(() => dirname(path))
       try {
         const document = parseArtifact(await readFile(path, 'utf8'))
-        values.push({ ...document.metadata, scope: root.scope, ...(root.binding ? { binding: root.binding } : {}), path: dirname(path) })
+        values.push({ ...document.metadata, scope: root.scope, ...(root.binding ? { binding: root.binding } : {}), path: directory })
       } catch (error) {
-        values.push({ scope: root.scope, path: dirname(path), invalid: error.message })
+        values.push({ scope: root.scope, path: directory, invalid: error.message })
       }
     }
   }
@@ -178,7 +179,8 @@ function selectKind(plan, selector) {
 
 async function selectArtifact(input, selector) {
   const selectedPath = resolve(selector)
-  const selectedDirectory = basename(selectedPath) === 'artifact.md' ? dirname(selectedPath) : selectedPath
+  const candidate = basename(selectedPath) === 'artifact.md' ? dirname(selectedPath) : selectedPath
+  const selectedDirectory = await realpath(candidate).catch(() => candidate)
   const matches = (await listArtifacts(input)).filter((entry) => entry.id === selector || `${entry.kind}:${entry.id}` === selector || entry.path === selectedDirectory)
   if (!matches.length) throw failure('artifact_missing', `${selector} was not found.`)
   if (matches.length > 1) throw failure('artifact_ambiguous', `${selector} matches multiple Artifacts.`)

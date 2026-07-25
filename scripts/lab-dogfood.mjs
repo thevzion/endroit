@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -23,6 +23,20 @@ try {
   await exec('npx', [...command, 'target', 'add', target, '--id', 'lab'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })
   await exec('npx', [...command, 'asset', 'add', '@hairness/scratch', '-y'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })
   await exec('npx', [...command, 'build'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })
+  const launcher = join(home, '.hairness', 'dev-cli')
+  await mkdir(join(home, '.hairness'), { recursive: true })
+  await writeFile(launcher, `#!/usr/bin/env node
+import { spawnSync } from 'node:child_process'
+const result = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['--yes', '--package', ${JSON.stringify(packs.cli)}, 'hairness', ...process.argv.slice(2)], { stdio: 'inherit' })
+process.exitCode = result.status ?? 1
+`)
+  await chmod(launcher, 0o755)
+  const codex = JSON.parse((await exec(process.execPath, [join(home, '.codex/hooks/hairness-session-start.mjs')], { cwd: home })).stdout)
+  assert.match(codex.hookSpecificOutput.additionalContext, /^<hairness-hud /)
+  assert.match(codex.hookSpecificOutput.additionalContext, /runtime-source="development"/)
+  const claude = (await exec(process.execPath, [join(home, '.claude/hooks/hairness-session-start.mjs')], { cwd: home })).stdout.trim()
+  assert.match(claude, /^<hairness-hud /)
+  assert.match(claude, /runtime-source="development"/)
   const status = JSON.parse((await exec('npx', [...command, 'asset', 'status', '--json'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
   assert.deepEqual(status.map((entry) => entry.name), ['hairness/artifacts', 'hairness/hud', 'hairness/onboarding', 'hairness/scratch', 'hairness/targets'])
   assert.ok(status.every((entry) => entry.state === 'clean'))

@@ -55,3 +55,20 @@ third-party HUD contributions are outside 0.5.
 
 This arrangement keeps the Home legible while leaving methods and project
 repositories sovereign.
+
+## Self-hosted development
+
+The Hairness repository remains a Target, not a colocated Home. Its
+repository-local orchestrator builds a sibling team Home and binds this checkout
+as `hairness/main`:
+
+```text
+Agentic Tools Home ──Target──> Hairness repository
+Agentic Tools Home ──Target──> Hairness Development Home
+Hairness Development Home ──Binding──> Hairness repository
+```
+
+The Development Home installs `hairness/project` through that Binding and uses
+`.hairness/dev-cli` to run the source checkout. This keeps product sources
+clean while exercising the same Home, Desk, Asset, projection and Target
+contracts shipped to users.

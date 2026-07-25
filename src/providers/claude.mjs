@@ -4,6 +4,7 @@ export const claude = {
   id: 'claude',
   instructionPath: 'CLAUDE.md',
   hookPath: '.claude/settings.json',
+  sessionPath: '.claude/hooks/hairness-session-start.mjs',
   skillRoot: '.claude/skills',
   invocation: '/',
   output(surface, capability) {
@@ -13,7 +14,7 @@ export const claude = {
     const content = `${frontmatter}\n\n# /${surface.projectedId}\n\n${capability.content.trim()}\n\nThis file is generated from ${surface.owner}. Edit the Asset source instead.\n`
     return { path: join(this.skillRoot, surface.projectedId, 'SKILL.md'), content }
   },
-  hook(runtime) {
-    return { matcher: 'startup|resume|clear|compact', hooks: [{ type: 'command', command: `npx --yes ${runtime} hud --prompt` }] }
+  hook() {
+    return { matcher: 'startup|resume|clear|compact', hooks: [{ type: 'command', command: `node ${this.sessionPath}` }] }
   },
 }

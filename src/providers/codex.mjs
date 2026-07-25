@@ -4,13 +4,14 @@ export const codex = {
   id: 'codex',
   instructionPath: 'AGENTS.md',
   hookPath: '.codex/hooks.json',
+  sessionPath: '.codex/hooks/hairness-session-start.mjs',
   skillRoot: '.agents/skills',
   invocation: '$',
   output(surface, capability) {
     return projectedSkill(this, surface, capability)
   },
-  hook(runtime) {
-    return { matcher: 'startup|resume|clear|compact', hooks: [{ type: 'command', command: `npx --yes ${runtime} hud --prompt` }] }
+  hook() {
+    return { matcher: 'startup|resume|clear|compact', hooks: [{ type: 'command', command: `node ${this.sessionPath}` }] }
   },
 }
 

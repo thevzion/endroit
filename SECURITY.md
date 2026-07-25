@@ -42,6 +42,9 @@ Hairness does not claim to sandbox them.
 - Target Map generation reads tracked paths, is bounded, rejects secret-like
   output and writes only to the Desk.
 - Desk recent-file discovery does not follow symbolic links.
+- SessionStart wrappers cap output, discard runtime stderr, expire after
+  30 seconds and never fall back to npm when a local development launcher is
+  present but broken.
 
 ## Runtime boundary
 
@@ -53,6 +56,8 @@ trusted.
 
 Provider sessions and their tools are also outside Hairness authority. A
 composed Home does not authorize Ness to modify a Target or access a service.
+Provider hook approval is also outside Hairness authority; Doctor verifies the
+projected files, not the provider's global consent state.
 
 ## User responsibilities
 

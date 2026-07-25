@@ -24,6 +24,7 @@ try {
 
 async function hud(input) {
   const { resolvedHome: plan, homeRoot, deskRoot } = input
+  const runtimeSource = process.env.HAIRNESS_RUNTIME_SOURCE === 'development' ? 'development' : 'registry'
   const preferences = plan.desk?.settings?.['hairness/onboarding'] ?? {}
   const git = await gitProbe(homeRoot)
   const artifacts = await scanArtifacts(homeRoot, deskRoot)
@@ -42,7 +43,7 @@ async function hud(input) {
   return {
     apiVersion: 'hairness.dev/hud/v1alpha1',
     generatedAt: new Date().toISOString(),
-    home: { name: plan.home.name, mode: plan.home.mode, runtime: plan.home.runtime, providers: plan.home.providers },
+    home: { name: plan.home.name, mode: plan.home.mode, runtime: plan.home.runtime, runtimeSource, providers: plan.home.providers },
     desk: plan.desk ? { configured: true, id: plan.desk.id, preferences } : { configured: false },
     surfaces: {
       assets: plan.assets.length,
@@ -157,7 +158,7 @@ async function gitProbe(root) {
 
 function human(model, full) {
   const lines = [
-    `HAIRNESS    ${model.home.name} · ${model.home.mode} · ${model.home.providers.join('+')} · ${model.home.runtime}`,
+    `HAIRNESS    ${model.home.name} · ${model.home.mode} · ${model.home.providers.join('+')} · ${model.home.runtime} · ${model.home.runtimeSource}`,
     `DESK        ${model.desk.configured ? [model.desk.id, model.desk.preferences.addressAs, model.desk.preferences.responseLanguage].filter(Boolean).join(' · ') : 'missing'} · recent:${model.recentDesk.length}`,
     `SURFACES    ${model.surfaces.assets} assets · ${model.surfaces.skills} skills · ${model.surfaces.commands} commands · ${model.surfaces.namespaces.join(',')}`,
     `ARTIFACTS   ${model.artifacts.count} · ${Object.entries(model.artifacts.counts).map(([key, value]) => `${key}:${value}`).join(' ') || 'none'}`,
@@ -182,7 +183,7 @@ async function xml(model, input) {
   }
   const lines = [
     '<hairness-hud version="1">',
-    `  <home name="${escape(model.home.name)}" mode="${model.home.mode}" runtime="${escape(model.home.runtime)}" providers="${model.home.providers.join(',')}"/>`,
+    `  <home name="${escape(model.home.name)}" mode="${model.home.mode}" runtime="${escape(model.home.runtime)}" runtime-source="${model.home.runtimeSource}" providers="${model.home.providers.join(',')}"/>`,
     `  <desk configured="${model.desk.configured}"${model.desk.id ? ` id="${escape(model.desk.id)}"` : ''}${model.desk.preferences?.addressAs ? ` address-as="${escape(model.desk.preferences.addressAs)}"` : ''}${model.desk.preferences?.responseLanguage ? ` response-language="${escape(model.desk.preferences.responseLanguage)}"` : ''}/>`,
     `  <surfaces assets="${model.surfaces.assets}" skills="${model.surfaces.skills}" commands="${model.surfaces.commands}" runtimes="${model.surfaces.runtimes}" namespaces="${escape(model.surfaces.namespaces.join(','))}"/>`,
     `  <git available="${model.git.available}"${model.git.available ? ` branch="${escape(model.git.branch ?? 'detached')}" head="${model.git.head}" clean="${model.git.clean}" changes="${model.git.changes}" conflicts="${model.git.conflicts}" worktrees="${model.git.worktrees}" committed-at="${model.git.committedAt}"` : ''}/>`,

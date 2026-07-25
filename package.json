@@ -54,6 +54,10 @@
     "check:providers": "node scripts/check-providers.mjs",
     "check:pack": "node scripts/check-pack.mjs",
     "check:lab": "node scripts/lab-dogfood.mjs",
+    "dev:home": "node scripts/development-home.mjs ensure",
+    "dev:home:recreate": "node scripts/development-home.mjs recreate",
+    "dev:session": "node scripts/development-home.mjs session",
+    "dev:verify": "node scripts/development-home.mjs verify",
     "launch:render": "node scripts/render-launch-assets.mjs",
     "release:pack": "node scripts/release-packages.mjs",
     "release:dry-run": "node scripts/release-publish.mjs --dry-run"

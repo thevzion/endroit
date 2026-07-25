@@ -21,5 +21,6 @@ for (const required of [
   'assets/hairness/scratch/asset.json',
 ]) assert.ok(paths.includes(required), `${required} missing from tarball`)
 assert.equal(paths.some((path) => path.startsWith('assets/hairness/project/')), false)
+assert.equal(paths.includes('scripts/development-home.mjs'), false)
 assert.equal(pack.name, '@hairness/cli')
 console.log(`package contents passed (${paths.length} files)`)
