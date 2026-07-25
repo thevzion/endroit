@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile, spawn } from 'node:child_process'
-import { lstat, mkdir, mkdtemp, readFile, readlink, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
@@ -156,7 +156,7 @@ async function verifyHome(home) {
   if (!codexHud?.startsWith('<hairness-hud ') || /status="unavailable"/.test(codexHud)) throw new Error('Codex SessionStart HUD is unavailable.')
   const claudeHud = (await run(process.execPath, [join(home, '.claude/hooks/hairness-session-start.mjs')], { cwd: home })).stdout.trim()
   if (!claudeHud.startsWith('<hairness-hud ') || /status="unavailable"/.test(claudeHud)) throw new Error('Claude SessionStart HUD is unavailable.')
-  if (!/runtime-source="development"/.test(codexHud) || !/runtime-source="development"/.test(claudeHud)) {
+  if (!/<kernel [^>]*source="development"/.test(codexHud) || !/<kernel [^>]*source="development"/.test(claudeHud)) {
     throw new Error('Development Home did not use the local Hairness Target runtime.')
   }
   return { doctor, codex: codexHud, claude: claudeHud }
@@ -177,15 +177,23 @@ async function ensureDevelopmentLauncher(home) {
   const directory = join(home, '.hairness')
   const path = join(directory, 'dev-cli')
   await mkdir(directory, { recursive: true })
+  const content = `#!/usr/bin/env node
+process.env.HAIRNESS_RUNTIME_SOURCE = 'development'
+await import(new URL(${JSON.stringify(devCliTarget)}, import.meta.url))
+`
   try {
     const info = await lstat(path)
-    if (!info.isSymbolicLink()) throw new Error(`${path} exists and is not a symbolic link.`)
-    if (await readlink(path) === devCliTarget) return
-    await rm(path)
+    if (!info.isFile() && !info.isSymbolicLink()) throw new Error(`${path} exists and is not a file.`)
+    if (info.isFile() && await readFile(path, 'utf8') === content) {
+      await chmod(path, 0o755)
+      return
+    }
+    await rm(path, { force: true })
   } catch (error) {
     if (error.code !== 'ENOENT') throw error
   }
-  await symlink(devCliTarget, path)
+  await writeFile(path, content, { mode: 0o755 })
+  await chmod(path, 0o755)
 }
 
 async function assertCleanRepository(root, label) {

@@ -16,6 +16,10 @@
   resolution.
 - Add a repository-owned, rollback-safe Development Home recipe and Project
   plan Artifact.
+- Add canonical `HOME.md` and `DESK.md` instruction sources with one-shot
+  templates and fully owned provider projections.
+- Expand the HUD into an operational boot contract with exact paths, invocation,
+  surfaces, local evidence and severity-separated attention.
 - Remove Overlay, Integrations, public Adapters, Registry and all 0.4 aliases.
 
 This is a clean break with 0.4.

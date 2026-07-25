@@ -6,6 +6,7 @@ import { initDesk } from './desk.mjs'
 import { doctorHome } from './doctor.mjs'
 import { git } from './git.mjs'
 import { homeDocument, homeId } from './home.mjs'
+import { HOME_INSTRUCTION, renderInstructionTemplate } from './instructions.mjs'
 import { HairnessError } from './lib/errors.mjs'
 import { exists, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
 
@@ -46,11 +47,19 @@ export async function initHome(root = process.cwd(), options = {}) {
   if (await exists(join(root, 'hairness.json'))) throw new HairnessError('home_exists', `${root} already contains hairness.json.`)
   const mode = options.mode ?? 'solo'
   const ignorePath = join(root, '.gitignore')
+  const instructionPath = join(root, HOME_INSTRUCTION)
+  const deskPath = join(root, '.desk')
   const ignoreExisted = await exists(ignorePath)
   const currentIgnore = ignoreExisted ? await readFile(ignorePath, 'utf8') : ''
+  if (await exists(instructionPath)) throw new HairnessError('home_instruction_exists', `${instructionPath} already exists.`)
+  if (await exists(deskPath)) throw new HairnessError('desk_exists', `${deskPath} already exists.`)
   try {
     const home = homeDocument({ destination: root, name: options.name, providers: options.providers, mode, prefix: options.prefix })
     await writeJsonAtomic(join(root, 'hairness.json'), home, 0o644)
+    await writeFileAtomic(instructionPath, await renderInstructionTemplate('home', {
+      'home.name': home.name,
+      'home.mode': home.mode,
+    }), 0o644)
     const required = ['/.hairness/', mode === 'team' ? '/.desk/' : '/.desk/targets/', '/.DS_Store']
     const lines = currentIgnore.split(/\r?\n/)
     const missing = required.filter((line) => !lines.includes(line))
@@ -59,7 +68,8 @@ export async function initHome(root = process.cwd(), options = {}) {
     return { status: 'initialized', home: root, mode, providers: home.providers, assets: [] }
   } catch (error) {
     await rm(join(root, 'hairness.json'), { force: true })
-    await rm(join(root, '.desk'), { recursive: true, force: true })
+    await rm(instructionPath, { force: true })
+    await rm(deskPath, { recursive: true, force: true })
     if (ignoreExisted) await writeFileAtomic(ignorePath, currentIgnore, 0o644)
     else await rm(ignorePath, { force: true })
     throw error

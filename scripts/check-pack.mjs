@@ -14,6 +14,8 @@ for (const required of [
   'schemas/v5/desk.schema.json',
   'schemas/v5/asset.schema.json',
   'schemas/v5/runtime.schema.json',
+  'templates/HOME.md',
+  'templates/DESK.md',
   'assets/hairness/onboarding/asset.json',
   'assets/hairness/hud/asset.json',
   'assets/hairness/artifacts/asset.json',

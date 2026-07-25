@@ -21,6 +21,11 @@ The default Home is `../hairness-development-home`. It is a team Home whose
 repositories and rolls back a failed replacement. The scripts never create a
 remote, commit or push.
 
+Edit `HOME.md`, `DESK.md` or the relevant Asset Instruction as canonical
+source. Never edit `AGENTS.md` or `CLAUDE.md`; they are fully owned provider
+projections. The development reconciler preserves these source-owned
+instructions and refuses an incomplete Desk.
+
 ```bash
 npm ci --ignore-scripts
 npm run check

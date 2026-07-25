@@ -5,8 +5,15 @@
   "description": "Dense local orientation for Ness at session start and on demand.",
   "prefix": "hairness",
   "files": [
+    "instructions/orientation.md",
     "capabilities/orient.md",
     "runtime.mjs"
+  ],
+  "instructions": [
+    {
+      "id": "orientation",
+      "path": "instructions/orientation.md"
+    }
   ],
   "capabilities": [
     {

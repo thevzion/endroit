@@ -8,7 +8,7 @@
 ```mermaid
 flowchart LR
   source["Local · HTTPS · Git"] --> lifecycle["Kernel Asset lifecycle"]
-  lifecycle --> home["Home + Desk sources"]
+  lifecycle --> home["HOME.md + DESK.md + Asset sources"]
   home --> resolve["Resolved Home"]
   resolve --> bridge["Codex / Claude Bridges"]
   bridge --> projection["Tracked provider projections"]
@@ -25,6 +25,7 @@ Adapter layer or package dependency graph.
 The Kernel contains:
 
 - Home and Desk loading;
+- strict loading of the canonical `HOME.md` and `DESK.md` sources;
 - JSON schema validation;
 - source resolution and transactional Asset lifecycle;
 - deterministic Resolved Home composition;
@@ -32,7 +33,9 @@ The Kernel contains:
 - runtime digest trust and dispatch;
 - static Doctor checks.
 
-It does not know the business behavior of HUD, Artifacts or Targets.
+It does not know the business behavior of HUD, Artifacts or Targets. It does
+not author behavioral instructions. It only validates, orders, attributes and
+projects explicit Markdown sources.
 
 ## First-party Assets
 
@@ -55,6 +58,13 @@ third-party HUD contributions are outside 0.5.
 
 This arrangement keeps the Home legible while leaving methods and project
 repositories sovereign.
+
+`HOME.md` is the shared constitution. `DESK.md` specializes it for one
+collaborator without replacing it. Home Asset Instructions follow `HOME.md` in
+deterministic Asset and instruction order. `DESK.md` and Desk Asset
+Instructions are injected through the HUD rather than written into shared
+files. `AGENTS.md` and `CLAUDE.md` are fully owned projections: a direct edit is
+reported as divergence.
 
 ## Self-hosted development
 

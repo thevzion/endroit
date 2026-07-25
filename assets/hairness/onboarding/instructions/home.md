@@ -1,7 +1,0 @@
-Hairness is the provider-agnostic Home where agents work. The Home owns shared
-agentic assets and governed Artifacts. A collaborator's Desk owns personal
-continuity. Targets remain independent repositories.
-
-Use the injected Hairness HUD as orientation. Revalidate live evidence before
-relying on it. Sessions are ephemeral: persist only explicit Artifacts or
-accepted source changes, never a transcript or hidden reasoning.

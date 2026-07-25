@@ -1,4 +1,5 @@
 import { spawn } from 'node:child_process'
+import { realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { allInstalledAssets, assetDigest, installedAssetDigest, resolveAsset } from './assets.mjs'
 import { API } from './contracts.mjs'
@@ -24,7 +25,7 @@ export async function runtimeTrust(root, selector, options = {}) {
   }
   approvals.runtimes[runtime.owner] = digest
   await writeJsonAtomic(path, approvals, 0o600)
-  return { status: 'trusted', name: runtime.owner, digest, scope: installed.scope, firstParty: runtime.owner.startsWith('hairness/') }
+  return { status: 'trusted', name: runtime.owner, digest, scope: installed.scope, firstParty: await exactFirstParty(root, runtime, digest) }
 }
 
 export async function runtimeTrustState(root, owner, plan) {
@@ -49,13 +50,30 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
   }
   const entry = await resolvePackageFile(runtime.root, runtime.entry, `${runtime.owner} runtime`)
   const desk = await loadDesk(root)
+  const homeRoot = await realpath(root)
+  const deskRoot = desk ? await realpath(join(root, '.desk')) : null
+  const runtimeSource = process.env.HAIRNESS_RUNTIME_SOURCE === 'development' ? 'development' : 'registry'
+  const trustStates = []
+  for (const candidate of plan.runtimes) {
+    try {
+      trustStates.push({ owner: candidate.owner, namespace: candidate.namespace, ...await runtimeTrustState(root, candidate.owner, plan) })
+    } catch (error) {
+      trustStates.push({ owner: candidate.owner, namespace: candidate.namespace, trusted: false, source: null, error: error.code ?? 'runtime-invalid' })
+    }
+  }
   const input = {
     protocol: API.runtime,
     argv,
-    homeRoot: root,
-    deskRoot: desk ? join(root, '.desk') : null,
+    homeRoot,
+    deskRoot,
     assetRoot: runtime.root,
     resolvedHome: plan,
+    kernel: {
+      runtime: plan.home.runtime,
+      source: runtimeSource,
+      invoke: runtimeSource === 'development' ? '.hairness/dev-cli' : `npx --yes ${plan.home.runtime}`,
+    },
+    runtimeTrust: trustStates,
   }
   return run(entry, input, io)
 }

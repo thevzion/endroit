@@ -4,11 +4,14 @@ import { basename, join, relative } from 'node:path'
 import { allInstalledAssets } from './assets.mjs'
 import { loadDesk } from './desk.mjs'
 import { loadHome } from './home.mjs'
+import { DESK_INSTRUCTION, HOME_INSTRUCTION, readInstructionFile } from './instructions.mjs'
 import { HairnessError } from './lib/errors.mjs'
 import { resolvePackageFile } from './lib/io.mjs'
 
 export async function resolveHome(root) {
   const [home, desk, installed] = await Promise.all([loadHome(root), loadDesk(root), allInstalledAssets(root)])
+  await readInstructionFile(join(root, HOME_INSTRUCTION), 'home_instruction')
+  if (desk) await readInstructionFile(join(root, '.desk', DESK_INSTRUCTION), 'desk_instruction')
   const invalid = installed.find((entry) => entry.invalid)
   if (invalid) throw new HairnessError('asset_invalid', `${invalid.id} is invalid: ${invalid.invalid.message}`)
 
@@ -28,6 +31,20 @@ export async function resolveHome(root) {
     root,
     home,
     desk,
+    homeInstruction: {
+      id: 'home',
+      owner: 'hairness/home',
+      scope: 'home',
+      root,
+      path: HOME_INSTRUCTION,
+    },
+    deskInstruction: desk ? {
+      id: 'desk',
+      owner: 'hairness/desk',
+      scope: 'desk',
+      root: join(root, '.desk'),
+      path: DESK_INSTRUCTION,
+    } : null,
     assets: [],
     instructions: [],
     capabilities: [],
@@ -99,6 +116,8 @@ export function publicPlan(plan) {
   return {
     home: plan.home,
     desk: plan.desk,
+    homeInstruction: withoutRoot(plan.homeInstruction),
+    deskInstruction: plan.deskInstruction ? withoutRoot(plan.deskInstruction) : null,
     assets: plan.assets.map(withoutRoot),
     instructions: plan.instructions.map(withoutRoot),
     capabilities: plan.capabilities.map(withoutRoot),
@@ -158,8 +177,8 @@ async function validateSetting(entry, path, value, scope) {
 }
 
 async function contextFootprint(plan) {
-  const instructionBytes = await sumFiles(plan.instructions.filter((item) => item.scope === 'home'))
-  const deskInstructionBytes = await sumFiles(plan.instructions.filter((item) => item.scope === 'desk'))
+  const instructionBytes = await sumFiles([plan.homeInstruction, ...plan.instructions.filter((item) => item.scope === 'home')])
+  const deskInstructionBytes = await sumFiles([...(plan.deskInstruction ? [plan.deskInstruction] : []), ...plan.instructions.filter((item) => item.scope === 'desk')])
   const modelDescriptionBytes = Buffer.byteLength(plan.skills.map((item) => item.description).join('\n'))
   return { instructionBytes, deskInstructionBytes, modelDescriptionBytes }
 }

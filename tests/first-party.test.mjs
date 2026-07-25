@@ -35,36 +35,31 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.equal(await dispatchRuntime(home, 'hud', ['--json'], json.io), 0)
     const model = JSON.parse(json.stdout())
     assert.equal(model.home.name, 'home')
-    assert.equal(model.home.runtimeSource, 'registry')
+    assert.equal(model.home.root, await exec('git', ['rev-parse', '--show-toplevel'], { cwd: home }).then((value) => value.stdout.trim()))
+    assert.equal(model.kernel.source, 'registry')
+    assert.equal(model.kernel.invoke, 'npx --yes @hairness/cli@0.5.0-alpha.0')
     assert.deepEqual(model.desk.preferences, { addressAs: 'Alexis', responseLanguage: 'fr' })
+    assert.equal(model.projections.every((entry) => entry.status === 'fresh'), true)
+    assert.deepEqual(model.surfaces.assets.map((entry) => entry.id), ['hairness/artifacts', 'hairness/hud', 'hairness/onboarding', 'hairness/targets'])
+    assert.deepEqual(model.surfaces.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'target'])
     assert.equal(model.recentDesk.length, 5)
     assert.deepEqual(model.recentDesk.map((entry) => entry.path), ['note-6.md', 'note-5.md', 'note-4.md', 'note-3.md', 'note-2.md'])
     assert.equal(model.recentDesk.some((entry) => entry.path === 'outside-link'), false)
+    assert.deepEqual(Object.keys(model.attention), ['blocking', 'warning', 'advisory'])
 
     const prompt = captureIo()
     await dispatchRuntime(home, 'hud', ['--prompt'], prompt.io)
-    assert.equal(prompt.stdout(), [
-      '<hairness-hud version="1">',
-      `  <home name="home" mode="solo" runtime="@hairness/cli@0.5.0-alpha.0" runtime-source="registry" providers="codex,claude"/>`,
-      '  <desk configured="true" id="local" address-as="Alexis" response-language="fr"/>',
-      '  <surfaces assets="4" skills="4" commands="5" runtimes="3" namespaces="artifact,hud,target"/>',
-      `  <git available="true" branch="${model.git.branch}" head="${model.git.head}" clean="${model.git.clean}" changes="${model.git.changes}" conflicts="${model.git.conflicts}" worktrees="${model.git.worktrees}" committed-at="${model.git.committedAt}"/>`,
-      '  <targets>',
-      '  </targets>',
-      '  <artifacts count="0"/>',
-      '  <recent-desk>',
-      ...model.recentDesk.map((entry) => `    <file path="${entry.path}" modified-at="${entry.modifiedAt}"/>`),
-      '  </recent-desk>',
-      '  <desk-instructions>',
-      '  </desk-instructions>',
-      '  <warnings>',
-      '  </warnings>',
-      '</hairness-hud>',
-      '',
-    ].join('\n'))
+    assert.match(prompt.stdout(), /^<hairness-hud version="1" status="ready" generated-at="[^"]+" event="on-demand">/)
+    assert.match(prompt.stdout(), new RegExp(`<home name="home" mode="solo" root="${escapeRegex(model.home.root)}" providers="codex,claude"/>`))
+    assert.match(prompt.stdout(), /<kernel runtime="@hairness\/cli@0\.5\.0-alpha\.0" source="registry" invoke="npx --yes @hairness\/cli@0\.5\.0-alpha\.0"\/>/)
+    assert.match(prompt.stdout(), /<asset id="hairness\/hud" version="0\.5\.0-alpha\.0" scope="home" overridden="false" runtime="hud"\/>/)
+    assert.match(prompt.stdout(), /<runtime owner="hairness\/targets" namespace="target" scope="home">/)
+    assert.match(prompt.stdout(), /<instruction owner="hairness\/desk" id="desk" source="DESK\.md">/)
+    assert.match(prompt.stdout(), /<advisory>\s+<item subject="home" code="home-dirty">/)
+    assert.doesNotMatch(prompt.stdout(), /outside-link/)
     const human = captureIo()
     await dispatchRuntime(home, 'hud', [], human.io)
-    assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.5.0-alpha.0 · registry')
+    assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.5.0-alpha.0 · registry · ready')
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }
@@ -140,4 +135,8 @@ async function tree(root) {
     values.push(entry.name)
   }
   return values.sort()
+}
+
+function escapeRegex(value) {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 }

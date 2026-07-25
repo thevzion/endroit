@@ -16,6 +16,12 @@ Optional fields are a projection `prefix`, context `budgets` and Asset-indexed
 `settings`. Target declarations are settings owned by `hairness/targets`; they
 are not a Kernel primitive.
 
+Every Home contains a UTF-8, non-empty, regular, non-symlink `HOME.md`. It is
+the shared constitution and a named Resolved Home source. `create` and `init`
+render it once from the bundled template with `home.name` and `home.mode`.
+Unknown template variables are rejected. The resulting file is source-owned
+and is never re-rendered automatically.
+
 `create <directory>` creates a Git repository, initializes a Home, installs
 Onboarding, HUD, Artifacts and Targets, builds shared projections, runs Doctor
 and commits the result. `init` writes a bare Home.
@@ -25,12 +31,17 @@ and commits the result. `init` writes a bare Home.
 `.desk/desk.json` identifies the Desk and contains personal settings indexed by
 Asset.
 
+Every configured Desk also contains a UTF-8, non-empty, regular, non-symlink
+`DESK.md`. It specializes language, style and personal conventions without
+replacing `HOME.md`. It is rendered once with `desk.id` and `home.name`.
+
 - `solo`: `.desk/` is part of the Home repository except local Target Bindings.
 - `team`: `.desk/` is an independent private Git repository ignored by the
   parent Home.
 
 `desk init`, `desk clone` and `desk status` are Kernel commands. A team Home is
-valid without a Desk.
+valid without a Desk. A clone without both `desk.json` and `DESK.md` is rejected
+and removed atomically.
 
 `hairness/onboarding` owns the optional personal `name`, `addressAs` and
 `responseLanguage` settings it collects. The HUD exposes accepted values to
@@ -73,8 +84,15 @@ reported as mobile.
 
 ## Resolved Home
 
-The Kernel deterministically composes Home Assets and Desk Assets. A Desk Asset
-may replace a Home Asset only when its origin marks an explicit override.
+The Kernel deterministically composes canonical instructions in this order:
+
+1. `HOME.md`;
+2. Home Asset Instructions, ordered by Asset and instruction ID;
+3. for the HUD prompt only, `DESK.md`;
+4. Desk Asset Instructions in the same deterministic order.
+
+A Desk Asset may replace a Home Asset only when its origin marks an explicit
+override.
 
 `validate` exposes a root-free JSON view of the resolved Home: Assets,
 Instructions, Capabilities, Skills, Commands, References, Artifact kinds,
@@ -89,18 +107,30 @@ model-facing descriptions and HUD prompt bytes.
 `build` reads the Resolved Home and writes provider-native projections. It never
 executes an Asset runtime.
 
-Codex and Claude Bridges currently project shared Instructions, Skills, Commands
-and session-start HUD hooks. Generated Skills and Commands are tracked in Git.
-Desk projections in a team Home are excluded locally by exact paths.
+Codex and Claude Bridges currently project the full shared instruction document,
+Skills, Commands and session-start HUD hooks. `AGENTS.md` and `CLAUDE.md` are
+entirely generated from `HOME.md` and Home Asset Instructions with source
+attribution. A direct edit is a blocking divergence. Generated Skills and
+Commands are tracked in Git. Desk projections in a team Home are excluded
+locally by exact paths.
 
 `.hairness/build.json` records output owners and digests but is not required
 after clone. `build --check` recomputes desired bytes without writing.
 
-Each Bridge also writes a tracked SessionStart wrapper. The wrapper prefers
-`.hairness/dev-cli` when present and otherwise invokes the exact Home runtime
-with `npx`. Codex receives its official JSON hook envelope; Claude receives the
-raw XML HUD. Errors, oversized output and a 30-second timeout collapse to a
-bounded `status="unavailable"` HUD without stderr.
+Each Bridge also writes a tracked SessionStart wrapper. The wrapper prefers the
+executable `.hairness/dev-cli` launcher when present and otherwise invokes the
+exact Home runtime with `npx`. Both paths report their actual
+`development|registry` source. Codex receives its official JSON hook envelope;
+Claude receives the raw XML HUD. Errors, oversized output and a 30-second
+timeout collapse to a bounded `status="unavailable"` HUD without stderr.
+
+`hud` renders dense text for humans, `hud --prompt` deterministic XML for Ness,
+`hud --json` a stable tool contract and `hud --full` the full inventory. The
+prompt includes absolute Home, Desk, Binding, Artifact and Target Map paths; the
+exact Kernel invocation; static surface inventories; local Git and worktree
+evidence; projection and trust state; context footprints; five recent regular
+Desk files; and severity-separated attention. It follows no Desk symlink and
+executes no other Asset runtime.
 
 ## Runtime
 

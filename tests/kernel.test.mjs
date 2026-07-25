@@ -45,6 +45,8 @@ test('create builds a source-owned Home and tracks shared provider projections',
     await assert.rejects(readFile(join(home, 'assets/hairness/scratch/asset.json')), (error) => error.code === 'ENOENT')
     const tracked = (await exec('git', ['ls-files'], { cwd: home })).stdout
     for (const path of [
+      'HOME.md',
+      '.desk/DESK.md',
       'AGENTS.md',
       'CLAUDE.md',
       '.agents/skills/acme-hairness-onboarding/SKILL.md',
@@ -56,6 +58,13 @@ test('create builds a source-owned Home and tracks shared provider projections',
       '.codex/hooks/hairness-session-start.mjs',
       'assets/hairness/hud/runtime.mjs',
     ]) assert.match(tracked, new RegExp(`^${escape(path)}$`, 'm'))
+    assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /^# home$/m)
+    assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /^# local's Desk$/m)
+    const agents = await readFile(join(home, 'AGENTS.md'), 'utf8')
+    assert.match(agents, /<!-- source: HOME\.md -->/)
+    assert.match(agents, /## hairness\/hud:orientation/)
+    assert.doesNotMatch(agents, /If no Hairness HUD was injected/)
+    assert.doesNotMatch(agents, /## hairness\/onboarding:home/)
     assert.doesNotMatch(tracked, /^\.hairness\//m)
     assert.equal((await doctorHome(home)).status, 'ready')
     await buildHome(home, { check: true })
@@ -161,11 +170,13 @@ test('init stays bare and team Homes remain usable before a private Desk exists'
     const home = join(temporary, 'team-home')
     await mkdir(home)
     await initHome(home, { name: 'team-home', mode: 'team', providers: ['codex'] })
+    assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /team-home/)
     assert.equal((await deskStatus(home)).status, 'missing')
     await buildHome(home)
     assert.equal((await doctorHome(home)).status, 'ready')
     await initDesk(home, { id: 'alexis', git: true })
     assert.equal((await deskStatus(home)).repository, true)
+    assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /alexis/)
 
     await exec('git', ['-C', join(home, '.desk'), 'add', '--all'])
     await exec('git', ['-C', join(home, '.desk'), '-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'desk'])
@@ -174,6 +185,65 @@ test('init stays bare and team Homes remain usable before a private Desk exists'
     await initHome(second, { name: 'second-home', mode: 'team', providers: ['codex'] })
     await cloneDesk(second, join(home, '.desk'))
     assert.equal((await deskStatus(second)).id, 'alexis')
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('canonical Home and Desk instructions are required, source-owned and fully projected', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-instructions-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home, { providers: ['codex'] })
+    const homePath = join(home, 'HOME.md')
+    const agentsPath = join(home, 'AGENTS.md')
+    await writeFile(homePath, '# Custom Home\n\nShared constitution for {{home.name}}.\n')
+    await assert.rejects(() => buildHome(home, { check: true }), (error) => error.code === 'build_stale')
+    await buildHome(home)
+    assert.match(await readFile(agentsPath, 'utf8'), /^<!-- source: HOME\.md -->\n\n# Custom Home/m)
+    assert.match(await readFile(agentsPath, 'utf8'), /\{\{home\.name\}\}/)
+    await writeFile(agentsPath, `${await readFile(agentsPath, 'utf8')}\nProvider-only rule.\n`)
+    await assert.rejects(() => buildHome(home), (error) => error.code === 'generated_output_diverged')
+
+    const missing = join(temporary, 'missing')
+    await createHome(missing)
+    await rm(join(missing, 'HOME.md'))
+    const report = await doctorHome(missing)
+    assert.equal(report.status, 'partial')
+    assert.deepEqual(report.limits, ['home_instruction_missing'])
+
+    const linked = join(temporary, 'linked')
+    await createHome(linked)
+    await rm(join(linked, 'HOME.md'))
+    await symlink(join(home, 'HOME.md'), join(linked, 'HOME.md'))
+    await assert.rejects(() => resolveHome(linked), (error) => error.code === 'home_instruction_symlink')
+
+    const empty = join(temporary, 'empty')
+    await createHome(empty)
+    await writeFile(join(empty, 'HOME.md'), ' \n')
+    await assert.rejects(() => resolveHome(empty), (error) => error.code === 'home_instruction_empty')
+
+    const invalid = join(temporary, 'invalid')
+    await createHome(invalid)
+    await writeFile(join(invalid, 'HOME.md'), Buffer.from([0xc3, 0x28]))
+    await assert.rejects(() => resolveHome(invalid), (error) => error.code === 'home_instruction_encoding')
+
+    const directory = join(temporary, 'directory')
+    await createHome(directory)
+    await rm(join(directory, 'HOME.md'))
+    await mkdir(join(directory, 'HOME.md'))
+    await assert.rejects(() => resolveHome(directory), (error) => error.code === 'home_instruction_type')
+
+    const emptyDesk = join(temporary, 'empty-desk')
+    await mkdir(emptyDesk)
+    await initHome(emptyDesk, { mode: 'team' })
+    const deskRepository = join(temporary, 'desk-repository')
+    await exec('git', ['init', '--quiet', '--initial-branch=main', deskRepository])
+    await writeFile(join(deskRepository, 'desk.json'), '{"$schema":"https://hairness.dev/schema/desk.json","id":"alexis"}\n')
+    await exec('git', ['add', 'desk.json'], { cwd: deskRepository })
+    await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'desk'], { cwd: deskRepository })
+    await assert.rejects(() => cloneDesk(emptyDesk, deskRepository), (error) => error.code === 'desk_instruction_missing')
+    await assert.rejects(readFile(join(emptyDesk, '.desk/desk.json')), (error) => error.code === 'ENOENT')
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

@@ -93,7 +93,7 @@ test('external runtimes are inert until their exact digest is trusted', async ()
     const home = join(temporary, 'home')
     await createHome(home)
     const runtime = await writeAsset(join(temporary, 'runtime'), asset({
-      name: 'fixture/echo',
+      name: 'hairness/echo',
       files: ['runtime.mjs'],
       capabilities: undefined,
       skills: undefined,
@@ -110,21 +110,21 @@ test('external runtimes are inert until their exact digest is trusted', async ()
     await assert.rejects(readFile(join(home, 'runtime-ran')), (error) => error.code === 'ENOENT')
     await buildHome(home)
     await assert.rejects(readFile(join(home, 'runtime-ran')), (error) => error.code === 'ENOENT')
-    const installedReview = await reviewAsset(home, 'fixture/echo')
+    const installedReview = await reviewAsset(home, 'hairness/echo')
     assert.equal(installedReview.local.state, 'clean')
     assert.match(installedReview.fileDigests['runtime.mjs'], /^sha256:/)
-    const trust = await runtimeTrustState(home, 'fixture/echo')
+    const trust = await runtimeTrustState(home, 'hairness/echo')
     assert.equal(trust.trusted, false)
     await assert.rejects(() => dispatchRuntime(home, 'echo', ['show']), (error) => error.code === 'runtime_trust_required')
     await assert.rejects(() => runtimeTrust(home, 'echo', { digest: 'sha256:' + '0'.repeat(64) }), (error) => error.code === 'runtime_digest_mismatch')
-    await runtimeTrust(home, 'echo', { digest: trust.digest })
+    assert.equal((await runtimeTrust(home, 'echo', { digest: trust.digest })).firstParty, false)
     const capture = captureIo()
     assert.equal(await dispatchRuntime(home, 'echo', ['show', '--value', 'one'], capture.io), 0)
     assert.deepEqual(JSON.parse(capture.stdout()), { argv: ['show', '--value', 'one'], home: 'home' })
     assert.equal(await readFile(join(home, 'runtime-ran'), 'utf8'), 'yes\n')
 
-    await writeFile(join(home, 'assets/fixture/echo/runtime.mjs'), "process.stdout.write('changed')\n")
-    assert.equal((await runtimeTrustState(home, 'fixture/echo')).trusted, false)
+    await writeFile(join(home, 'assets/hairness/echo/runtime.mjs'), "process.stdout.write('changed')\n")
+    assert.equal((await runtimeTrustState(home, 'hairness/echo')).trusted, false)
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

@@ -40,6 +40,7 @@
     "assets/hairness/artifacts/",
     "assets/hairness/targets/",
     "assets/hairness/scratch/",
+    "templates/",
     "schemas/v5/",
     "src/",
     "LICENSE",

@@ -1,5 +1,18 @@
 # Lifecycles
 
+## Home and Desk instructions
+
+```text
+create or init → render HOME.md once → source-owned constitution
+solo Desk      → render DESK.md once → versionable personal conventions
+team Desk      → init or clone       → private repository with DESK.md
+```
+
+The built-in templates accept only `home.name`, `home.mode` and `desk.id`.
+Rendering happens once. Later edits are canonical source changes and are never
+re-templated. A team Home remains valid without a Desk; an existing Desk is
+valid only with both `desk.json` and `DESK.md`.
+
 ## Asset source
 
 ```text
@@ -62,13 +75,15 @@ writes into the Target.
 ## Session
 
 The provider Bridge invokes `hud --prompt` at session start, resume, clear and
-compaction. The HUD reads local evidence and the Resolved Home, then emits XML
+compaction. The HUD reads local evidence and the Resolved Home, prepends
+`DESK.md` and Desk Asset Instructions, then emits an operational XML contract
 for Ness. It executes no other Asset runtime.
 
-The generated wrapper uses `.hairness/dev-cli` when it exists; otherwise it
-invokes the exact `hairness.json#runtime` through `npx`. A present but failing
-development launcher never falls back to npm. Failure or a 30-second timeout
-returns a bounded unavailable HUD and lets the provider session continue.
+The generated wrapper uses the executable `.hairness/dev-cli` launcher when it
+exists; otherwise it invokes the exact `hairness.json#runtime` through `npx`.
+The launcher marks its own source as `development`. A present but failing
+launcher never falls back to npm. Failure or a 30-second timeout returns a
+bounded unavailable HUD and lets the provider session continue.
 
 ## Hairness development
 

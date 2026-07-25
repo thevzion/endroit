@@ -5,15 +5,8 @@
   "description": "A consent-first orientation for a new Hairness Home or Desk.",
   "prefix": "hairness",
   "files": [
-    "instructions/home.md",
     "capabilities/onboard.md",
     "schemas/desk-settings.schema.json"
-  ],
-  "instructions": [
-    {
-      "id": "home",
-      "path": "instructions/home.md"
-    }
   ],
   "capabilities": [
     {

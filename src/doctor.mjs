@@ -1,12 +1,30 @@
 import { statusAssets } from './assets.mjs'
 import { buildHome } from './build.mjs'
 import { loadDesk } from './desk.mjs'
+import { loadHome } from './home.mjs'
 import { HairnessError } from './lib/errors.mjs'
 import { resolveHome } from './resolved.mjs'
 import { runtimeTrustState } from './runtime.mjs'
 
 export async function doctorHome(root) {
-  const plan = await resolveHome(root)
+  let plan
+  try {
+    plan = await resolveHome(root)
+  } catch (error) {
+    if (!(error instanceof HairnessError) || !/^(?:home|desk)_instruction_/.test(error.code)) throw error
+    const [home, desk] = await Promise.all([loadHome(root), loadDesk(root)])
+    return {
+      status: 'partial',
+      home: { name: home.name, mode: home.mode, runtime: home.runtime, providers: home.providers },
+      desk: desk ? { id: desk.id, configured: true } : { configured: false },
+      assets: [],
+      runtimes: [],
+      context: null,
+      build: error.code,
+      limits: [error.code],
+      warnings: [error.message],
+    }
+  }
   const desk = await loadDesk(root)
   const statuses = [
     ...await statusAssets(root, undefined, { scope: 'home' }),

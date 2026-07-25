@@ -36,31 +36,47 @@ The onboarding is a source file in the Home—not a remote wizard. It explains
 the proposed changes, asks for consent, and lets Ness call the exact runtime
 pinned by the Home.
 
+`HOME.md` is the shared constitution. `.desk/DESK.md` contains one
+collaborator’s preferences and conventions. Asset Instructions add modular
+invariants. Hairness projects those explicit sources into each provider; the
+Kernel authors no behavioral prose.
+
 When a session starts, the provider Bridge injects a compact XML HUD into
-Ness’s context. Ness wakes up knowing which Home and Desk exist, which Assets
-are available, what the Git state is, which Targets are bound, which Target
-Maps are stale, and what needs attention. Ness can ask for the full HUD later.
-The generated wrapper uses the exact runtime pinned by the Home. A local
-development launcher takes precedence; if it exists but fails, Hairness reports
-an unavailable HUD instead of silently switching code or sending Ness exploring.
-Codex asks you to trust the Home and review its hook through `/hooks` before the
-first injection; changed hook bytes require review again.
+Ness’s context. This is the Home’s live boot contract: roots, exact invocation,
+available surfaces, local Git evidence, Targets, Artifacts, context footprint
+and attention. Ness starts oriented instead of searching the filesystem for
+clues, and can request the full HUD later.
 
 ```text
 HAIRNESS    agentic-tools · team · codex+claude · @hairness/cli@0.5.0-alpha.0
-DESK        alexis · Alexis · fr · recent:5
+ROOT        /Users/alexis/Projects/agentic-tools-home
+KERNEL      registry · npx --yes @hairness/cli@0.5.0-alpha.0
+HOME GIT    main · clean · 51b88db1 · 1 worktree · 2026-07-24
+DESK        alexis · /Users/alexis/Projects/agentic-tools-home/.desk · clean
 SURFACES    7 assets · 9 skills · 12 commands · artifact,hud,target
 ARTIFACTS   4 · active:2 current:2
-GIT         main · clean · 51b88db1 · 1 worktree · 2026-07-24
 TARGETS     3 declared · 4 bindings
-  hairness           main:clean · map:current
-  hacp               main:clean · experiment:dirty · map:stale
-  think-it-through   main:clean · map:current
+  hairness
+    main       /Users/alexis/Projects/hairness · main@c31db7c · clean
+               worktrees:2 · map:.desk/artifacts/target-map/hairness-main/artifact.md · current
+  hacp
+    main       /Users/alexis/Projects/hacp · main@6d2c429 · clean
+    experiment /Users/alexis/Worktrees/hacp-experiment · codex/experiment@a913dce · dirty
 CONTEXT     instructions:1820B · desk:640B · model:1094B
+PROJECTIONS fresh · AGENTS.md · CLAUDE.md · hooks:2
+TRUST       first-party:3 · external:1 approved
+RECENT      .desk/artifacts/plan/release/artifact.md · 2026-07-25T09:42:11Z
+ATTENTION   0 blocking · 1 warning · 1 advisory
 ```
 
 The human-readable HUD is useful for inspection. `hud --prompt` is the
-agent-facing XML contract. `hud --json` is the stable tool-facing form.
+agent-facing XML contract injected at wake-up. `hud --json` is the stable
+tool-facing form. The generated wrapper uses the exact runtime pinned by the
+Home. A local development launcher takes precedence; if it exists but fails,
+Hairness reports an unavailable HUD instead of silently switching code or
+sending Ness exploring. Codex asks you to trust the Home and review its hook
+through `/hooks` before the first injection; changed hook bytes require review
+again.
 
 > **The model may be a black box. The Home doesn’t have to be.**
 
@@ -69,6 +85,7 @@ agent-facing XML contract. `hud --json` is the stable tool-facing form.
 ```text
 ness-home/
 ├── hairness.json                         # shared Home contract
+├── HOME.md                               # shared constitution
 ├── assets/
 │   ├── hairness/
 │   │   ├── onboarding/asset.json
@@ -81,6 +98,7 @@ ness-home/
 ├── .agents/ · .claude/ · .codex/         # tracked provider projections
 ├── .desk/
 │   ├── desk.json                         # Collaborator × Home
+│   ├── DESK.md                           # personal conventions
 │   ├── assets/                           # personal Assets and overrides
 │   ├── artifacts/                        # personal work and continuity
 │   └── targets/                          # local Target Bindings
@@ -110,16 +128,16 @@ runtime behavior.
 
 | Primitive | What it owns |
 |---|---|
-| **Home** | Shared composition and provider-independent contract |
-| **Desk** | One collaborator’s continuity, overrides, Artifacts and Bindings |
+| **Home** | Shared composition and constitution in `HOME.md` |
+| **Desk** | One collaborator’s continuity and conventions in `DESK.md` |
 | **Asset** | Source-owned agentic material and optional runtime behavior |
 | **Capability** | One provider-neutral procedure |
 | **Skill** | Model access to a Capability |
 | **Command** | Human access to a Capability |
 | **Artifact** | An inspectable outcome with kind, owner, state and lineage |
 | **Target** | Independent repository where real work remains sovereign |
-| **Projection** | Generated provider-native view; never canonical source |
-| **HUD** | Live, local orientation generated at wake-up and on demand |
+| **Projection** | Fully generated provider-native view; never canonical source |
+| **HUD** | Live boot contract generated at wake-up and on demand |
 
 An Asset can expose both a Skill and a Command for the same Capability. Hairness
 keeps the distinction; a lossy provider projection warns instead of silently
@@ -264,7 +282,8 @@ methods keep their loops, Targets keep their repositories, providers keep their
 native surfaces, and the Home keeps ownership.
 
 This is **Projection Inversion**: canonical sources do not live inside provider
-folders. Hairness projects owned sources outward into each provider.
+folders. `HOME.md`, `DESK.md` and Asset Instructions are canonical; Hairness
+projects owned sources outward into each provider.
 
 ## Runtime trust is explicit
 

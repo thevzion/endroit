@@ -7,8 +7,6 @@ import { digest, exists, readJson, resolvePackageFile, writeFileAtomic } from '.
 import { provider } from './providers/index.mjs'
 import { resolveHome } from './resolved.mjs'
 
-const managedRegion = /<!-- hairness:begin id="agent-contract" -->[\s\S]*?<!-- hairness:end id="agent-contract" -->/
-
 export async function buildHome(root, options = {}) {
   const plan = await resolveHome(root)
   const statePath = join(root, '.hairness', 'build.json')
@@ -16,25 +14,23 @@ export async function buildHome(root, options = {}) {
   const wanted = await providerOutputs(plan)
   wanted.sort((left, right) => left.path.localeCompare(right.path))
   assertNoOutputCollisions(wanted)
-  const mutations = await reconcileOutputs(root, previous?.outputs ?? [], wanted, Boolean(options.check))
+  const legacyInstructions = (previous?.managed ?? [])
+    .filter((entry) => ['AGENTS.md', 'CLAUDE.md'].includes(entry.path))
+    .map((entry) => ({ ...entry, provider: entry.path === 'AGENTS.md' ? 'codex' : 'claude', owner: 'hairness/instructions', scope: 'home' }))
+  const mutations = await reconcileOutputs(root, [...(previous?.outputs ?? []), ...legacyInstructions], wanted, Boolean(options.check))
   const writes = [...mutations.writes]
   const managed = []
 
   for (const id of ['codex', 'claude']) {
     const projector = provider(id)
     const active = plan.home.providers.includes(id)
-    const instructionPath = join(root, projector.instructionPath)
-    const instruction = await planManagedText(instructionPath, active ? await renderAgentContract(plan, projector) : null, options.check)
-    if (instruction.managed) managed.push(relativeManaged(root, instruction.managed))
-    if (instruction.write) writes.push(instruction.write)
-
     const hookPath = join(root, projector.hookPath)
     const hook = await planHookConfig(hookPath, active, projector, options.check)
     if (hook.managed) managed.push(relativeManaged(root, hook.managed))
     if (hook.write) writes.push(hook.write)
   }
 
-  const state = { version: 1, outputs: mutations.outputs, managed }
+  const state = { version: 2, outputs: mutations.outputs, managed }
   if (options.check) {
     if (previous && JSON.stringify(previous) !== JSON.stringify(state)) throw stale('Local build state does not match the resolved Home.')
   } else {
@@ -57,6 +53,13 @@ async function providerOutputs(plan) {
   const values = []
   for (const providerId of plan.home.providers) {
     const projector = provider(providerId)
+    values.push({
+      path: projector.instructionPath,
+      content: Buffer.from(await renderAgentContract(plan)),
+      provider: providerId,
+      owner: 'hairness/instructions',
+      scope: 'home',
+    })
     values.push({
       path: projector.sessionPath,
       content: Buffer.from(sessionWrapper(providerId)),
@@ -89,13 +92,16 @@ function mergeSurface(surfaces, item, kind) {
   surfaces.set(key, surface)
 }
 
-async function renderAgentContract(plan, projector) {
-  const entries = []
+async function renderAgentContract(plan) {
+  const home = await readFile(await resolvePackageFile(plan.homeInstruction.root, plan.homeInstruction.path, 'Home Instruction'), 'utf8')
+  const entries = [
+    `<!-- source: ${plan.homeInstruction.path} -->\n\n${home.trim()}`,
+  ]
   for (const instruction of plan.instructions.filter((entry) => entry.scope === 'home')) {
     const content = await readFile(await resolvePackageFile(instruction.root, instruction.path, `${instruction.owner} Instruction`), 'utf8')
-    entries.push(`### ${instruction.owner}\n\n${content.trim()}`)
+    entries.push(`## ${instruction.owner}:${instruction.localId}\n\n<!-- source: assets/${instruction.owner}/${instruction.path} -->\n\n${content.trim()}`)
   }
-  return `<!-- hairness:begin id="agent-contract" -->\n## Hairness Home\n\n- If no Hairness HUD was injected, run \`node ${projector.sessionPath}\` once. If it reports an unavailable HUD, stop recovery and tell the collaborator instead of exploring the Home.\n- Treat provider files as projections; edit Home or Asset sources instead.\n\n${entries.join('\n\n')}\n<!-- hairness:end id="agent-contract" -->`
+  return `${entries.join('\n\n')}\n`
 }
 
 async function reconcileOutputs(root, previous, wanted, check) {
@@ -122,18 +128,6 @@ async function reconcileOutputs(root, previous, wanted, check) {
     outputs.push({ path: entry.path, provider: entry.provider, owner: entry.owner, scope: entry.scope, digest: digest(entry.content) })
   }
   return { outputs, writes, deletes }
-}
-
-async function planManagedText(path, block, check) {
-  const current = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? '' : Promise.reject(error))
-  const next = block
-    ? managedRegion.test(current) ? current.replace(managedRegion, block) : `${current.trimEnd()}${current.trim() ? '\n\n' : ''}${block}\n`
-    : current.replace(managedRegion, '').trimStart()
-  if (check && current !== next) throw stale(`${path} needs a managed-region rebuild.`)
-  return {
-    managed: block ? { path, digest: digest(next) } : null,
-    write: !check && current !== next ? { path, content: Buffer.from(next) } : null,
-  }
 }
 
 async function planHookConfig(path, active, projector, check) {
@@ -212,7 +206,7 @@ function execute(command, args, source) {
     let timer
     const child = spawn(command, args, {
       cwd: homeRoot,
-      env: { ...process.env, HAIRNESS_RUNTIME_SOURCE: source },
+      env: { ...process.env, HAIRNESS_RUNTIME_SOURCE: source, HAIRNESS_HUD_EVENT: 'session-start' },
       stdio: ['ignore', 'pipe', 'ignore'],
     })
     const finish = (value) => {

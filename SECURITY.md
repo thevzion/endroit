@@ -25,6 +25,8 @@ Hairness does not claim to sandbox them.
 
 - Schemas reject unknown fields and malformed contracts.
 - Source and destination checks reject escaping paths and symbolic links.
+- Canonical `HOME.md` and `DESK.md` sources must be non-empty regular UTF-8
+  files; symlinks and incomplete Desks are rejected before composition.
 - HTTPS sources reject credentials and query strings; redirects remain HTTPS.
 - Asset writes are staged, backed up and restored after failed promotion.
 - Local divergence blocks sync, remove and override publication unless the
@@ -35,13 +37,15 @@ Hairness does not claim to sandbox them.
   A changed byte invalidates approval.
 - Exact first-party runtime trust requires byte equality with the Asset bundled
   in the Home’s exact pinned CLI distribution.
-- Provider projections track owners and digests; edits to owned output block
-  reconciliation.
+- Provider projections are fully owned and digest-tracked; direct edits block
+  reconciliation instead of being preserved or overwritten.
 - Context budgets fail validation and build when explicitly configured.
 - Target Bindings verify normalized Git remote identity.
 - Target Map generation reads tracked paths, is bounded, rejects secret-like
   output and writes only to the Desk.
 - Desk recent-file discovery does not follow symbolic links.
+- HUD probes use local evidence only, execute no other Asset runtime and
+  separate blocking, warning and advisory attention.
 - SessionStart wrappers cap output, discard runtime stderr, expire after
   30 seconds and never fall back to npm when a local development launcher is
   present but broken.
