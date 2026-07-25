@@ -16,6 +16,40 @@ A lightweight framework for source-owned, portable agent work environments.
 
 </div>
 
+## The missing layer isn’t another agent.
+
+Context gets scattered across provider projects, chat history, hidden
+configuration and methodology-specific folders. An agent starts by searching
+for its bearings. Tools add files to product repositories. Useful outcomes
+disappear with the session, and changing provider means rebuilding the working
+environment.
+
+Hairness gives that environment an owned, local structure:
+
+| Without a Home | With Hairness |
+|---|---|
+| Implicit context | A source-owned Home |
+| Startup exploration | A static Floor Plan plus optional Wake-up |
+| Tool files inside projects | Independent Targets |
+| Ephemeral results | Inspectable Artifacts |
+| One-off practices | Reusable Assets |
+| Provider-bound configuration | Reconstructible projections |
+
+Hairness is a lightweight framework for owned agent work environments and a
+local, Git-backed coordination layer. Agent execution, scheduling, reasoning,
+methodologies and package resolution stay with the tools that own them.
+**Hairness orchestrates the environment around the agent, not the agent
+itself.**
+
+The Home and its Floor Plan remain readable from local files without a network.
+Executable operations require the exact npm package named in `hairness.json`
+from the npm cache or registry, or an explicit development backing. After
+creation, every documented operation passes through:
+
+```bash
+node ./hairness.mjs <namespace> <command> [...arguments]
+```
+
 ## Ness needed a Home
 
 Ness is the agent. A provider wakes Ness up, but the provider is not where the
@@ -54,7 +88,7 @@ gives Ness a dense local snapshot before any work begins:
 ```text
 HAIRNESS    studio-home · team · codex+claude · ready
 ROOT        /workspace/studio-home
-KERNEL      registry · node ./hairness.mjs
+KERNEL      npm · node ./hairness.mjs
 DESK        maya · /workspace/studio-home/.desk · clean
 SURFACES    6 assets · 8 skills · 9 commands · artifact,hud,target
 TARGETS     2 declared · 3 bindings · payments:clean · website:dirty
@@ -84,7 +118,7 @@ agent-facing response:
 <hairness-hud version="1" status="ready" event="wake-up">
   <home name="studio-home" mode="team" root="/workspace/studio-home"
         providers="codex,claude" />
-  <kernel runtime="@hairness/cli@0.5.0-alpha.0" source="registry"
+  <kernel runtime="@hairness/cli@0.5.0-alpha.0" source="npm"
           invoke="node ./hairness.mjs" />
   <desk configured="true" id="maya"
         root="/workspace/studio-home/.desk" git="clean" />
@@ -285,9 +319,11 @@ node ./hairness.mjs asset trust company/security --digest sha256:…
 node ./hairness.mjs security audit
 ```
 
-Trust is local and bound to the complete Asset digest; changing any byte
-revokes it. An approved runtime executes with the user’s rights. Hairness
-provides review and explicit trust, not an operating-system sandbox.
+Runtime trust is explicit: `bundled` means byte-for-byte equality with the
+Asset shipped by the exact npm package, `approved` means a matching local
+digest approval and `pending` blocks execution. Changing any byte turns an
+approved runtime back into `pending`. An approved runtime executes with the
+user’s rights; Hairness does not provide an operating-system sandbox.
 
 The alpha has no Registry, marketplace, dependency solver, daemon, automatic
 merge or update, public Adapter contract, Integration framework, Capsule

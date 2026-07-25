@@ -37,10 +37,10 @@ export async function doctorHome(root) {
     try {
       const trust = await runtimeTrustState(root, runtime.owner, plan)
       runtimes.push({ name: runtime.owner, namespace: runtime.namespace, ...trust })
-      if (!trust.trusted) limits.push(`runtime-untrusted:${runtime.owner}`)
+      if (trust.trust === 'pending') limits.push(`runtime-pending:${runtime.owner}`)
     } catch (error) {
       const code = error instanceof HairnessError ? error.code : error.code ?? 'runtime-invalid'
-      runtimes.push({ name: runtime.owner, namespace: runtime.namespace, trusted: false, source: null, error: code })
+      runtimes.push({ name: runtime.owner, namespace: runtime.namespace, trust: 'pending', error: code })
       limits.push(`runtime-invalid:${runtime.owner}:${code}`)
     }
   }

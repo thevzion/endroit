@@ -13,9 +13,6 @@ Rendering happens once. Later edits are canonical source changes and are never
 re-templated. A team Home remains valid without a Desk; an existing Desk is
 valid only with both `desk.json` and `DESK.md`.
 
-The Kernel retains a bare initializer internally for transactional creation and
-tests; `init` is not a public 0.5 command.
-
 ## Asset source
 
 ```text
@@ -49,8 +46,14 @@ installed static source
   → approval no longer matches
 ```
 
-First-party runtimes are trusted only while they exactly match the bundled Asset
-from the Home’s pinned CLI distribution.
+```text
+exact npm-bundled bytes → bundled
+matching local approval → approved
+anything else           → pending
+```
+
+Only `bundled` and `approved` runtimes can execute. Any byte change returns an
+approved runtime to `pending`.
 
 ## Artifact
 
@@ -110,7 +113,8 @@ continues to orient the session.
 
 The first-party default is `hairness/hud:prompt`. HUD reads local evidence and
 the Resolved Home, includes `DESK.md` and Desk Asset Instructions, then emits
-XML for Ness. It executes no other Asset runtime.
+XML for Ness. It executes no other Asset runtime. Its optional prompt budget is
+owned by `settings["hairness/hud"].promptBytes`.
 
 ## Hairness development
 

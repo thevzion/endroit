@@ -92,7 +92,7 @@ test('Desk overrides publish only while their Home base is unchanged', async () 
   }
 })
 
-test('external runtimes are inert until their exact digest is trusted', async () => {
+test('external runtimes stay pending until their exact digest is approved', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'hairness-runtime-'))
   try {
     const home = join(temporary, 'home')
@@ -129,10 +129,11 @@ test('external runtimes are inert until their exact digest is trusted', async ()
     assert.equal(installed.state, 'clean')
     assert.match(installed.effectiveDigest, /^sha256:/)
     const trust = await runtimeTrustState(home, 'hairness/echo')
-    assert.equal(trust.trusted, false)
+    assert.equal(trust.trust, 'pending')
     await assert.rejects(() => dispatchRuntime(home, 'echo', ['show']), (error) => error.code === 'runtime_trust_required')
     await assert.rejects(() => runtimeTrust(home, 'echo', { digest: 'sha256:' + '0'.repeat(64) }), (error) => error.code === 'runtime_digest_mismatch')
-    assert.equal((await runtimeTrust(home, 'echo', { digest: trust.digest })).firstParty, false)
+    assert.equal((await runtimeTrust(home, 'echo', { digest: trust.digest })).trust, 'approved')
+    assert.equal((await runtimeTrustState(home, 'hairness/echo')).trust, 'approved')
     const capture = captureIo()
     assert.equal(await dispatchRuntime(home, 'echo', ['show', '--value', 'one'], capture.io), 0)
     assert.deepEqual(JSON.parse(capture.stdout()), {
@@ -144,7 +145,7 @@ test('external runtimes are inert until their exact digest is trusted', async ()
     assert.equal(await readFile(join(home, 'runtime-ran'), 'utf8'), 'yes\n')
 
     await writeFile(join(home, 'assets/hairness/echo/runtime.mjs'), "process.stdout.write('changed')\n")
-    assert.equal((await runtimeTrustState(home, 'hairness/echo')).trusted, false)
+    assert.equal((await runtimeTrustState(home, 'hairness/echo')).trust, 'pending')
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

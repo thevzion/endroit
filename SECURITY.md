@@ -37,10 +37,11 @@ Hairness does not claim to sandbox them.
 - Front Door routes are resolved from the effective composition; Asset
   mutations that would break the selected runtime or command fail before
   writing.
-- Runtime approval is local and keyed by the complete installed Asset digest.
-  A changed byte invalidates approval.
-- Exact first-party runtime trust requires byte equality with the Asset bundled
-  in the Home’s exact pinned CLI distribution.
+- Runtime trust is `bundled`, `approved` or `pending`. `bundled` requires byte
+  equality with the Asset in the exact pinned npm package. `approved` requires
+  a matching local digest approval. `pending` blocks execution.
+- A changed byte invalidates local approval and returns the runtime to
+  `pending`.
 - Provider projections are fully owned and digest-tracked; direct edits block
   reconciliation instead of being preserved or overwritten.
 - Context budgets fail validation and build when explicitly configured.

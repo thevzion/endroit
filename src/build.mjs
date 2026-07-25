@@ -15,10 +15,7 @@ export async function buildHome(root, options = {}) {
   const wanted = await providerOutputs(plan)
   wanted.sort((left, right) => left.path.localeCompare(right.path))
   assertNoOutputCollisions(wanted)
-  const legacyInstructions = (previous?.managed ?? [])
-    .filter((entry) => ['AGENTS.md', 'CLAUDE.md'].includes(entry.path))
-    .map((entry) => ({ ...entry, provider: entry.path === 'AGENTS.md' ? 'codex' : 'claude', owner: 'hairness/instructions', scope: 'home' }))
-  const mutations = await reconcileOutputs(root, [...(previous?.outputs ?? []), ...legacyInstructions], wanted, Boolean(options.check))
+  const mutations = await reconcileOutputs(root, previous?.outputs ?? [], wanted, Boolean(options.check))
   const writes = [...mutations.writes]
   const managed = []
 

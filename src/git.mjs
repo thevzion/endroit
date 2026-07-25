@@ -60,8 +60,6 @@ export async function inspectRepository(path) {
   }
 }
 
-export const gitEvidence = inspectRepository
-
 async function gitOperation(root) {
   const checks = [
     ['merge', 'MERGE_HEAD'],

@@ -25,16 +25,22 @@ export async function runtimeTrust(root, selector, options = {}) {
   }
   approvals.runtimes[runtime.owner] = digest
   await writeJsonAtomic(path, approvals, 0o600)
-  return { status: 'trusted', name: runtime.owner, digest, scope: installed.scope, firstParty: await exactFirstParty(root, runtime, digest) }
+  return {
+    status: 'trusted',
+    name: runtime.owner,
+    digest,
+    scope: installed.scope,
+    trust: await exactFirstParty(root, runtime, digest) ? 'bundled' : 'approved',
+  }
 }
 
 export async function runtimeTrustState(root, owner, plan) {
   plan ??= await resolveHome(root)
   const runtime = selectRuntime(plan, owner)
   const digest = await runtimeDigest(plan, owner)
-  if (await exactFirstParty(root, runtime, digest)) return { trusted: true, source: 'distribution', digest }
+  if (await exactFirstParty(root, runtime, digest)) return { trust: 'bundled', digest }
   const approvals = await readJson(join(root, '.hairness', 'approvals.json'), { version: 1, runtimes: {} })
-  return { trusted: approvals.runtimes?.[owner] === digest, source: approvals.runtimes?.[owner] === digest ? 'local' : null, digest }
+  return { trust: approvals.runtimes?.[owner] === digest ? 'approved' : 'pending', digest }
 }
 
 export async function dispatchRuntime(root, namespace, argv, io = process) {
@@ -42,7 +48,7 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
   const runtime = plan.runtimes.find((entry) => entry.namespace === namespace)
   if (!runtime) throw new HairnessError('usage', `Unknown command ${namespace}.`, { exitCode: 2 })
   const trust = await runtimeTrustState(root, runtime.owner, plan)
-  if (!trust.trusted) {
+  if (trust.trust === 'pending') {
     throw new HairnessError('runtime_trust_required', `${runtime.owner} runtime ${trust.digest} requires local approval. Review it, then run hairness asset trust ${runtime.owner} --digest ${trust.digest}.`, {
       exitCode: 6,
       details: { asset: runtime.owner, digest: trust.digest, entry: runtime.entry, namespace },
@@ -52,7 +58,7 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
   const desk = await loadDesk(root)
   const homeRoot = await realpath(root)
   const deskRoot = desk ? await realpath(join(root, '.desk')) : null
-  const runtimeSource = process.env.HAIRNESS_RUNTIME_SOURCE === 'development' ? 'development' : 'registry'
+  const runtimeSource = process.env.HAIRNESS_RUNTIME_SOURCE === 'development' ? 'development' : 'npm'
   const invocationKind = process.env.HAIRNESS_INVOCATION_KIND === 'wake-up' ? 'wake-up' : 'command'
   const invocationProvider = ['codex', 'claude'].includes(process.env.HAIRNESS_INVOCATION_PROVIDER)
     ? process.env.HAIRNESS_INVOCATION_PROVIDER
@@ -62,7 +68,7 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
     try {
       trustStates.push({ owner: candidate.owner, namespace: candidate.namespace, ...await runtimeTrustState(root, candidate.owner, plan) })
     } catch (error) {
-      trustStates.push({ owner: candidate.owner, namespace: candidate.namespace, trusted: false, source: null, error: error.code ?? 'runtime-invalid' })
+      trustStates.push({ owner: candidate.owner, namespace: candidate.namespace, trust: 'pending', error: error.code ?? 'runtime-invalid' })
     }
   }
   const input = {

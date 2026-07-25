@@ -111,7 +111,7 @@ Hairness Development Home ──Binding──> Hairness repository
 
 The Development Home installs `hairness/project` through that Binding.
 Its ignored regular `.hairness/dev-cli` file points the tracked Home Console at
-the source checkout. The Console alone selects `development|registry`; a broken
+the source checkout. The Console alone selects `development|npm`; a broken
 development launcher never falls back. This keeps product sources clean while
 exercising the same Home, Desk, Asset, Front Door and Target contracts shipped
 to users.

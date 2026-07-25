@@ -3,7 +3,7 @@ import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { API, validateDocument } from './contracts.mjs'
 import { HairnessError } from './lib/errors.mjs'
-import { assertId, digest, readJson, writeJsonAtomic } from './lib/io.mjs'
+import { assertId, digest, readJson } from './lib/io.mjs'
 
 const packageDocument = JSON.parse(await readFile(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'))
 export const RUNTIME = `@hairness/cli@${packageDocument.version}`
@@ -57,12 +57,4 @@ export function homeDocument(options = {}) {
     ...(Object.keys(budgets).length ? { budgets } : {}),
     ...(Object.keys(settings).length ? { settings } : {}),
   }
-}
-
-export async function saveHome(root, home) {
-  const document = homeDocument(home)
-  document.runtime = home.runtime
-  await validateDocument(document, 'home')
-  await writeJsonAtomic(join(root, 'hairness.json'), document, 0o644)
-  return document
 }

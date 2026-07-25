@@ -36,12 +36,25 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     const model = JSON.parse(json.stdout())
     assert.equal(model.home.name, 'home')
     assert.equal(model.home.root, await exec('git', ['rev-parse', '--show-toplevel'], { cwd: home }).then((value) => value.stdout.trim()))
-    assert.equal(model.kernel.source, 'registry')
+    assert.equal(model.kernel.source, 'npm')
     assert.equal(model.kernel.invoke, 'node ./hairness.mjs')
     assert.deepEqual(model.desk.preferences, { addressAs: 'Alexis', responseLanguage: 'fr' })
     assert.equal(model.projections.every((entry) => entry.status === 'fresh'), true)
     assert.deepEqual(model.surfaces.assets.map((entry) => entry.id), ['hairness/artifacts', 'hairness/hud', 'hairness/onboarding', 'hairness/targets'])
     assert.deepEqual(model.surfaces.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'target'])
+    assert.deepEqual(
+      model.trust.runtimes.map((entry) => [entry.owner, entry.trust]),
+      [
+        ['hairness/artifacts', 'bundled'],
+        ['hairness/hud', 'bundled'],
+        ['hairness/targets', 'bundled'],
+      ],
+    )
+    assert.deepEqual({ bundled: model.trust.bundled, approved: model.trust.approved, pending: model.trust.pending }, {
+      bundled: 3,
+      approved: 0,
+      pending: 0,
+    })
     assert.equal(model.recentDesk.length, 5)
     assert.deepEqual(model.recentDesk.map((entry) => entry.path), ['note-6.md', 'note-5.md', 'note-4.md', 'note-3.md', 'note-2.md'])
     assert.equal(model.recentDesk.some((entry) => entry.path === 'outside-link'), false)
@@ -51,7 +64,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     await dispatchRuntime(home, 'hud', ['prompt'], prompt.io)
     assert.match(prompt.stdout(), /^<hairness-hud version="1" status="ready" generated-at="[^"]+" event="command">/)
     assert.match(prompt.stdout(), new RegExp(`<home name="home" mode="solo" root="${escapeRegex(model.home.root)}" providers="codex,claude"/>`))
-    assert.match(prompt.stdout(), /<kernel runtime="@hairness\/cli@0\.5\.0-alpha\.0" source="registry" invoke="node \.\/hairness\.mjs"\/>/)
+    assert.match(prompt.stdout(), /<kernel runtime="@hairness\/cli@0\.5\.0-alpha\.0" source="npm" invoke="node \.\/hairness\.mjs"\/>/)
     assert.match(prompt.stdout(), /<asset id="hairness\/hud" version="0\.5\.0-alpha\.0" scope="home" overridden="false" runtime="hud"\/>/)
     assert.match(prompt.stdout(), /<runtime owner="hairness\/targets" namespace="target" scope="home">/)
     assert.match(prompt.stdout(), /<instruction owner="hairness\/desk" id="desk" source="DESK\.md">/)
@@ -59,7 +72,24 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.doesNotMatch(prompt.stdout(), /outside-link/)
     const human = captureIo()
     await dispatchRuntime(home, 'hud', ['show'], human.io)
-    assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.5.0-alpha.0 · registry · ready')
+    assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.5.0-alpha.0 · npm · ready')
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('the HUD owns its prompt budget through namespaced Home settings', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-hud-budget-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home)
+    const path = join(home, 'hairness.json')
+    const document = JSON.parse(await readFile(path, 'utf8'))
+    document.settings = { 'hairness/hud': { promptBytes: 1 } }
+    await writeFile(path, `${JSON.stringify(document, null, 2)}\n`)
+    const output = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], output.io), 5)
+    assert.match(output.stderr(), /hud_budget_exceeded/)
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

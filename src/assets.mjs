@@ -64,12 +64,6 @@ export async function addAssets(root, addresses, options = {}) {
 }
 
 export async function installedAssets(root, options = {}) {
-  if (await exists(join(root, 'extensions'))) {
-    throw new HairnessError('legacy_asset_layout', 'The legacy extensions/ layout is unsupported; move managed sources under assets/.')
-  }
-  if (await exists(join(root, '.overlay'))) {
-    throw new HairnessError('legacy_overlay_layout', 'The legacy .overlay/ layout is unsupported; migrate personal sources to .desk/.')
-  }
   const scope = options.scope === 'desk' ? 'desk' : 'home'
   const base = scope === 'desk' ? join(root, '.desk', 'assets') : join(root, 'assets')
   if (!await exists(base)) return []

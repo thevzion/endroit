@@ -7,6 +7,7 @@
   "files": [
     "instructions/orientation.md",
     "capabilities/orient.md",
+    "schemas/home-settings.schema.json",
     "runtime.mjs"
   ],
   "instructions": [
@@ -36,6 +37,9 @@
       "description": "Show and interpret the current Hairness Home."
     }
   ],
+  "settings": {
+    "home": "schemas/home-settings.schema.json"
+  },
   "runtime": {
     "namespace": "hud",
     "entry": "runtime.mjs",

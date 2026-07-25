@@ -35,8 +35,7 @@
       "additionalProperties": false,
       "properties": {
         "instructionsBytes": { "type": "integer", "minimum": 0 },
-        "modelDescriptionsBytes": { "type": "integer", "minimum": 0 },
-        "hudPromptBytes": { "type": "integer", "minimum": 0 }
+        "modelDescriptionsBytes": { "type": "integer", "minimum": 0 }
       }
     },
     "settings": {

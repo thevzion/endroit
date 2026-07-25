@@ -14,7 +14,7 @@ try {
   if (command === 'json' && args.length === 0) process.stdout.write(`${JSON.stringify(model, null, 2)}\n`)
   else if (command === 'prompt' && args.length === 0) {
     const prompt = await xml(model, input)
-    const budget = input.resolvedHome.home.budgets?.hudPromptBytes
+    const budget = input.resolvedHome.home.settings?.['hairness/hud']?.promptBytes
     if (budget !== undefined && Buffer.byteLength(prompt) > budget) {
       throw failure('hud_budget_exceeded', `HUD prompt is ${Buffer.byteLength(prompt)} bytes, over the ${budget} byte budget.`)
     }
@@ -41,9 +41,9 @@ async function hud(input) {
   const trust = {
     runtimes: (input.runtimeTrust ?? []).sort((left, right) => left.owner.localeCompare(right.owner)),
   }
-  trust.firstParty = trust.runtimes.filter((entry) => entry.trusted && entry.source === 'distribution').length
-  trust.externalApproved = trust.runtimes.filter((entry) => entry.trusted && entry.source === 'local').length
-  trust.pending = trust.runtimes.filter((entry) => !entry.trusted).length
+  trust.bundled = trust.runtimes.filter((entry) => entry.trust === 'bundled').length
+  trust.approved = trust.runtimes.filter((entry) => entry.trust === 'approved').length
+  trust.pending = trust.runtimes.filter((entry) => entry.trust === 'pending').length
 
   const attention = []
   if (!deskRoot && plan.home.mode === 'team') {
@@ -65,8 +65,8 @@ async function hud(input) {
       else if (!binding.git.clean) attention.push(item('advisory', `target:${target.id}/${binding.id}`, 'target-dirty', `Binding has ${binding.git.changes} change(s).`))
     }
   }
-  for (const runtime of trust.runtimes.filter((entry) => !entry.trusted)) {
-    attention.push(item('blocking', `runtime:${runtime.owner}`, 'runtime-untrusted', `${runtime.owner} requires approval before execution.`))
+  for (const runtime of trust.runtimes.filter((entry) => entry.trust === 'pending')) {
+    attention.push(item('blocking', `runtime:${runtime.owner}`, 'runtime-pending', `${runtime.owner} requires approval before execution.`))
   }
 
   const groupedAttention = {
@@ -114,7 +114,7 @@ async function hud(input) {
     },
     context: {
       ...plan.context,
-      hudPromptBudgetBytes: plan.home.budgets?.hudPromptBytes ?? null,
+      promptBudgetBytes: plan.home.settings?.['hairness/hud']?.promptBytes ?? null,
     },
     targets,
     artifacts,
@@ -413,9 +413,9 @@ async function xml(model, input) {
   for (const artifact of model.artifacts.items) {
     lines.push(`    <artifact${artifact.id ? ` id="${escape(artifact.id)}"` : ''}${artifact.kind ? ` kind="${escape(artifact.kind)}"` : ''} scope="${artifact.scope}"${artifact.owner ? ` owner="${escape(artifact.owner)}"` : ''}${artifact.state ? ` state="${escape(artifact.state)}"` : ''} path="${escape(artifact.path)}"/>`)
   }
-  lines.push('  </artifacts>', `  <context instructions-bytes="${model.context.instructionBytes}" desk-instructions-bytes="${model.context.deskInstructionBytes}" model-descriptions-bytes="${model.context.modelDescriptionBytes}"${model.context.hudPromptBudgetBytes === null ? '' : ` hud-budget-bytes="${model.context.hudPromptBudgetBytes}"`}/>`)
-  lines.push(`  <trust first-party="${model.trust.firstParty}" external-approved="${model.trust.externalApproved}" pending="${model.trust.pending}">`)
-  for (const runtime of model.trust.runtimes) lines.push(`    <runtime owner="${escape(runtime.owner)}" namespace="${escape(runtime.namespace)}" trusted="${runtime.trusted}"${runtime.source ? ` source="${runtime.source}"` : ''}/>`)
+  lines.push('  </artifacts>', `  <context instructions-bytes="${model.context.instructionBytes}" desk-instructions-bytes="${model.context.deskInstructionBytes}" model-descriptions-bytes="${model.context.modelDescriptionBytes}"${model.context.promptBudgetBytes === null ? '' : ` hud-budget-bytes="${model.context.promptBudgetBytes}"`}/>`)
+  lines.push(`  <trust bundled="${model.trust.bundled}" approved="${model.trust.approved}" pending="${model.trust.pending}">`)
+  for (const runtime of model.trust.runtimes) lines.push(`    <runtime owner="${escape(runtime.owner)}" namespace="${escape(runtime.namespace)}" trust="${runtime.trust}"/>`)
   lines.push('  </trust>', '  <recent-desk>')
   for (const entry of model.recentDesk) lines.push(`    <file path="${escape(entry.path)}" modified-at="${entry.modifiedAt}"/>`)
   lines.push('  </recent-desk>', '  <desk-instructions>')

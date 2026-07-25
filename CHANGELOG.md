@@ -11,7 +11,7 @@
 - Add source-owned Asset validation, override and guarded publication.
 - Add typed Artifact creation, import, validation, publication and lineage.
 - Add named Target Bindings and evidence-backed Target Map Artifacts.
-- Replace Prologue with a fail-closed, provider-neutral Front Door.
+- Add a fail-closed, provider-neutral Front Door.
 - Add a repository-owned, rollback-safe Development Home recipe and Project
   plan Artifact.
 - Add canonical `HOME.md` and `DESK.md` instruction sources with one-shot
@@ -19,16 +19,14 @@
 - Introduce the Front Door and Progressive Orientation: a static Floor Plan,
   one optional Home-selected Wake-up route, generic provider Bridges and the
   tracked `hairness.mjs` Home Console.
+- Separate Kernel provenance (`npm|development`) from Asset runtime trust
+  (`bundled|approved|pending`).
+- Move the HUD prompt budget into `settings["hairness/hud"].promptBytes`.
 - Expand the HUD into an optional operational Wake-up with exact paths,
   invocation, surfaces, local evidence and severity-separated attention.
 - Replace HUD flags with explicit `hud show|prompt|json` routes.
-- Replace `asset review`, `asset diff` and installed-only validation with
-  standalone `asset validate <source>`, offline status digests and detailed
+- Add standalone `asset validate <source>`, offline status digests and detailed
   `asset sync --check`.
-- Remove public `init` and `desk status`.
-- Remove Overlay, Integrations, public Adapters, Registry and all 0.4 aliases.
-
-This is a clean break with 0.4.
 
 ## 0.4.0-alpha.1
 

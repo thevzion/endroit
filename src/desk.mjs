@@ -1,7 +1,7 @@
 import { mkdir, readFile, rm } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
+import { join } from 'node:path'
 import { API, validateDocument } from './contracts.mjs'
-import { git, gitEvidence } from './git.mjs'
+import { git } from './git.mjs'
 import { loadHome } from './home.mjs'
 import { DESK_INSTRUCTION, readInstructionFile, renderInstructionTemplate } from './instructions.mjs'
 import { HairnessError } from './lib/errors.mjs'
@@ -50,20 +50,6 @@ export async function cloneDesk(root, repository) {
   } catch (error) {
     await rm(directory, { recursive: true, force: true })
     throw error
-  }
-}
-
-export async function deskStatus(root) {
-  const home = await loadHome(root)
-  const desk = await loadDesk(root)
-  if (!desk) return { status: 'missing', mode: home.mode }
-  const repository = await exists(join(root, '.desk', '.git'))
-  return {
-    status: 'ready',
-    mode: home.mode,
-    id: desk.id,
-    repository,
-    ...(repository ? { git: await gitEvidence(resolve(root, '.desk')) } : {}),
   }
 }
 

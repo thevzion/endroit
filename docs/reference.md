@@ -12,8 +12,8 @@ Hairness 0.5 is an alpha. The schemas under `schemas/v5` are authoritative.
 - `mode: solo | team`;
 - at least one supported provider.
 
-Optional fields are a projection `prefix`, context `budgets`, Asset-indexed
-`settings` and:
+Optional fields are a projection `prefix`, budgets for Instructions and
+model-facing descriptions, Asset-indexed `settings` and:
 
 ```json
 {
@@ -36,8 +36,7 @@ and is never re-rendered automatically.
 
 `create <directory>` creates a Git repository, initializes a Home, installs
 Onboarding, HUD, Artifacts and Targets, selects `hairness/hud:prompt`, builds
-shared projections, runs Doctor and commits the result. There is no public
-`init` command.
+shared projections, runs Doctor and commits the result.
 
 ## Desk
 
@@ -121,7 +120,8 @@ lockfile is persisted. Floor Plan bytes are measured separately.
 
 Runtime namespaces and projected surfaces must be unique. Settings are validated
 against the schemas owned by each Asset. Optional budgets cover Instructions,
-model-facing descriptions and HUD prompt bytes.
+and model-facing descriptions. `hairness/hud` owns its prompt budget at
+`settings["hairness/hud"].promptBytes`.
 
 ## Build and Bridges
 
@@ -146,7 +146,7 @@ node ./hairness.mjs <namespace> <command> [...arguments]
 
 The Console uses `.hairness/dev-cli` only when it is a regular non-symlink file;
 otherwise it invokes the exact Home runtime with `npx`. It centralizes
-`development|registry` provenance and propagates stdio, signals and exit status.
+`development|npm` provenance and propagates stdio, signals and exit status.
 A present but failing development launcher never falls back.
 
 When `frontDoor.wakeUp` exists, each Bridge writes a tracked SessionStart
@@ -185,7 +185,7 @@ An Asset runtime receives one JSON document on stdin:
   "resolvedHome": {},
   "kernel": {
     "runtime": "@hairness/cli@0.5.0-alpha.0",
-    "source": "registry",
+    "source": "npm",
     "invoke": "node ./hairness.mjs"
   },
   "runtimeTrust": [],
@@ -197,10 +197,16 @@ An Asset runtime receives one JSON document on stdin:
 
 For Front Door execution, `invocation.kind` is `wake-up` and `provider` is
 `codex` or `claude`. The runtime parses its arguments and owns stdout, stderr
-and exit code. Hairness does not wrap its output. An external runtime must be
-approved locally by exact Asset digest. A digest change revokes approval. Exact
-first-party runtime bytes from the pinned CLI distribution are trusted as part
-of that distribution.
+and exit code. Hairness does not wrap its output.
+
+Each runtime entry carries one trust value:
+
+- `bundled`: the installed Asset matches the bytes bundled in the exact npm
+  package;
+- `approved`: its digest matches a local approval;
+- `pending`: execution is blocked.
+
+A digest change returns an approved runtime to `pending`.
 
 `add`, `sync`, `build`, `doctor` and resolution never execute Asset runtimes.
 HUD executes no other Asset runtime while composing its own output.

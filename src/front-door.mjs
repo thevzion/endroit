@@ -71,7 +71,7 @@ const child = spawn(command, args, {
   env: {
     ...process.env,
     HAIRNESS_HOME_PATH: homeRoot,
-    HAIRNESS_RUNTIME_SOURCE: local ? 'development' : 'registry',
+    HAIRNESS_RUNTIME_SOURCE: local ? 'development' : 'npm',
   },
   stdio: 'inherit',
 })
