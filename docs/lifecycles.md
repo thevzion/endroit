@@ -69,6 +69,12 @@ rejecting symbolic links and the reserved `artifact.md`.
 Publishing preserves content, records lineage and never removes the Desk
 source. Transformations create a new Artifact with `--derived-from`.
 
+Artifact-to-Asset curation is a separate human authoring step. Hairness 0.5 has
+no promotion command: a collaborator selects reusable material, authors a new
+or improved Asset, validates it through the Asset lifecycle and reviews the Git
+diff. `artifact publish` preserves the Artifact kind, changes its owner and
+records lineage; it does not produce an Asset.
+
 ## Target
 
 ```text
