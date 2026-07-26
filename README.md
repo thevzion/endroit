@@ -4,14 +4,12 @@
 
 ### Own the place where your agents work.
 
-Hairness gives the agents you already use a Home you own. Keep working in Codex
-or Claude while your repositories stay where they are. The Home keeps context
-stable and capabilities reusable across independent repositories, while
-results remain inspectable.
+Hairness is a lightweight, Home-first framework for building human-agent work
+environments.
 
-**A provider can host the agent. It shouldn’t own the Home.**
-
-Codex and Claude today. Provider-neutral sources by design.
+Keep the agents and repositories you already use. Methods, skills, tools, and
+execution loops can become reusable Assets inside a Home you own. Codex and
+Claude today.
 
 [![npm latest](https://img.shields.io/npm/v/%40hairness%2Fcli/latest?label=npm%20latest)](https://www.npmjs.com/package/@hairness/cli)
 [![CI](https://github.com/thevzion/hairness/actions/workflows/ci.yml/badge.svg)](https://github.com/thevzion/hairness/actions/workflows/ci.yml)
@@ -21,32 +19,23 @@ Codex and Claude today. Provider-neutral sources by design.
 
 </div>
 
-Create one Home beside your existing repositories, then bind the checkouts you
-need as Targets. Their history and delivery process stay with them. The
-built-in Floor Plan and HUD provide value before you design a custom Asset.
-
-Ness is the character in these illustrations: the first agent to get a Home.
-
 ![Nine comic frames show target-first agent work becoming a source-owned Home with a Front Door, personal Desks, reusable Assets, inspectable Artifacts, independent Targets and accumulated agentic capital.](https://raw.githubusercontent.com/thevzion/hairness/main/docs/assets/hairness-home-first-journey.webp)
 
-## Most agent sessions start inside a repository
+*Ness is the recurring character in these illustrations, the first agent to
+get a Home. Hairness works with the agent you already use; it does not install
+Ness.*
+
+## The missing ownership layer
 
 You open Codex or Claude in a repository. The provider starts a session there,
 loads local instructions and treats that working directory as the agent’s
 environment.
 
-That path works for one repository. Across an API, an application and
-documentation, each repository becomes an accidental Home. Collaborators copy
-methods between projects, rebuild context and leave useful results in separate
-sessions.
+Across an API, an application and documentation, each repository becomes an
+accidental Home. Collaborators copy methods between projects, rebuild context
+and leave useful results in separate sessions.
 
-```text
-Target-first
-
-Provider ──> agent inside payments-api
-Provider ──> agent inside product-app
-Provider ──> agent inside documentation
-```
+**Target-first:** each provider session starts inside one repository.
 
 ![Three collaborators and three Ness sessions work inside separate API, web application and documentation repositories while methods move between them by hand.](https://raw.githubusercontent.com/thevzion/hairness/main/docs/assets/hairness-target-first.webp)
 
@@ -55,15 +44,8 @@ bring the agent to the Home’s Front Door. Each collaborator uses a personal
 Desk, equips shared Assets and reaches product repositories through explicit
 Bindings.
 
-```text
-Home-first
-
-Providers ──> Front Door ──> Home
-                              ├── shared Assets
-                              ├── Home Artifacts
-                              ├── active Desk
-                              └── Bindings ──> independent Targets
-```
+**Home-first:** provider sessions enter one Home, then reach independent
+Targets through explicit Bindings.
 
 ![Three collaborators and Ness work inside one source-owned Home with a Front Door, Floor Plan, HUD, personal Desks, shared Assets, governed Artifacts, human curation and explicit Bindings to independent Targets.](https://raw.githubusercontent.com/thevzion/hairness/main/docs/assets/hairness-home-first.webp)
 
@@ -82,9 +64,16 @@ Hairness centralizes ownership and coordination while product code, history
 and delivery stay with each Target. It provides the missing ownership layer
 between provider sessions and independent Targets.
 
+**A provider can host the agent. It shouldn’t own the Home.**
+
 ## Useful in minutes
 
-Create a Home, then open it with a supported provider:
+Hairness is designed to be agent-operated and human-governed. Conversation is
+the primary interface; the tracked Home Console is the inspectable execution
+channel.
+
+Create one Home beside your existing repositories, then open it with a
+supported provider:
 
 ```bash
 npx --yes @hairness/cli@latest create studio-home
@@ -105,8 +94,9 @@ node ./hairness.mjs <namespace> <command> [...arguments]
 ```
 
 Invoke `$hairness-onboarding` in Codex or `/hairness-onboarding` in Claude.
-Your agent explains the setup, asks for consent and configures your Desk. You
-can start without writing provider configuration or designing an Asset.
+Your agent explains the setup, asks for consent and configures your Desk. The
+built-in Floor Plan and HUD provide orientation before you write provider
+configuration or design a custom Asset.
 
 | Horizon | You do | Hairness provides |
 | --- | --- | --- |
@@ -120,7 +110,9 @@ After onboarding, you own ordinary files. `HOME.md`, `DESK.md`, Asset sources
 and Artifacts are canonical. `AGENTS.md`, `CLAUDE.md` and provider directories
 are generated views.
 
-## One Home, many Desks, independent Targets
+## How the Home works
+
+### One Home, many Desks, independent Targets
 
 A team Home supports any number of collaborators. Each collaborator uses a
 separate checkout of the shared Home and attaches one private `.desk/`
@@ -134,21 +126,14 @@ shared Home.
 The Home declares Targets. Each Desk binds the checkouts it uses. A Target
 keeps its repository, history, test suite and delivery process.
 
-## The agent enters through the Front Door
+### The agent enters through the Front Door
 
-The provider starts the session. Its projection carries the same Home-owned
-entry contract:
+The provider starts the session. Codex and Claude Bridges render the same
+Home-owned entry contract from provider-neutral sources:
 
 ```text
-Provider starts the agent
-    ↓
-Front Door
-├── static Floor Plan
-├── Home Console
-├── provider Bridge
-└── optional Wake-up route
-    ↓
-active Desk and local evidence
+Provider → Front Door [Floor Plan · Console · Bridge · optional Wake-up]
+         → active Desk and local evidence
 ```
 
 The Front Door names this composition even when the Home selects no Wake-up
@@ -168,25 +153,13 @@ orientation is unavailable. The Home stays readable from tracked files.
 Executable operations still require the pinned runtime from the local npm
 cache, registry or an explicit development backing.
 
-> **The model may be a black box. The Home doesn’t have to be.**
-
 ## Assets are products for work
 
 An Asset packages a reusable capability that the Home can locate, inspect,
-trust, specialize and project through a stable contract.
-
-```text
-Asset
-├── asset.json            identity and public surfaces
-├── instructions/        knowledge and operating guidance
-├── capabilities/        provider-neutral procedures
-├── references/          supporting material
-└── runtime.mjs           optional executable behavior
-```
-
-Assets can package a method, domain knowledge, a validator, a mapping tool or
-an executable runtime. A manifest names the source-owned files and public
-surfaces. The Asset contains the capability itself.
+trust, specialize and project through a stable contract. It may contain
+instructions, provider-neutral procedures, references and an executable
+runtime. Its `asset.json` manifest names the source-owned files and public
+surfaces.
 
 Hairness gives each session orientation, named equipment, ownership boundaries
 and inspectable failure modes. Humans can design and review that Agent
@@ -317,7 +290,7 @@ completed work should reduce effort in later work. Hairness applies that
 principle to the source-owned environment around human-agent collaboration.
 The reference does not imply an official integration.
 
-## Hairness 0.5 today
+## What Hairness 0.5 proves today
 
 | Shipped contract | Inspectable evidence |
 | --- | --- |
@@ -331,26 +304,13 @@ The reference does not imply an official integration.
 | Reconstructible projections | Deterministic build, `build --check` and divergence detection |
 | Pinned execution channel | Tracked `hairness.mjs` and an exact runtime in `hairness.json` |
 
-## Bring the stack you already use
+### Integrations and open proof questions
 
 Hairness provides value without a third-party methodology. Existing tools can
-join a Home when their ownership and runtime boundaries become explicit.
-
-| Existing layer | Current relationship |
-| --- | --- |
-| Codex and Claude | Supported providers that host the agent |
-| GSD, Spec Kit, Superpowers and similar methods | Candidates for Asset-based adaptation; no official integration ships |
-| Compound Engineering | Related practice; no official integration ships |
-| MCP servers and company tools | External authorities that a provider or trusted Asset runtime may call |
-| Product repositories | Independent Targets |
-| Future providers | Separate Bridges remain an architectural direction |
-
-Mentioned tools are compatibility targets or related work. Their presence in
-this table does not claim support.
-
-## Open proof questions
-
-Hairness has a useful core. Broader claims still need evidence:
+join a Home when their ownership and runtime boundaries become explicit. GSD,
+Spec Kit, Superpowers and similar methods remain candidates for Asset-based
+adaptation; no official integration ships. MCP servers and company tools
+remain external authorities that a provider or trusted Asset runtime may call.
 
 | Question | Current state |
 | --- | --- |
