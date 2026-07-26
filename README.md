@@ -8,7 +8,7 @@
 
 A lightweight framework for source-owned, portable agent work environments.
 
-[![npm next](https://img.shields.io/npm/v/%40hairness%2Fcli/next?label=npm%20next)](https://www.npmjs.com/package/@hairness/cli)
+[![npm latest](https://img.shields.io/npm/v/%40hairness%2Fcli/latest?label=npm%20latest)](https://www.npmjs.com/package/@hairness/cli)
 [![CI](https://github.com/thevzion/hairness/actions/workflows/ci.yml/badge.svg)](https://github.com/thevzion/hairness/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-d8996a.svg)](LICENSE)
 
@@ -60,10 +60,14 @@ instructions, capabilities and continuity. You create it once, then work with
 Ness instead of operating a framework.
 
 ```bash
-npx --yes @hairness/cli@0.5.0-alpha.0 create studio-home
+npx --yes @hairness/cli@latest create studio-home
 codex -C studio-home
 # or: cd studio-home && claude
 ```
+
+`latest` is used only for bootstrap. The generated Home pins the exact runtime
+in `hairness.json`; every subsequent operation goes through
+`node ./hairness.mjs`.
 
 Invoke `$hairness-onboarding` in Codex or `/hairness-onboarding` in Claude.
 Ness explains the proposed setup, asks for consent and completes it through the
