@@ -4,9 +4,10 @@
 
 ### Own the place where your agents work.
 
-Hairness is a Home-first framework that gives human-agent work a Home you own.
-It keeps context stable, capabilities reusable and results inspectable across
-independent repositories.
+Hairness gives the agents you already use a Home you own. Keep working in Codex
+or Claude while your repositories stay where they are. The Home keeps context
+stable and capabilities reusable across independent repositories, while
+results remain inspectable.
 
 **A provider can host the agent. It shouldn’t own the Home.**
 
@@ -19,6 +20,12 @@ Codex and Claude today. Provider-neutral sources by design.
 <sub>Hairness 0.5 is an alpha. Keep the Home in a dedicated Git repository and inspect an Asset runtime before trusting it.</sub>
 
 </div>
+
+Create one Home beside your existing repositories, then bind the checkouts you
+need as Targets. Their history and delivery process stay with them. The
+built-in Floor Plan and HUD provide value before you design a custom Asset.
+
+Ness is the character in these illustrations: the first agent to get a Home.
 
 ![Nine comic frames show target-first agent work becoming a source-owned Home with a Front Door, personal Desks, reusable Assets, inspectable Artifacts, independent Targets and accumulated agentic capital.](https://raw.githubusercontent.com/thevzion/hairness/main/docs/assets/hairness-home-first-journey.webp)
 
@@ -44,8 +51,9 @@ Provider ──> agent inside documentation
 ![Three collaborators and three Ness sessions work inside separate API, web application and documentation repositories while methods move between them by hand.](https://raw.githubusercontent.com/thevzion/hairness/main/docs/assets/hairness-target-first.webp)
 
 Hairness gives the environment its own source-owned repository. Providers
-bring Ness to its Front Door. Each collaborator uses a personal Desk, equips
-shared Assets and reaches product repositories through explicit Bindings.
+bring the agent to the Home’s Front Door. Each collaborator uses a personal
+Desk, equips shared Assets and reaches product repositories through explicit
+Bindings.
 
 ```text
 Home-first
@@ -61,7 +69,7 @@ Providers ──> Front Door ──> Home
 
 | Target-first setup | Home-first contract |
 | --- | --- |
-| Agent starts inside each repository | Providers bring Ness to one **Front Door** |
+| Agent starts inside each repository | Providers bring the agent to one **Front Door** |
 | Context gets rebuilt for each project | The **Home** owns shared orientation |
 | Personal continuity follows chats and working directories | Each collaborator owns a **Desk** |
 | Methods get copied between repositories | The Home installs reusable **Assets** |
@@ -97,8 +105,8 @@ node ./hairness.mjs <namespace> <command> [...arguments]
 ```
 
 Invoke `$hairness-onboarding` in Codex or `/hairness-onboarding` in Claude.
-Ness explains the setup, asks for consent and configures your Desk. You can
-start without writing provider configuration or designing an Asset.
+Your agent explains the setup, asks for consent and configures your Desk. You
+can start without writing provider configuration or designing an Asset.
 
 | Horizon | You do | Hairness provides |
 | --- | --- | --- |
@@ -126,13 +134,13 @@ shared Home.
 The Home declares Targets. Each Desk binds the checkouts it uses. A Target
 keeps its repository, history, test suite and delivery process.
 
-## Ness enters through the Front Door
+## The agent enters through the Front Door
 
 The provider starts the session. Its projection carries the same Home-owned
 entry contract:
 
 ```text
-Provider starts Ness
+Provider starts the agent
     ↓
 Front Door
 ├── static Floor Plan
@@ -155,7 +163,7 @@ visual metaphor treats HUD as a pair of glasses at the entrance:
 - `hud prompt`, `hud show` and `hud json` are rendered views;
 - each view combines shared Home state, the active Desk and local evidence.
 
-If Wake-up fails, Ness keeps the static Floor Plan and reports that live
+If Wake-up fails, the agent keeps the static Floor Plan and reports that live
 orientation is unavailable. The Home stays readable from tracked files.
 Executable operations still require the pinned runtime from the local npm
 cache, registry or an explicit development backing.
@@ -330,7 +338,7 @@ join a Home when their ownership and runtime boundaries become explicit.
 
 | Existing layer | Current relationship |
 | --- | --- |
-| Codex and Claude | Supported providers that host Ness |
+| Codex and Claude | Supported providers that host the agent |
 | GSD, Spec Kit, Superpowers and similar methods | Candidates for Asset-based adaptation; no official integration ships |
 | Compound Engineering | Related practice; no official integration ships |
 | MCP servers and company tools | External authorities that a provider or trusted Asset runtime may call |
