@@ -1,5 +1,12 @@
 # Changelog
 
+## 0.5.0-alpha.1
+
+- Give Hairness a product-focused README and link the framework to its website
+  and the independent Home-first proposal.
+- Publish the CLI under npm's `latest` tag so the documented bootstrap command
+  resolves to the qualified release.
+
 ## 0.5.0-alpha.0
 
 - Rebuild Hairness as a Home-first microkernel with one CLI package.

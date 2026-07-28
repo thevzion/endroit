@@ -184,7 +184,7 @@ An Asset runtime receives one JSON document on stdin:
   "assetRoot": "/absolute/home/assets/company/security",
   "resolvedHome": {},
   "kernel": {
-    "runtime": "@hairness/cli@0.5.0-alpha.0",
+    "runtime": "@hairness/cli@0.5.0-alpha.1",
     "source": "npm",
     "invoke": "node ./hairness.mjs"
   },

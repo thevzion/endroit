@@ -1,6 +1,6 @@
 # Security policy
 
-Hairness `0.5.0-alpha.0` is prerelease software. Report vulnerabilities through
+Hairness `0.5.0-alpha.1` is prerelease software. Report vulnerabilities through
 [GitHub Security Advisories](https://github.com/thevzion/hairness/security/advisories/new).
 Do not disclose credentials, private Home content or unpublished Assets in a
 public issue.
