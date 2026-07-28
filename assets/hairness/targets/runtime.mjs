@@ -1,17 +1,69 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
-import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, extname, join, relative, resolve } from 'node:path'
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { basename, dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
+
+const TARGET_HELP = {
+  list: {
+    usage: 'hairness target list [--json]',
+    effect: 'read-only',
+    summary: 'List declared Targets, their Bindings and current repository evidence.',
+  },
+  discover: {
+    usage: 'hairness target discover <root> [--json]',
+    effect: 'read-only',
+    summary: 'Discover Git repositories within a bounded directory.',
+  },
+  doctor: {
+    usage: 'hairness target doctor [--json]',
+    effect: 'read-only',
+    summary: 'Check Target identities and Binding health.',
+  },
+  add: {
+    usage: 'hairness target add <repository-or-path> [--id <id>] [--summary <text>] [--binding <id>] [--json]',
+    effect: 'mutating — adds a shared Target declaration and may bind a local checkout',
+    summary: 'Declare a Target from a remote identity or existing checkout.',
+  },
+  bind: {
+    usage: 'hairness target bind <target> <repository-path> [--binding <id>] [--json]',
+    effect: 'mutating — adds a personal Desk Binding',
+    summary: 'Bind an existing checkout after verifying its repository identity.',
+  },
+  clone: {
+    usage: 'hairness target clone <target> [--binding <id>] [--json]',
+    effect: 'mutating — clones a managed Binding into the Desk',
+    summary: 'Clone the declared Target source as a managed Binding.',
+  },
+  unbind: {
+    usage: 'hairness target unbind <target> [--binding <id>] [--delete] [--json]',
+    effect: 'mutating — removes a Binding; --delete is required for a clean managed checkout',
+    summary: 'Remove one selected local Binding without changing the Target declaration.',
+  },
+  remove: {
+    usage: 'hairness target remove <target> [--json]',
+    effect: 'mutating — removes an unbound shared Target declaration',
+    summary: 'Remove a Target declaration after all Bindings are gone.',
+  },
+  inspect: {
+    usage: 'hairness target inspect <target> [--binding <id>] [--json]',
+    effect: 'read-only',
+    summary: 'Collect deterministic evidence from one Target Binding without interpreting files.',
+  },
+}
 
 try {
   const input = JSON.parse(await stdin())
   const { positionals, flags } = argumentsOf(input.argv)
   const [command, ...args] = positionals
-  const value = await route(input, command, args, flags)
-  process.stdout.write(flags.json ? `${JSON.stringify(value, null, 2)}\n` : `${human(value)}\n`)
+  if (flags.help) {
+    process.stdout.write(`${helpFor(command)}\n`)
+  } else {
+    const value = await route(input, command, args, flags)
+    process.stdout.write(flags.json ? `${JSON.stringify(value, null, 2)}\n` : `${human(value)}\n`)
+  }
 } catch (error) {
   process.stderr.write(`${error.code ?? 'target_failed'}: ${error.message}\n`)
   process.exitCode = error.exitCode ?? 4
@@ -26,8 +78,8 @@ async function route(input, command, args, flags) {
   if (command === 'clone') return cloneTarget(input, required(args[0], 'Target id'), flags.binding)
   if (command === 'unbind') return unbindTarget(input, required(args[0], 'Target id'), flags.binding, flags)
   if (command === 'remove') return removeTarget(input, required(args[0], 'Target id'))
-  if (command === 'map') return mapTarget(input, required(args[0], 'Target id'), flags)
-  throw failure('usage', 'hairness target list|discover|doctor|add|bind|clone|unbind|remove|map', 2)
+  if (command === 'inspect') return inspectTarget(input, required(args[0], 'Target id'), flags)
+  throw failure('usage', 'hairness target list|discover|doctor|add|bind|clone|unbind|remove|inspect', 2)
 }
 
 async function listTargets(input) {
@@ -172,85 +224,44 @@ async function removeTarget(input, id) {
   return { status: 'removed', id }
 }
 
-async function mapTarget(input, id, flags) {
-  requireDesk(input)
+async function inspectTarget(input, id, flags) {
   const target = declaration(input, id)
   const binding = await selectBinding(input, id, flags.binding)
   const evidence = await inspectRepository(binding.path)
-  if (!evidence.available && evidence.error) throw failure('target_unavailable', evidence.error)
-  const files = (await git(['ls-files'], binding.path)).split('\n').filter(Boolean).sort().slice(0, 5000)
-  const mappedAt = new Date().toISOString()
-  const artifactId = flags.id ?? `${id}-${evidence.head.slice(0, 8)}`
-  assertId(artifactId)
-  const kind = input.resolvedHome.artifactKinds.find((entry) => entry.id === 'hairness/targets:target-map')
-  if (!kind) throw failure('artifact_kind_missing', 'hairness/targets:target-map is not installed.')
-  const destination = join(input.deskRoot, 'artifacts', kind.id.replace(/[/:]+/g, '-'), artifactId)
-  if (await exists(destination)) throw failure('artifact_exists', `${relative(input.homeRoot, destination)} already exists.`)
-  await mkdir(dirname(destination), { recursive: true })
+  if (!evidence.remotes.some((remote) => remote.repository === target.repository)) {
+    throw failure('target_remote_mismatch', `${evidence.root} does not match ${target.repository}.`)
+  }
+  const trackedFiles = (await git(['ls-files'], binding.path)).split('\n').filter(Boolean).sort()
+  const files = trackedFiles.slice(0, 5000)
   const packageInfo = await packageMetadata(binding.path, files)
-  const values = mapValues(target, binding, evidence, files, packageInfo, mappedAt)
-  const metadata = {
-    $schema: 'https://hairness.dev/schema/artifact.json',
-    id: artifactId,
-    kind: kind.id,
-    owner: 'desk',
-    state: 'current',
-    createdBy: 'hairness/targets',
-    createdAt: mappedAt,
-    derivedFrom: `target:${id}@${evidence.head}`,
-    targets: [id],
-  }
-  const stage = await mkdtemp(join(dirname(destination), '.hairness-target-map-'))
-  try {
-    const body = substitute(await readFile(join(kind.root, kind.template), 'utf8'), values)
-    await writeFile(join(stage, 'artifact.md'), renderArtifact(metadata, body), { mode: 0o644 })
-    for (const source of kind.requiredFiles ?? []) {
-      const content = substitute(await readFile(join(kind.root, source), 'utf8'), values)
-      assertNoSecret(content)
-      await writeFile(join(stage, basename(source)), content, { mode: 0o644 })
-    }
-    await rename(stage, destination)
-  } catch (error) {
-    await rm(stage, { recursive: true, force: true })
-    throw error
-  }
-  return { status: 'mapped', target: id, binding: binding.id, head: evidence.head, mappedAt, artifact: relative(input.homeRoot, destination) }
-}
-
-function mapValues(target, binding, evidence, files, packageInfo, mappedAt) {
-  const header = `Target: \`${target.id}\` · Binding: \`${binding.id}\` · HEAD: \`${evidence.head}\` · Mapped: ${mappedAt}`
   const manifests = files.filter((path) => /(^|\/)(package\.json|pyproject\.toml|Cargo\.toml|go\.mod|Gemfile|composer\.json)$/.test(path))
-  const configs = files.filter((path) => /(^|\/)(Dockerfile|docker-compose|compose\.ya?ml|\.github|\.gitlab-ci|tsconfig|eslint|vite|next\.config|terraform)/i.test(path)).slice(0, 100)
   const tests = files.filter((path) => /(^|\/)(test|tests|spec|__tests__)(\/|$)|\.(test|spec)\.[^.]+$/i.test(path)).slice(0, 100)
-  const docs = files.filter((path) => /(^|\/)(README|CONTRIBUTING|docs\/)/i.test(path)).slice(0, 100)
-  const entrypoints = files.filter((path) => /(^|\/)(index|main|app|cli|server)\.[a-z0-9]+$/i.test(path)).slice(0, 50)
-  const modules = [...new Set(files.map((path) => path.split('/')[0]))].slice(0, 100)
-  const structure = modules.map((path) => `- \`${path}\``).join('\n') || '- No tracked paths.'
-  const extensions = new Map()
-  for (const path of files) {
-    const extension = extname(path).toLowerCase() || '[none]'
-    extensions.set(extension, (extensions.get(extension) ?? 0) + 1)
-  }
-  const languages = [...extensions.entries()].sort((left, right) => right[1] - left[1]).slice(0, 12).map(([extension, count]) => `- \`${extension}\`: ${count} files`).join('\n') || '- Unknown.'
-  const uncertainty = files.length >= 5000 ? '- Mapping was capped at 5,000 tracked files.' : '- This map uses paths and bounded manifests; it does not claim semantic completeness.'
   return {
+    status: 'inspected',
     target: target.id,
     binding: binding.id,
+    repository: target.repository,
+    root: evidence.root,
     head: evidence.head,
-    header,
-    manifests: bullets(manifests, 'No conventional manifests detected.'),
-    languages,
-    uncertainty,
-    remotes: evidence.remotes.map((remote) => `- ${remote.name}: \`${remote.repository}\``).join('\n') || '- No remotes.',
-    configs: bullets(configs, 'No conventional configuration signals detected.'),
-    entrypoints: bullets(entrypoints, 'No conventional entry points detected.'),
-    modules: bullets(modules, 'No module roots detected.'),
-    structure,
-    documentation: bullets(docs, 'No documentation signals detected.'),
-    tests: bullets(tests, 'No conventional test paths detected.'),
-    scripts: bullets(packageInfo.scripts, 'No package scripts detected.'),
-    workingTree: `- ${evidence.clean ? 'Clean.' : `${evidence.changes.length} local change(s).`}\n- ${evidence.conflicts} conflict(s).`,
-    operation: `- Branch: \`${evidence.branch ?? 'detached'}\`\n- Worktrees: ${evidence.worktrees.length}\n- Operation: ${evidence.operation ?? 'none'}`,
+    branch: evidence.branch,
+    workingTree: {
+      clean: evidence.clean,
+      changes: evidence.changes.length,
+      conflicts: evidence.conflicts,
+      operation: evidence.operation,
+      worktrees: evidence.worktrees.length,
+    },
+    observedAt: new Date().toISOString(),
+    files,
+    manifests,
+    scripts: packageInfo.scripts,
+    tests,
+    limits: [
+      ...(trackedFiles.length > 5000 ? [`Tracked files are capped at 5,000 of ${trackedFiles.length}.`] : []),
+      'Manifest scripts are read from at most 20 package.json files.',
+      'Tests are detected from conventional paths and filenames and capped at 100.',
+      'No file content is interpreted by this scanner.',
+    ],
   }
 }
 
@@ -381,23 +392,6 @@ async function git(args, cwd) {
   catch (error) { throw failure('git_failed', error.stderr?.trim() || error.message) }
 }
 
-function renderArtifact(metadata, body) {
-  return `---\n${Object.entries(metadata).map(([key, value]) => `${key}: ${JSON.stringify(value)}`).join('\n')}\n---\n\n${body.trim()}\n`
-}
-
-function substitute(template, values) {
-  return template.replace(/\{\{([A-Za-z0-9]+)\}\}/g, (_match, key) => values[key] ?? `Unknown ${key}.`)
-}
-
-function bullets(values, empty) {
-  return values.length ? values.map((value) => `- \`${value}\``).join('\n') : `- ${empty}`
-}
-
-function assertNoSecret(content) {
-  const patterns = [/-----BEGIN (?:RSA |EC |OPENSSH )?PRIVATE KEY-----/, /\b(?:ghp|github_pat|sk)-[A-Za-z0-9_-]{20,}\b/, /\bAKIA[0-9A-Z]{16}\b/]
-  if (patterns.some((pattern) => pattern.test(content))) throw failure('target_map_secret', 'Target Map output resembles a secret.')
-}
-
 async function removeEmpty(path, stop) {
   let current = path
   while (current !== stop) {
@@ -432,6 +426,22 @@ function human(value) {
     ? value.targets.map((target) => `${target.id} · ${target.state} · ${target.bindings?.map((binding) => `${binding.id}:${binding.evidence?.clean ? 'clean' : binding.evidence?.available === false ? 'broken' : 'dirty'}`).join(', ') || 'no bindings'}`).join('\n')
     : 'No Targets.'
   return Object.entries(value).map(([key, entry]) => `${key}: ${typeof entry === 'object' ? JSON.stringify(entry) : entry}`).join('\n')
+}
+
+function helpFor(command) {
+  if (!command) {
+    return [
+      'Usage: hairness target <command> [options]',
+      '',
+      'Commands:',
+      ...Object.entries(TARGET_HELP).map(([name, entry]) => `  ${name.padEnd(8)} ${entry.summary}`),
+      '',
+      'Run hairness target <command> --help for command details.',
+    ].join('\n')
+  }
+  const entry = TARGET_HELP[command]
+  if (!entry) throw failure('usage', `Unknown target command ${command}.`, 2)
+  return [`Usage: ${entry.usage}`, `Effect: ${entry.effect}`, '', entry.summary].join('\n')
 }
 
 function requireDesk(input) { if (!input.deskRoot) throw failure('desk_missing', 'Configure a Desk before managing Target Bindings.') }

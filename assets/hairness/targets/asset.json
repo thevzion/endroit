@@ -13,6 +13,7 @@
     "schemas/desk-settings.schema.json",
     "schemas/target-map.schema.json",
     "templates/target-map/artifact.md",
+    "templates/target-map/EVIDENCE.json",
     "templates/target-map/STACK.md",
     "templates/target-map/INTEGRATIONS.md",
     "templates/target-map/ARCHITECTURE.md",
@@ -78,6 +79,7 @@
       "owners": ["desk", "home"],
       "states": ["current", "stale"],
       "requiredFiles": [
+        "templates/target-map/EVIDENCE.json",
         "templates/target-map/STACK.md",
         "templates/target-map/INTEGRATIONS.md",
         "templates/target-map/ARCHITECTURE.md",
@@ -105,7 +107,7 @@
       { "name": "clone", "description": "Clone a managed Binding." },
       { "name": "unbind", "description": "Remove a local Binding." },
       { "name": "remove", "description": "Remove a Target declaration." },
-      { "name": "map", "description": "Create a Target Map Artifact in the Desk." }
+      { "name": "inspect", "description": "Collect deterministic read-only evidence from a Target Binding." }
     ]
   }
 }
