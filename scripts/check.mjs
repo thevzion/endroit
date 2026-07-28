@@ -24,7 +24,7 @@ for (const name of ['onboarding', 'hud', 'artifacts', 'targets', 'scratch']) {
 await validateDocument({
   $schema: 'https://hairness.dev/schema/home.json',
   name: 'check',
-  runtime: '@hairness/cli@0.5.0-alpha.0',
+  runtime: '@hairness/cli@0.5.0-alpha.1',
   mode: 'solo',
   providers: ['codex'],
   frontDoor: { wakeUp: 'hairness/hud:prompt' },

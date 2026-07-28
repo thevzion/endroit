@@ -64,7 +64,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     await dispatchRuntime(home, 'hud', ['prompt'], prompt.io)
     assert.match(prompt.stdout(), /^<hairness-hud version="1" status="ready" generated-at="[^"]+" event="command">/)
     assert.match(prompt.stdout(), new RegExp(`<home name="home" mode="solo" root="${escapeRegex(model.home.root)}" providers="codex,claude"/>`))
-    assert.match(prompt.stdout(), /<kernel runtime="@hairness\/cli@0\.5\.0-alpha\.0" source="npm" invoke="node \.\/hairness\.mjs"\/>/)
+    assert.match(prompt.stdout(), /<kernel runtime="@hairness\/cli@0\.5\.0-alpha\.1" source="npm" invoke="node \.\/hairness\.mjs"\/>/)
     assert.match(prompt.stdout(), /<asset id="hairness\/hud" version="0\.5\.0-alpha\.0" scope="home" overridden="false" runtime="hud"\/>/)
     assert.match(prompt.stdout(), /<runtime owner="hairness\/targets" namespace="target" scope="home">/)
     assert.match(prompt.stdout(), /<instruction owner="hairness\/desk" id="desk" source="DESK\.md">/)
@@ -72,7 +72,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.doesNotMatch(prompt.stdout(), /outside-link/)
     const human = captureIo()
     await dispatchRuntime(home, 'hud', ['show'], human.io)
-    assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.5.0-alpha.0 · npm · ready')
+    assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.5.0-alpha.1 · npm · ready')
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

@@ -38,7 +38,7 @@ for (const source of sources) {
 const { stdout: commit } = await exec('git', ['rev-parse', 'HEAD'], { cwd: projectRoot })
 const manifest = {
   commit: commit.trim(),
-  tag: 'next',
+  tag: 'latest',
   packages,
 }
 await writeFile(join(outputRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)

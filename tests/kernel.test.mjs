@@ -32,7 +32,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
     assert.deepEqual(document, {
       $schema: 'https://hairness.dev/schema/home.json',
       name: 'home',
-      runtime: '@hairness/cli@0.5.0-alpha.0',
+      runtime: '@hairness/cli@0.5.0-alpha.1',
       mode: 'solo',
       providers: ['codex', 'claude'],
       prefix: 'acme',
@@ -161,7 +161,7 @@ process.stdout.write('<wake-up source="' + process.env.HAIRNESS_RUNTIME_SOURCE +
     assert.equal(npm.stdout, '<wake-up source="npm"/>\n')
     assert.deepEqual(JSON.parse(await readFile(argsPath, 'utf8')), [
       '--yes',
-      '@hairness/cli@0.5.0-alpha.0',
+      '@hairness/cli@0.5.0-alpha.1',
       'hud',
       'prompt',
     ])

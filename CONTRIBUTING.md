@@ -40,6 +40,21 @@ Run `npm run dev:verify -- --full` before a merge checkpoint. It adds the
 Node 22/24, conformance, security, pack and lab gates to the persistent Home
 checks.
 
+## Release
+
+The `npm release` workflow qualifies the exact public `main` commit, publishes
+the packed CLI through npm trusted publishing and assigns the `latest` tag.
+After registry verification, a maintainer with an authenticated npm session may
+also move the prerelease channel:
+
+```bash
+npm dist-tag add @hairness/cli@<version> next
+npm view @hairness/cli dist-tags --json
+```
+
+Trusted publishing does not authorize a later `npm dist-tag` mutation. Keep
+that authenticated step separate from the OIDC workflow.
+
 Use Conventional Commits and keep changes focused. A new dependency, executable
 Asset runtime or public contract change needs a concrete consumer and maintainer
 agreement.
