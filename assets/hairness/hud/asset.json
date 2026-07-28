@@ -55,6 +55,10 @@
       {
         "name": "json",
         "description": "Render the stable machine-readable HUD."
+      },
+      {
+        "name": "activity",
+        "description": "Show recent sourced observations without persisting an event log."
       }
     ]
   }

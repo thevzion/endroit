@@ -2,12 +2,44 @@
 import { cp, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 
+const ARTIFACT_HELP = {
+  create: {
+    usage: 'hairness artifact create <kind> <id> [--owner <desk|home|target>] [--target <id>] [--binding <id>] [--state <state>] [--created-by <owner>] [--derived-from <ref>] [--from <directory>] [--json]',
+    effect: 'mutating — creates one new Artifact at its declared destination',
+    summary: 'Create an Artifact, optionally importing a bounded directory.',
+  },
+  list: {
+    usage: 'hairness artifact list [--json]',
+    effect: 'read-only',
+    summary: 'List Artifacts across the Desk, Home and bound Targets.',
+  },
+  inspect: {
+    usage: 'hairness artifact inspect <selector> [--json]',
+    effect: 'read-only',
+    summary: 'Inspect one Artifact selected by id, kind and id, or path.',
+  },
+  validate: {
+    usage: 'hairness artifact validate <selector> [--json]',
+    effect: 'read-only',
+    summary: 'Validate one Artifact against the schema and files owned by its kind.',
+  },
+  publish: {
+    usage: 'hairness artifact publish <selector> --to <home|target> [--target <id>] [--binding <id>] [--json]',
+    effect: 'mutating — copies a validated Desk Artifact to an explicit destination',
+    summary: 'Publish a Desk Artifact while preserving its source and lineage.',
+  },
+}
+
 try {
   const input = JSON.parse(await stdin())
   const { positionals, flags } = argumentsOf(input.argv)
   const [command, ...args] = positionals
-  const value = await route(input, command, args, flags)
-  process.stdout.write(flags.json ? `${JSON.stringify(value, null, 2)}\n` : `${human(value)}\n`)
+  if (flags.help) {
+    process.stdout.write(`${helpFor(command)}\n`)
+  } else {
+    const value = await route(input, command, args, flags)
+    process.stdout.write(flags.json ? `${JSON.stringify(value, null, 2)}\n` : `${human(value)}\n`)
+  }
 } catch (error) {
   process.stderr.write(`${error.code ?? 'artifact_failed'}: ${error.message}\n`)
   process.exitCode = error.exitCode ?? 4
@@ -158,7 +190,7 @@ async function validateDirectory(directory, metadata, kind, owner) {
 }
 
 async function destinationFor(input, kind, id, owner, flags) {
-  const segment = kind.id.replace(/[/:]+/g, '-')
+  const segment = kind.id.replace(':', '/')
   if (owner === 'home') return join(input.homeRoot, 'artifacts', segment, id)
   if (owner === 'desk') {
     if (!input.deskRoot) throw failure('desk_missing', 'A Desk is required for Desk Artifacts.')
@@ -298,6 +330,22 @@ function argumentsOf(argv) {
 function human(value) {
   if (value.artifacts) return value.artifacts.length ? value.artifacts.map((entry) => `${entry.kind}:${entry.id} · ${entry.scope} · ${entry.state ?? 'invalid'}`).join('\n') : 'No Artifacts.'
   return Object.entries(value).map(([key, entry]) => `${key}: ${typeof entry === 'object' ? JSON.stringify(entry) : entry}`).join('\n')
+}
+
+function helpFor(command) {
+  if (!command) {
+    return [
+      'Usage: hairness artifact <command> [options]',
+      '',
+      'Commands:',
+      ...Object.entries(ARTIFACT_HELP).map(([name, entry]) => `  ${name.padEnd(8)} ${entry.summary}`),
+      '',
+      'Run hairness artifact <command> --help for command details.',
+    ].join('\n')
+  }
+  const entry = ARTIFACT_HELP[command]
+  if (!entry) throw failure('usage', `Unknown artifact command ${command}.`, 2)
+  return [`Usage: ${entry.usage}`, `Effect: ${entry.effect}`, '', entry.summary].join('\n')
 }
 
 function required(value, label) { if (!value) throw failure('usage', `${label} is required.`, 2); return value }

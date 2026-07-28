@@ -1,8 +1,13 @@
 # Manage Artifacts
 
-Artifacts are durable outputs, not agent capabilities. Start uncertain or
-personal work in the Desk. Validate it against its owning kind before
-publishing it to the Home or a Target.
+Use an Artifact when work has earned an explicit, inspectable result contract.
+Clarify its kind, intended owner and destination before creating it. Keep
+uncertain or personal work in the Desk rather than inferring publication.
 
-Use `hairness artifact create`, `list`, `inspect`, `validate` and `publish`.
-Publishing preserves the Desk source and records lineage.
+Assemble the bounded payload, preserve its provenance and validate it against
+the kind owned by the producing Asset. Inspect existing Artifacts before
+creating a competing copy. Publish only after the human has chosen the Home or
+a Target as destination.
+
+Publishing preserves the Desk source and records lineage. Never turn a normal
+document, conversation or provisional result into an Artifact implicitly.

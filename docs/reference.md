@@ -165,11 +165,22 @@ Runtime stderr is never injected. Static Floor Plan orientation is unaffected.
 
 `hud show` renders dense text for humans, `hud prompt` deterministic XML for
 Ness, `hud json` a stable tool contract and `hud show --full` the full
-inventory. The prompt includes absolute Home, Desk, Binding, Artifact and
-Target Map paths; the exact Console invocation; static surface inventories;
-local Git and worktree evidence; projection and trust state; context
-footprints; five recent regular Desk files; and severity-separated attention.
-It follows no Desk symlink and executes no other Asset runtime.
+inventory. HUD v2 exposes Workspaces, Workstreams, Targets and Capabilities
+through a normalized Routable Item envelope: `kind`, `id`, `state`, `summary`,
+`when`, `tags`, `ref`, `access` and `routable`. The owning Markdown, Target
+settings, Asset manifest or Artifact metadata remains canonical.
+
+`hud activity [--since <duration|date>] [--scope <ref>] [--json]` computes at
+most 100 recent events. Supported scopes are `home`, `desk`,
+`workspace:<id>`, `workstream:<workspace>/<id>`, `target:<id>` and
+`artifact:<id>`. An unknown scope fails without searching outside the resolved
+inventory. Artifact metadata is attributed `authoritative`; Git, filesystem,
+current status and HUD freshness observations are `observed`. Activity stores
+no journal and claims no unobserved causality.
+
+The prompt includes the smallest routable inventory, Console and provider
+state, context footprint, trust, Desk Instructions and severity-separated
+attention. It follows no Desk symlink and executes no other Asset runtime.
 
 ## Runtime
 
@@ -215,9 +226,10 @@ HUD executes no other Asset runtime while composing its own output.
 
 - `hairness/onboarding`: static, user-invoked, consent-first setup;
 - `hairness/hud`: optional Wake-up and on-demand orientation through
-  `show|prompt|json`;
+  `show|prompt|json|activity`;
 - `hairness/artifacts`: generic Artifact lifecycle;
-- `hairness/targets`: declarations, named Bindings and Target Maps;
+- `hairness/targets`: routable declarations, named Bindings, deterministic
+  inspection and agent-authored Target Maps;
 - `hairness/scratch`: bundled, opt-in Scratch Artifact kind;
 - `hairness/project`: external maintenance Asset, excluded from the package.
 

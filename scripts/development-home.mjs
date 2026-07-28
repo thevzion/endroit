@@ -11,6 +11,8 @@ const localCli = join(projectRoot, 'bin', 'hairness.mjs')
 const defaultHome = resolve(projectRoot, '..', 'hairness-development-home')
 const projectAsset = '.desk/targets/hairness/main/assets/hairness/project/asset.json'
 const devCliTarget = '../.desk/targets/hairness/main/bin/hairness.mjs'
+const projectPackage = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8'))
+const developmentRuntime = `${projectPackage.name}@${projectPackage.version}`
 
 export async function ensureDevelopmentHome(options = {}) {
   const home = resolve(options.home ?? defaultHome)
@@ -23,12 +25,17 @@ export async function ensureDevelopmentHome(options = {}) {
   const config = JSON.parse(await readFile(document, 'utf8'))
   if (config.mode !== 'team') throw new Error(`${home} must be recreated as a team Home.`)
   if (!same(config.providers, ['codex', 'claude'])) throw new Error(`${home} must enable codex and claude.`)
+  if (config.runtime !== developmentRuntime) {
+    config.runtime = developmentRuntime
+    await writeFile(document, `${JSON.stringify(config, null, 2)}\n`)
+  }
 
   if (!await exists(join(home, '.desk', 'desk.json'))) {
     if (options.deskRepository) await hairness(['desk', 'clone', options.deskRepository, '--home', home])
     else await hairness(['desk', 'init', '--id', options.deskId ?? process.env.USER ?? 'local', '--home', home])
   }
 
+  await hairness(['asset', 'sync', '--all', '--home', home])
   const target = await targetState(home)
   if (!target) {
     await hairness([

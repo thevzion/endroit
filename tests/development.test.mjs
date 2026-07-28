@@ -17,8 +17,16 @@ test('the repository recipe creates and safely recreates its Development Home', 
     const created = await ensureDevelopmentHome({ home, deskId: 'alexis' })
     assert.equal(created.status, 'ready')
     const document = JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8'))
+    const projectPackage = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
     assert.equal(document.mode, 'team')
     assert.deepEqual(document.providers, ['codex', 'claude'])
+    document.runtime = '@hairness/cli@0.0.0'
+    await writeFile(join(home, 'hairness.json'), `${JSON.stringify(document, null, 2)}\n`)
+    assert.equal((await ensureDevelopmentHome({ home, deskId: 'alexis' })).status, 'ready')
+    assert.equal(
+      JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8')).runtime,
+      `${projectPackage.name}@${projectPackage.version}`,
+    )
     assert.match(await readFile(join(home, '.hairness/dev-cli'), 'utf8'), /\.\.\/\.desk\/targets\/hairness\/main\/bin\/hairness\.mjs/)
     const directHud = JSON.parse((await exec(process.execPath, [join(home, 'hairness.mjs'), 'hud', 'json'], { cwd: home })).stdout)
     assert.equal(directHud.kernel.source, 'development')

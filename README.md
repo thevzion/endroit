@@ -81,9 +81,9 @@ Hairness `0.5.0-alpha.1` ships these inspectable contracts:
 | **Home** | `hairness.json`, `HOME.md` and Git history |
 | **Desk** | Solo and team modes with collaborator-owned continuity |
 | **Assets** | Validation, installation, overrides, sync, publication and runtime trust |
-| **Artifacts** | Typed results with owner, state, source files and lineage |
-| **Bindings and Targets** | Shared declarations, local checkouts and evidence-backed Target Maps |
-| **Front Door** | Static Floor Plan, tracked Console and optional Wake-up |
+| **Artifacts** | Typed results with owner, state, source files, lineage and readable hierarchical paths |
+| **Bindings and Targets** | Routable declarations, local checkouts and agent-authored Target Maps backed by deterministic inspection |
+| **Front Door** | Static Floor Plan, Routable Items, tracked Console and optional Wake-up |
 | **Provider projections** | Deterministic Codex and Claude Instructions, Skills, Commands and hooks |
 | **Pinned execution** | Exact npm runtime recorded in the Home |
 
@@ -114,6 +114,13 @@ node ./hairness.mjs target list
 
 The Home records Target identities. The active Desk records local Bindings.
 Hairness does not install agent infrastructure in those repositories.
+
+Inspect recent evidence without creating an event log:
+
+```bash
+node ./hairness.mjs hud activity --since 2d
+node ./hairness.mjs hud activity --scope target:payments --json
+```
 
 Keep a result when it deserves a durable contract:
 

@@ -75,8 +75,16 @@ Assets live in a Home. Their `asset.json` manifests declare every public
 surface. Runtime code lives beside the manifest that owns it.
 
 HUD intentionally understands the official Artifact and Target contracts so it
-can render a coherent first-party view without executing other runtimes. Generic
-third-party HUD contributions are outside 0.5.
+can render a coherent first-party view without executing other runtimes. It
+normalizes Workspaces, Workstreams, Targets and Capabilities as Routable Items:
+`kind`, `id`, `state`, `summary`, `when`, `tags`, `ref`, `access` and
+`routable`. Their owning sources remain authoritative; HUD is only a projection.
+Generic third-party HUD contributions are outside 0.5.
+
+Activity is another HUD view. It computes recent attributed observations from
+Git, regular files and Hairness metadata without creating an event store.
+Hairness metadata is `authoritative`; Git and filesystem evidence is
+`observed`.
 
 ## Ownership
 

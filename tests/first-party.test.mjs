@@ -27,6 +27,18 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
       const time = new Date(Date.now() + index * 1000)
       await utimes(path, time, time)
     }
+    const workspace = join(home, '.desk', 'workspaces', 'demo')
+    await mkdir(workspace, { recursive: true })
+    await writeFile(join(workspace, 'workspace.md'), [
+      '---',
+      'summary: "Demo Workspace."',
+      'when: ["Working on the demo."]',
+      'tags: ["demo"]',
+      '---',
+      '',
+      '# Demo',
+      '',
+    ].join('\n'))
     const outside = join(temporary, 'outside.md')
     await writeFile(outside, 'outside\n')
     await symlink(outside, join(home, '.desk', 'outside-link'))
@@ -58,18 +70,39 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.equal(model.recentDesk.length, 5)
     assert.deepEqual(model.recentDesk.map((entry) => entry.path), ['note-6.md', 'note-5.md', 'note-4.md', 'note-3.md', 'note-2.md'])
     assert.equal(model.recentDesk.some((entry) => entry.path === 'outside-link'), false)
+    assert.deepEqual(
+      model.items.workspaces.map(({ id, routable }) => [id, routable]),
+      [['demo', false]],
+    )
+    assert.ok(model.items.capabilities.some(({ id }) => id === 'hairness-home'))
     assert.deepEqual(Object.keys(model.attention), ['blocking', 'warning', 'advisory'])
 
     const prompt = captureIo()
     await dispatchRuntime(home, 'hud', ['prompt'], prompt.io)
-    assert.match(prompt.stdout(), /^<hairness-hud version="1" status="ready" generated-at="[^"]+" event="command">/)
+    assert.match(prompt.stdout(), /^<hairness-hud version="2" status="ready" generated-at="[^"]+" event="command">/)
     assert.match(prompt.stdout(), new RegExp(`<home name="home" mode="solo" root="${escapeRegex(model.home.root)}" providers="codex,claude"/>`))
     assert.match(prompt.stdout(), /<kernel runtime="@hairness\/cli@0\.5\.0-alpha\.1" source="npm" invoke="node \.\/hairness\.mjs"\/>/)
-    assert.match(prompt.stdout(), /<asset id="hairness\/hud" version="0\.5\.0-alpha\.0" scope="home" overridden="false" runtime="hud"\/>/)
-    assert.match(prompt.stdout(), /<runtime owner="hairness\/targets" namespace="target" scope="home">/)
+    assert.match(prompt.stdout(), /<item id="demo" state="local" routable="false" access="model,user" summary="Demo Workspace\." tags="demo"/)
+    assert.match(prompt.stdout(), /<runtime namespace="target" commands="list,discover,doctor,add,bind,clone,unbind,remove,inspect"\/>/)
     assert.match(prompt.stdout(), /<instruction owner="hairness\/desk" id="desk" source="DESK\.md">/)
     assert.match(prompt.stdout(), /<advisory>\s+<item subject="home" code="home-dirty">/)
+    assert.doesNotMatch(prompt.stdout(), /<assets>|<skills>|<commands>|<recent-desk>/)
     assert.doesNotMatch(prompt.stdout(), /outside-link/)
+
+    const activity = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hud', ['activity', '--since', '1d', '--scope', 'workspace:demo', '--json'], activity.io), 0)
+    const activityModel = JSON.parse(activity.stdout())
+    assert.equal(activityModel.apiVersion, 'hairness.dev/hud/activity/v1alpha1')
+    assert.equal(activityModel.scope, 'workspace:demo')
+    assert.ok(activityModel.events.some(({ source }) => source.ref.endsWith('workspace.md')))
+    assert.equal(activityModel.events.some(({ source }) => source.ref.includes('outside-link')), false)
+    const unknown = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hud', ['activity', '--scope', 'workspace:unknown'], unknown.io), 5)
+    assert.match(unknown.stderr(), /activity_scope_unknown/)
+    const invalidSince = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hud', ['activity', '--since', `${'9'.repeat(400)}w`], invalidSince.io), 5)
+    assert.match(invalidSince.stderr(), /activity_since_invalid/)
+
     const human = captureIo()
     await dispatchRuntime(home, 'hud', ['show'], human.io)
     assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.5.0-alpha.1 · npm · ready')
@@ -108,6 +141,8 @@ test('Artifacts import directories atomically and publish while preserving the D
     const create = captureIo()
     assert.equal(await dispatchRuntime(home, 'artifact', ['create', 'hairness/scratch:scratch', 'demo', '--from', source, '--json'], create.io), 0)
     const created = JSON.parse(create.stdout())
+    assert.equal(created.path, '.desk/artifacts/hairness/scratch/scratch/demo')
+    assert.equal(created.path.includes('hairness-scratch-scratch'), false)
     const path = join(home, created.path, 'artifact.md')
     assert.match(await readFile(path, 'utf8'), /kind: "hairness\/scratch:scratch"/)
     assert.equal(await readFile(join(home, created.path, 'decision.md'), 'utf8'), 'Choose boring primitives.\n')
@@ -122,7 +157,7 @@ test('Artifacts import directories atomically and publish while preserving the D
   }
 })
 
-test('Targets support named Bindings and map without writing into the Target', async () => {
+test('Targets separate deterministic inspection from agent-authored Map Artifacts', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'hairness-targets-'))
   try {
     const home = join(temporary, 'home')
@@ -141,18 +176,43 @@ test('Targets support named Bindings and map without writing into the Target', a
     const bound = captureIo()
     assert.equal(await dispatchRuntime(home, 'target', ['bind', 'demo', second, '--binding', 'experiment'], bound.io), 0, bound.stderr())
     const ambiguous = captureIo()
-    assert.equal(await dispatchRuntime(home, 'target', ['map', 'demo'], ambiguous.io), 4)
+    assert.equal(await dispatchRuntime(home, 'target', ['inspect', 'demo'], ambiguous.io), 4)
     assert.match(ambiguous.stderr(), /target_binding_ambiguous/)
     const before = await tree(target)
-    const mappedOutput = captureIo()
-    assert.equal(await dispatchRuntime(home, 'target', ['map', 'demo', '--binding', 'main', '--id', 'demo-main', '--json'], mappedOutput.io), 0, mappedOutput.stderr())
+    const inspectedOutput = captureIo()
+    assert.equal(await dispatchRuntime(home, 'target', ['inspect', 'demo', '--binding', 'main', '--json'], inspectedOutput.io), 0, inspectedOutput.stderr())
     assert.deepEqual(await tree(target), before)
+    const inspected = JSON.parse(inspectedOutput.stdout())
+    assert.equal(inspected.status, 'inspected')
+    assert.deepEqual(inspected.files, ['README.md', 'package.json'])
+    assert.deepEqual(inspected.manifests, ['package.json'])
+    assert.deepEqual(inspected.tests, [])
+
+    const mappedOutput = captureIo()
+    assert.equal(await dispatchRuntime(home, 'artifact', [
+      'create',
+      'hairness/targets:target-map',
+      'demo-main',
+      '--owner',
+      'desk',
+      '--state',
+      'current',
+      '--created-by',
+      'hairness/targets',
+      '--derived-from',
+      `target:demo@${inspected.head}`,
+      '--target',
+      'demo',
+      '--json',
+    ], mappedOutput.io), 0, mappedOutput.stderr())
     const mapped = JSON.parse(mappedOutput.stdout())
-    const map = join(home, mapped.artifact, 'artifact.md')
+    const map = join(home, mapped.path, 'artifact.md')
     assert.match(await readFile(map, 'utf8'), /derivedFrom: "target:demo@[a-f0-9]{40}"/)
-    for (const name of ['STACK.md', 'INTEGRATIONS.md', 'ARCHITECTURE.md', 'STRUCTURE.md', 'CONVENTIONS.md', 'TESTING.md', 'CONCERNS.md']) {
-      assert.equal((await lstat(join(home, mapped.artifact, name))).isFile(), true)
+    for (const name of ['EVIDENCE.json', 'STACK.md', 'INTEGRATIONS.md', 'ARCHITECTURE.md', 'STRUCTURE.md', 'CONVENTIONS.md', 'TESTING.md', 'CONCERNS.md']) {
+      assert.equal((await lstat(join(home, mapped.path, name))).isFile(), true)
     }
+    assert.equal(await dispatchRuntime(home, 'artifact', ['validate', mapped.path], captureIo().io), 0)
+    assert.deepEqual(await tree(target), before)
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

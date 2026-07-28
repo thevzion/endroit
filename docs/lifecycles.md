@@ -66,6 +66,11 @@ An Artifact kind is declared by an Asset. The kind owns allowed owners, states,
 schema and template. `--from <directory>` imports a tree atomically after
 rejecting symbolic links and the reserved `artifact.md`.
 
+Home and Desk Artifact paths preserve the kind hierarchy:
+`artifacts/<namespace>/<asset>/<kind>/<id>`. A kind such as
+`hairness/scratch:scratch` is never flattened to
+`hairness-scratch-scratch`.
+
 Publishing preserves content, records lineage and never removes the Desk
 source. Transformations create a new Artifact with `--derived-from`.
 
@@ -82,13 +87,18 @@ declare remote identity
   ├─ clone → managed Binding
   └─ bind existing checkout → external Binding
           ↓
-        map → Desk Target Map Artifact
+      deterministic inspect
+          ↓
+    agent interpretation
+          ↓
+    Desk Target Map Artifact
 ```
 
 A Target accepts multiple named Bindings. A unique Binding is inferred;
-ambiguity requires `--binding`. Mapping reads tracked files and local Git
-evidence, caps inspection at 5,000 paths, rejects secret-like output and never
-writes into the Target.
+ambiguity requires `--binding`. `target inspect` reads tracked paths, manifests,
+test names and local Git evidence, caps inspection at 5,000 paths and never
+writes into the Target. The Target Map Capability then guides the agent to
+interpret the bounded evidence and create one inspectable Artifact per Target.
 
 ## Front Door
 
@@ -121,6 +131,9 @@ The first-party default is `hairness/hud:prompt`. HUD reads local evidence and
 the Resolved Home, includes `DESK.md` and Desk Asset Instructions, then emits
 XML for Ness. It executes no other Asset runtime. Its optional prompt budget is
 owned by `settings["hairness/hud"].promptBytes`.
+
+`hud activity` computes recent attributed observations on demand. It stores no
+event log and does not run during `build`, `doctor` or Home resolution.
 
 ## Hairness development
 

@@ -7,37 +7,290 @@ import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
 
+const HUD_HELP = {
+  show: {
+    usage: 'hairness hud show [--full]',
+    effect: 'read-only',
+    summary: 'Render the human HUD; --full includes its complete inventory.',
+  },
+  prompt: {
+    usage: 'hairness hud prompt',
+    effect: 'read-only',
+    summary: 'Render the bounded agent-facing HUD selected by the Front Door.',
+  },
+  json: {
+    usage: 'hairness hud json',
+    effect: 'read-only',
+    summary: 'Render the stable machine-readable HUD.',
+  },
+  activity: {
+    usage: 'hairness hud activity [--since <duration|date>] [--scope <ref>] [--json]',
+    effect: 'read-only',
+    summary: 'Show recent sourced observations without persisting an event log.',
+  },
+}
+
 try {
   const input = JSON.parse(await stdin())
-  const model = await hud(input)
   const [command, ...args] = input.argv
-  if (command === 'json' && args.length === 0) process.stdout.write(`${JSON.stringify(model, null, 2)}\n`)
-  else if (command === 'prompt' && args.length === 0) {
-    const prompt = await xml(model, input)
-    const budget = input.resolvedHome.home.settings?.['hairness/hud']?.promptBytes
-    if (budget !== undefined && Buffer.byteLength(prompt) > budget) {
-      throw failure('hud_budget_exceeded', `HUD prompt is ${Buffer.byteLength(prompt)} bytes, over the ${budget} byte budget.`)
-    }
-    process.stdout.write(`${prompt}\n`)
-  } else if (command === 'show' && args.every((value) => value === '--full')) {
-    process.stdout.write(`${human(model, args.includes('--full'))}\n`)
-  } else throw failure('usage', 'Use hud show [--full], hud prompt or hud json.', 2)
+  if (command === '--help' && args.length === 0) {
+    process.stdout.write(`${helpFor()}\n`)
+  } else if (args.length === 1 && args[0] === '--help') {
+    process.stdout.write(`${helpFor(command)}\n`)
+  } else if (command === 'activity') {
+    const options = activityOptions(args)
+    const model = await activity(input, options)
+    process.stdout.write(options.json ? `${JSON.stringify(model, null, 2)}\n` : `${activityHuman(model)}\n`)
+  } else {
+    const model = await hud(input)
+    if (command === 'json' && args.length === 0) process.stdout.write(`${JSON.stringify(model, null, 2)}\n`)
+    else if (command === 'prompt' && args.length === 0) {
+      const prompt = await xml(model, input)
+      const budget = input.resolvedHome.home.settings?.['hairness/hud']?.promptBytes
+      if (budget !== undefined && Buffer.byteLength(prompt) > budget) {
+        throw failure('hud_budget_exceeded', `HUD prompt is ${Buffer.byteLength(prompt)} bytes, over the ${budget} byte budget.`)
+      }
+      process.stdout.write(`${prompt}\n`)
+    } else if (command === 'show' && args.every((value) => value === '--full')) {
+      process.stdout.write(`${human(model, args.includes('--full'))}\n`)
+    } else throw failure('usage', 'Use hud show [--full], hud prompt, hud json or hud activity.', 2)
+  }
 } catch (error) {
   process.stderr.write(`${error.code ?? 'hud_failed'}: ${error.message}\n`)
   process.exitCode = error.exitCode ?? 4
 }
 
+function helpFor(command) {
+  if (!command) {
+    return [
+      'Usage: hairness hud <command> [options]',
+      '',
+      'Commands:',
+      ...Object.entries(HUD_HELP).map(([name, entry]) => `  ${name.padEnd(8)} ${entry.summary}`),
+      '',
+      'Run hairness hud <command> --help for command details.',
+    ].join('\n')
+  }
+  const entry = HUD_HELP[command]
+  if (!entry) throw failure('usage', `Unknown hud command ${command}.`, 2)
+  return [`Usage: ${entry.usage}`, `Effect: ${entry.effect}`, '', entry.summary].join('\n')
+}
+
+function activityOptions(args) {
+  const options = { since: '1d', scope: null, json: false }
+  for (let index = 0; index < args.length; index += 1) {
+    const value = args[index]
+    if (value === '--json') options.json = true
+    else if (value === '--since' && args[index + 1]) options.since = args[++index]
+    else if (value === '--scope' && args[index + 1]) options.scope = args[++index]
+    else throw failure('usage', 'Use hud activity [--since <duration|date>] [--scope <ref>] [--json].', 2)
+  }
+  return options
+}
+
+async function activity(input, options) {
+  const generatedAt = new Date().toISOString()
+  const since = activitySince(options.since, generatedAt)
+  const model = await hud(input)
+  const scope = resolveActivityScope(options.scope, model)
+  const events = []
+
+  if (!scope || scope.kind === 'home') {
+    events.push(...await gitActivity(input.homeRoot, since, 'home'))
+    if (!model.home.git.clean) events.push(currentGitActivity('home', model.home.git, generatedAt))
+  }
+  if ((!scope || scope.kind === 'desk') && input.deskRoot) {
+    if (scope) {
+      const root = model.desk.git?.root ?? input.deskRoot
+      const pathspec = root === model.home.git?.root ? relative(root, input.deskRoot) : null
+      events.push(...await gitActivity(root, since, 'desk', pathspec))
+    }
+    if (scope && !model.desk.git.clean) events.push(currentGitActivity('desk', model.desk.git, generatedAt))
+  }
+
+  const workspaces = scope?.kind === 'workspace'
+    ? model.items.workspaces.filter((entry) => entry.id === scope.id)
+    : scope ? [] : model.items.workspaces
+  for (const workspace of workspaces) {
+    events.push(...await fileActivity(join(input.deskRoot, 'workspaces', workspace.id), since, workspace.ref, input.homeRoot))
+  }
+
+  const workstreams = scope?.kind === 'workstream'
+    ? model.items.workstreams.filter((entry) => entry.id === scope.id)
+    : []
+  for (const workstream of workstreams) {
+    const [workspace, id] = workstream.id.split('/')
+    events.push(...await fileActivity(join(input.deskRoot, 'workspaces', workspace, 'workstreams', id), since, workstream.ref, input.homeRoot))
+  }
+
+  const targets = scope?.kind === 'target'
+    ? model.targets.filter((entry) => entry.id === scope.id)
+    : scope ? [] : model.targets
+  for (const target of targets) {
+    for (const binding of target.bindings) {
+      const subject = `target:${target.id}/${binding.id}`
+      if (binding.root) events.push(...await gitActivity(binding.root, since, subject))
+      if (binding.git?.available && !binding.git.clean) events.push(currentGitActivity(subject, binding.git, generatedAt))
+    }
+    if (target.map.state !== 'current') {
+      events.push({
+        occurredAt: generatedAt,
+        subject: `target:${target.id}`,
+        verb: 'observed',
+        summary: `Target Map is ${target.map.state}.`,
+        confidence: 'observed',
+        source: { kind: 'hud', ref: target.map.path },
+      })
+    }
+  }
+
+  const artifacts = model.artifacts.items.filter((artifact) => {
+    if (!scope) return true
+    if (scope.kind === 'artifact') return artifact.id === scope.id
+    if (scope.kind === 'desk' || scope.kind === 'home') return artifact.scope === scope.kind
+    if (scope.kind === 'target') return artifact.targets?.includes(scope.id)
+    return false
+  })
+  for (const artifact of artifacts) {
+    const timestamp = Date.parse(artifact.createdAt)
+    if (Number.isNaN(timestamp)) continue
+    const occurredAt = new Date(timestamp).toISOString()
+    if (occurredAt < since) continue
+    events.push({
+      occurredAt,
+      subject: `artifact:${artifact.id}`,
+      verb: 'created',
+      summary: `${artifact.kind} entered ${artifact.state ?? 'unknown'} state in ${artifact.scope}.`,
+      confidence: 'authoritative',
+      source: { kind: 'artifact-metadata', ref: relative(input.homeRoot, artifact.path) },
+    })
+  }
+
+  const ordered = events
+    .filter((entry) => entry.occurredAt >= since)
+    .sort((left, right) => right.occurredAt.localeCompare(left.occurredAt) || left.subject.localeCompare(right.subject))
+  return {
+    apiVersion: 'hairness.dev/hud/activity/v1alpha1',
+    generatedAt,
+    since,
+    scope: options.scope,
+    truncated: ordered.length > 100,
+    events: ordered.slice(0, 100),
+  }
+}
+
+function activitySince(value, now) {
+  const duration = String(value).match(/^(\d+)(m|h|d|w)$/)
+  if (duration) {
+    const units = { m: 60_000, h: 3_600_000, d: 86_400_000, w: 604_800_000 }
+    const timestamp = Date.parse(now) - Number(duration[1]) * units[duration[2]]
+    if (Number.isFinite(timestamp)) return new Date(timestamp).toISOString()
+  }
+  const timestamp = Date.parse(value)
+  if (!Number.isNaN(timestamp)) return new Date(timestamp).toISOString()
+  throw failure('activity_since_invalid', `Invalid Activity duration or date: ${value}.`)
+}
+
+function resolveActivityScope(value, model) {
+  if (!value) return null
+  if (value === 'home' || value === 'desk') return { kind: value }
+  const [kind, id] = value.split(/:(.+)/)
+  const known = {
+    workspace: model.items.workspaces,
+    workstream: model.items.workstreams,
+    target: model.items.targets,
+    artifact: model.artifacts.items,
+  }
+  if (!known[kind] || !id || !known[kind].some((entry) => entry.id === id)) {
+    throw failure('activity_scope_unknown', `Unknown Activity scope: ${value}.`)
+  }
+  return { kind, id }
+}
+
+async function gitActivity(root, since, subject, pathspec = null) {
+  try {
+    const args = ['log', `--since=${since}`, '--format=%H%x00%cI%x00%s']
+    if (pathspec && pathspec !== '.') args.push('--', pathspec)
+    const { stdout } = await exec('git', args, { cwd: root, maxBuffer: 8 * 1024 * 1024 })
+    return stdout.trim().split('\n').filter(Boolean).map((line) => {
+      const [commit, occurredAt, summary] = line.split('\0')
+      return {
+        occurredAt,
+        subject,
+        verb: 'committed',
+        summary,
+        confidence: 'observed',
+        source: { kind: 'git', ref: commit },
+      }
+    })
+  } catch {
+    return []
+  }
+}
+
+function currentGitActivity(subject, git, observedAt) {
+  return {
+    occurredAt: observedAt,
+    subject,
+    verb: 'observed',
+    summary: `${git.changes} uncommitted change(s), ${git.conflicts} conflict(s).`,
+    confidence: 'observed',
+    source: { kind: 'git-status', ref: git.root },
+  }
+}
+
+async function fileActivity(root, since, subject, homeRoot) {
+  const events = []
+  async function visit(directory) {
+    for (const entry of await safeReadDir(directory)) {
+      const path = join(directory, entry.name)
+      const info = await lstat(path)
+      if (info.isSymbolicLink()) continue
+      if (info.isDirectory()) await visit(path)
+      else if (info.isFile() && info.mtime.toISOString() >= since) {
+        events.push({
+          occurredAt: info.mtime.toISOString(),
+          subject,
+          verb: 'modified',
+          summary: `Updated ${relative(root, path)}.`,
+          confidence: 'observed',
+          source: { kind: 'filesystem', ref: relative(homeRoot, path) },
+        })
+      }
+    }
+  }
+  await visit(root)
+  return events
+}
+
+function activityHuman(model) {
+  const lines = [
+    `ACTIVITY    since ${model.since} · scope:${model.scope ?? 'all'} · ${model.events.length}${model.truncated ? '+' : ''} event(s)`,
+  ]
+  for (const event of model.events) {
+    lines.push(`  ${event.occurredAt} · ${event.confidence} · ${event.verb} · ${event.subject} · ${event.summary}`)
+  }
+  return lines.join('\n')
+}
+
 async function hud(input) {
   const { resolvedHome: plan, homeRoot, deskRoot } = input
   const preferences = plan.desk?.settings?.['hairness/onboarding'] ?? {}
-  const [homeGit, deskGit, artifacts, recentDesk, projections] = await Promise.all([
+  const [homeGit, deskGit, artifacts, recentDesk, projections, orientation] = await Promise.all([
     gitProbe(homeRoot),
     deskRoot ? gitProbe(deskRoot) : null,
     scanArtifacts(homeRoot, deskRoot),
     deskRoot ? recentFiles(deskRoot) : [],
     projectionProbe(homeRoot, plan.home.providers),
+    scanOrientation(homeRoot, deskRoot),
   ])
   const targets = await scanTargets(plan.home.settings?.['hairness/targets']?.targets ?? [], deskRoot, artifacts)
+  const items = {
+    workspaces: orientation.workspaces,
+    workstreams: orientation.workstreams,
+    targets: targets.map(targetItem),
+    capabilities: capabilityItems(plan),
+  }
   const trust = {
     runtimes: (input.runtimeTrust ?? []).sort((left, right) => left.owner.localeCompare(right.owner)),
   }
@@ -56,6 +309,8 @@ async function hud(input) {
     if (projection.status !== 'fresh') attention.push(item('warning', `provider:${projection.id}`, 'projection-stale', `${projection.id} projections are ${projection.status}.`))
   }
   for (const target of targets) {
+    const metadataError = orientationError(target)
+    if (metadataError) attention.push(item('warning', `target:${target.id}`, 'orientation-invalid', metadataError))
     if (!target.bindings.length) attention.push(item('warning', `target:${target.id}`, 'target-unbound', `${target.id} has no local Binding.`))
     if (target.map.state === 'missing') attention.push(item('advisory', `target:${target.id}`, 'target-map-missing', `${target.id} has no Target Map.`))
     if (target.map.state === 'stale') attention.push(item('advisory', `target:${target.id}`, 'target-map-stale', `${target.id} Target Map is stale.`))
@@ -68,6 +323,9 @@ async function hud(input) {
   for (const runtime of trust.runtimes.filter((entry) => entry.trust === 'pending')) {
     attention.push(item('blocking', `runtime:${runtime.owner}`, 'runtime-pending', `${runtime.owner} requires approval before execution.`))
   }
+  for (const entry of [...items.workspaces, ...items.workstreams]) {
+    if (entry.metadataError) attention.push(item('warning', `${entry.kind}:${entry.id}`, 'orientation-invalid', entry.metadataError))
+  }
 
   const groupedAttention = {
     blocking: attention.filter((entry) => entry.severity === 'blocking').map(withoutSeverity),
@@ -78,7 +336,7 @@ async function hud(input) {
     ? 'blocked'
     : groupedAttention.warning.length ? 'attention' : 'ready'
   return {
-    apiVersion: 'hairness.dev/hud/v1alpha1',
+    apiVersion: 'hairness.dev/hud/v2alpha1',
     generatedAt: new Date().toISOString(),
     status: severity,
     event: input.invocation?.kind ?? 'command',
@@ -117,10 +375,129 @@ async function hud(input) {
       promptBudgetBytes: plan.home.settings?.['hairness/hud']?.promptBytes ?? null,
     },
     targets,
+    items,
     artifacts,
     recentDesk,
     trust,
     attention: groupedAttention,
+  }
+}
+
+async function scanOrientation(homeRoot, deskRoot) {
+  if (!deskRoot) return { workspaces: [], workstreams: [] }
+  const home = await readFile(join(homeRoot, 'HOME.md'), 'utf8')
+  const registry = new Set([...(home.match(/## Active Workspaces([\s\S]*?)(?=\n## )/)?.[1] ?? '')
+    .matchAll(/^- `([^`]+)`/gm)]
+    .map((match) => match[1]))
+  const workspaces = []
+  const workstreams = []
+  const root = join(deskRoot, 'workspaces')
+  for (const entry of await safeReadDir(root)) {
+    if (!entry.isDirectory() || entry.isSymbolicLink()) continue
+    const path = join(root, entry.name, 'workspace.md')
+    const document = await orientationDocument(path)
+    const active = registry.has(entry.name)
+    workspaces.push({
+      kind: 'workspace',
+      id: entry.name,
+      state: active ? 'active' : 'local',
+      ...document.metadata,
+      ref: `workspace:${entry.name}`,
+      path: relative(homeRoot, path),
+      access: ['model', 'user'],
+      routable: active && !document.error,
+      ...(document.error ? { metadataError: document.error } : {}),
+    })
+    for (const stream of await safeReadDir(join(root, entry.name, 'workstreams'))) {
+      if (!stream.isDirectory() || stream.isSymbolicLink()) continue
+      const streamPath = join(root, entry.name, 'workstreams', stream.name, 'workstream.md')
+      const streamDocument = await orientationDocument(streamPath)
+      const content = await readFile(streamPath, 'utf8').catch(() => '')
+      const state = /^## Status\s*\n+\s*`active`/m.test(content) ? 'active' : 'local'
+      workstreams.push({
+        kind: 'workstream',
+        id: `${entry.name}/${stream.name}`,
+        workspace: entry.name,
+        state,
+        ...streamDocument.metadata,
+        ref: `workstream:${entry.name}/${stream.name}`,
+        path: relative(homeRoot, streamPath),
+        access: ['model', 'user'],
+        routable: active && state === 'active' && !streamDocument.error,
+        ...(streamDocument.error ? { metadataError: streamDocument.error } : {}),
+      })
+    }
+  }
+  return { workspaces, workstreams }
+}
+
+async function orientationDocument(path) {
+  try {
+    const metadata = frontmatter(await readFile(path, 'utf8'))
+    const error = orientationError(metadata)
+    return { metadata, ...(error ? { error } : {}) }
+  } catch (error) {
+    return { metadata: { summary: null, when: [], tags: [] }, error: error.message }
+  }
+}
+
+function orientationError(value) {
+  if (typeof value.summary !== 'string' || !value.summary.trim()) return 'summary must be a non-empty string.'
+  if (!Array.isArray(value.when) || value.when.length < 1 || value.when.length > 3 || value.when.some((entry) => typeof entry !== 'string' || !entry.trim())) {
+    return 'when must contain one to three non-empty situations.'
+  }
+  if (!Array.isArray(value.tags) || !value.tags.length || value.tags.some((entry) => typeof entry !== 'string' || !/^[a-z0-9][a-z0-9._-]*$/.test(entry))) {
+    return 'tags must contain stable identifiers.'
+  }
+  return null
+}
+
+function capabilityItems(plan) {
+  return plan.capabilities.flatMap((capability) => {
+    const skills = plan.skills.filter((entry) => entry.capability === capability.id)
+    const commands = plan.commands.filter((entry) => entry.capability === capability.id)
+    if (!skills.length && !commands.length) return []
+    const access = [...(skills.length ? ['model'] : []), ...(commands.length ? ['user'] : [])]
+    return [{
+      kind: 'capability',
+      id: skills[0]?.projectedId ?? commands[0].projectedId,
+      state: 'available',
+      summary: capability.description,
+      when: [...new Set(skills.map((entry) => entry.description))].slice(0, 3),
+      tags: [...new Set([...capability.owner.split('/'), capability.localId])],
+      ref: `capability:${capability.id}`,
+      path: capability.path,
+      access,
+      routable: access.length > 0,
+      entrypoint: {
+        ...(skills[0] ? { model: skills[0].projectedId } : {}),
+        ...(commands[0] ? { user: commands[0].projectedId } : {}),
+      },
+    }]
+  })
+}
+
+function targetItem(target) {
+  const metadataError = orientationError(target)
+  return {
+    kind: 'target',
+    id: target.id,
+    state: target.state,
+    summary: target.summary ?? null,
+    when: target.when ?? [],
+    tags: target.tags ?? [],
+    ref: `target:${target.id}`,
+    access: ['model', 'user'],
+    routable: !metadataError && target.bindings.some((binding) => binding.git?.available),
+    entrypoint: { model: 'hairness-target-map', user: 'hairness-target-map' },
+    bindings: target.bindings.map((binding) => ({
+      id: binding.id,
+      state: binding.git?.available ? binding.git.clean ? 'clean' : 'dirty' : 'broken',
+      root: binding.root,
+      head: binding.git?.head ?? null,
+    })),
+    map: target.map,
+    ...(metadataError ? { metadataError } : {}),
   }
 }
 
@@ -329,7 +706,8 @@ function human(model, full) {
     `KERNEL      ${model.kernel.invoke}`,
     `HOME GIT    ${homeGit}`,
     `DESK        ${model.desk.configured ? `${model.desk.id} · ${model.desk.root} · ${deskGit}` : 'missing'} · recent:${model.recentDesk.length}`,
-    `SURFACES    ${model.surfaces.assets.length} assets · ${model.surfaces.skills.length} skills · ${model.surfaces.commands.length} commands · ${model.surfaces.runtimes.map((entry) => entry.namespace).join(',')}`,
+    `ITEMS       ${model.items.workspaces.length} workspaces · ${model.items.workstreams.length} workstreams · ${model.items.targets.length} targets · ${model.items.capabilities.length} capabilities`,
+    `SURFACES    ${model.surfaces.assets.length} assets · ${model.surfaces.runtimes.map((entry) => entry.namespace).join(',')}`,
     `ARTIFACTS   ${model.artifacts.count} · ${Object.entries(model.artifacts.counts).map(([key, value]) => `${key}:${value}`).join(' ') || 'none'}`,
     `TARGETS     ${model.targets.length} declared · ${model.targets.reduce((sum, target) => sum + target.bindings.length, 0)} bindings`,
   ]
@@ -342,6 +720,7 @@ function human(model, full) {
   const attention = Object.entries(model.attention).flatMap(([severity, entries]) => entries.map((entry) => ({ severity, ...entry })))
   if (attention.length) lines.push('ATTENTION', ...attention.map((entry) => `  ${entry.severity} · ${entry.code} · ${entry.message}`))
   if (full) {
+    lines.push('ROUTABLE ITEMS', ...Object.values(model.items).flat().map((entry) => `  ${entry.kind}:${entry.id} · ${entry.state} · ${entry.access.join(',')} · routable:${entry.routable} · ${entry.ref}`))
     lines.push('PROJECTIONS', ...model.projections.map((entry) => `  ${entry.id} · ${entry.status} · ${entry.instruction} · ${entry.hook}`))
     lines.push('ASSETS', ...model.surfaces.assets.map((asset) => `  ${asset.id}@${asset.version} · ${asset.scope}${asset.overridden ? ' · override' : ''}${asset.runtime ? ` · ${asset.runtime.namespace}` : ''}`))
     lines.push('SKILLS', ...model.surfaces.skills.map((entry) => `  ${entry.projectedId} · ${entry.owner}`))
@@ -360,7 +739,7 @@ function gitSummary(git) {
 async function xml(model, input) {
   const deskInstructions = await resolvedDeskInstructions(input.resolvedHome)
   const lines = [
-    `<hairness-hud version="1" status="${model.status}" generated-at="${model.generatedAt}" event="${escape(model.event)}">`,
+    `<hairness-hud version="2" status="${model.status}" generated-at="${model.generatedAt}" event="${escape(model.event)}">`,
     `  <home name="${escape(model.home.name)}" mode="${model.home.mode}" root="${escape(model.home.root)}" providers="${model.home.providers.join(',')}"/>`,
     `  <kernel runtime="${escape(model.kernel.runtime)}" source="${model.kernel.source}" invoke="${escape(model.kernel.invoke)}"/>`,
   ]
@@ -369,56 +748,26 @@ async function xml(model, input) {
   }
   lines.push(`  <desk configured="${model.desk.configured}"${model.desk.configured ? ` id="${escape(model.desk.id)}" root="${escape(model.desk.root)}"` : ''}/>`)
   lines.push(`  ${gitXml('home-git', model.home.git)}`)
-  if (model.desk.configured) lines.push(`  ${gitXml('desk-git', model.desk.git)}`)
-  lines.push('  <projections>')
+  if (model.desk.configured) lines.push(model.desk.git?.root === model.home.git?.root ? '  <desk-git same-as="home-git"/>' : `  ${gitXml('desk-git', model.desk.git)}`)
+  lines.push('  <routing priority="explicit-human,unique-semantic-match,ask-if-ambiguous">The Wake-up does not know the user message. Use these items to infer later; do not resolve a route now.</routing>')
+  lines.push('  <providers>')
   for (const projection of model.projections) {
     lines.push(`    <provider id="${projection.id}" status="${projection.status}" instruction="${escape(projection.instruction)}" hook="${escape(projection.hook)}"/>`)
   }
-  lines.push('  </projections>', '  <surfaces>', '    <assets>')
-  for (const asset of model.surfaces.assets) {
-    lines.push(`      <asset id="${escape(asset.id)}" version="${escape(asset.version)}" scope="${asset.scope}" overridden="${asset.overridden}"${asset.runtime ? ` runtime="${escape(asset.runtime.namespace)}"` : ''}/>`)
+  lines.push('  </providers>', '  <items>')
+  for (const group of ['workspaces', 'workstreams', 'targets', 'capabilities']) {
+    lines.push(`    <${group}>`)
+    for (const entry of model.items[group]) lines.push(`      <item ${itemAttributes(entry)}/>`)
+    lines.push(`    </${group}>`)
   }
-  lines.push('    </assets>', '    <skills>')
-  for (const skill of model.surfaces.skills) {
-    lines.push(`      <skill id="${escape(skill.projectedId)}" owner="${escape(skill.owner)}" invocation="${skill.invocation}" description="${escape(skill.description)}"/>`)
-  }
-  lines.push('    </skills>', '    <commands>')
-  for (const command of model.surfaces.commands) {
-    lines.push(`      <command id="${escape(command.projectedId)}" owner="${escape(command.owner)}" invocation="${command.invocation}" description="${escape(command.description)}"/>`)
-  }
-  lines.push('    </commands>', '    <runtimes>')
+  lines.push('  </items>', '  <runtimes>')
   for (const runtime of model.surfaces.runtimes) {
-    lines.push(`      <runtime owner="${escape(runtime.owner)}" namespace="${escape(runtime.namespace)}" scope="${runtime.scope}">`)
-    for (const command of runtime.commands) lines.push(`        <command name="${escape(command.name)}" description="${escape(command.description)}"/>`)
-    lines.push('      </runtime>')
+    lines.push(`    <runtime namespace="${escape(runtime.namespace)}" commands="${escape(runtime.commands.map((command) => command.name).join(','))}"/>`)
   }
-  lines.push('    </runtimes>', '  </surfaces>', '  <targets>')
-  for (const target of model.targets) {
-    lines.push(`    <target id="${escape(target.id)}" state="${target.state}" repository="${escape(target.repository)}">`)
-    for (const binding of target.bindings) {
-      lines.push(`      <binding id="${escape(binding.id)}" type="${binding.type}" mount="${escape(binding.mount)}"${binding.root ? ` root="${escape(binding.root)}"` : ''} usable="${binding.git.available}">`)
-      if (binding.git.available) {
-        lines.push(`        ${gitXml('git', binding.git)}`, '        <worktrees>')
-        for (const worktree of binding.git.worktrees) {
-          lines.push(`          <worktree path="${escape(worktree.path)}"${worktree.branch ? ` branch="${escape(worktree.branch)}"` : ''}${worktree.head ? ` head="${worktree.head}"` : ''} clean="${worktree.clean}" current="${worktree.current}"/>`)
-        }
-        lines.push('        </worktrees>')
-      }
-      lines.push('      </binding>')
-    }
-    lines.push(`      <map state="${target.map.state}" count="${target.map.count}"${target.map.path ? ` path="${escape(target.map.path)}"` : ''}${target.map.derivedFrom ? ` derived-from="${escape(target.map.derivedFrom)}"` : ''}${target.map.generatedAt ? ` generated-at="${escape(target.map.generatedAt)}"` : ''} route="${escape(target.map.route)}"/>`)
-    lines.push('    </target>')
-  }
-  lines.push('  </targets>', `  <artifacts count="${model.artifacts.count}">`)
-  for (const artifact of model.artifacts.items) {
-    lines.push(`    <artifact${artifact.id ? ` id="${escape(artifact.id)}"` : ''}${artifact.kind ? ` kind="${escape(artifact.kind)}"` : ''} scope="${artifact.scope}"${artifact.owner ? ` owner="${escape(artifact.owner)}"` : ''}${artifact.state ? ` state="${escape(artifact.state)}"` : ''} path="${escape(artifact.path)}"/>`)
-  }
-  lines.push('  </artifacts>', `  <context instructions-bytes="${model.context.instructionBytes}" desk-instructions-bytes="${model.context.deskInstructionBytes}" model-descriptions-bytes="${model.context.modelDescriptionBytes}"${model.context.promptBudgetBytes === null ? '' : ` hud-budget-bytes="${model.context.promptBudgetBytes}"`}/>`)
+  lines.push('  </runtimes>', `  <context instructions-bytes="${model.context.instructionBytes}" desk-instructions-bytes="${model.context.deskInstructionBytes}" model-descriptions-bytes="${model.context.modelDescriptionBytes}"${model.context.promptBudgetBytes === null ? '' : ` hud-budget-bytes="${model.context.promptBudgetBytes}"`}/>`)
   lines.push(`  <trust bundled="${model.trust.bundled}" approved="${model.trust.approved}" pending="${model.trust.pending}">`)
   for (const runtime of model.trust.runtimes) lines.push(`    <runtime owner="${escape(runtime.owner)}" namespace="${escape(runtime.namespace)}" trust="${runtime.trust}"/>`)
-  lines.push('  </trust>', '  <recent-desk>')
-  for (const entry of model.recentDesk) lines.push(`    <file path="${escape(entry.path)}" modified-at="${entry.modifiedAt}"/>`)
-  lines.push('  </recent-desk>', '  <desk-instructions>')
+  lines.push('  </trust>', '  <desk-instructions>')
   for (const instruction of deskInstructions) {
     lines.push(`    <instruction owner="${escape(instruction.owner)}" id="${escape(instruction.id)}" source="${escape(instruction.source)}">${escape(instruction.content)}</instruction>`)
   }
@@ -432,6 +781,22 @@ async function xml(model, input) {
   }
   lines.push('  </attention>', '</hairness-hud>')
   return lines.join('\n')
+}
+
+function itemAttributes(entry) {
+  return [
+    `id="${escape(entry.id)}"`,
+    `state="${entry.state}"`,
+    ...(entry.routable ? [] : ['routable="false"']),
+    `access="${entry.access.join(',')}"`,
+    `summary="${escape(entry.summary ?? '')}"`,
+    `tags="${escape(entry.tags.join(','))}"`,
+    ...(entry.when.length ? [`when="${escape(entry.when.join(' | '))}"`] : []),
+    ...(entry.kind === 'capability' ? [] : [`ref="${escape(entry.ref)}"`]),
+    ...(entry.bindings ? [`bindings="${escape(entry.bindings.map((binding) => `${binding.id}:${binding.state}${binding.head ? `@${short(binding.head)}` : ''}`).join(','))}"`] : []),
+    ...(entry.map ? [`map="${entry.map.state}:${entry.map.count}${entry.map.derivedFrom ? `@${short(String(entry.map.derivedFrom).split('@').at(-1))}` : ''}"`] : []),
+    ...(entry.metadataError ? [`metadata-error="${escape(entry.metadataError)}"`] : []),
+  ].join(' ')
 }
 
 function gitXml(name, git) {
