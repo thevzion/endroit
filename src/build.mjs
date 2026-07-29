@@ -94,6 +94,7 @@ function mergeSurface(surfaces, item, kind) {
     scope: item.scope,
     projectedId: item.projectedId,
     capability: item.capability,
+    binding: item.binding,
   }
   surface[kind] = item
   surfaces.set(key, surface)

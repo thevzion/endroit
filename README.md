@@ -74,13 +74,13 @@ folder names.
 
 ## Hairness Today
 
-Hairness `0.5.0-alpha.1` ships these inspectable contracts:
+Hairness `0.5.0-alpha.2` ships these inspectable contracts:
 
 | Contract | Current implementation |
 | --- | --- |
 | **Home** | `hairness.json`, `HOME.md` and Git history |
 | **Desk** | Solo and team modes with collaborator-owned continuity |
-| **Assets** | Validation, installation, overrides, sync, publication and runtime trust |
+| **Assets** | Validation, installation, overrides, sync, publication, runtime trust and resolved `forEach` accessors |
 | **Artifacts** | Typed results with owner, state, source files, lineage and readable hierarchical paths |
 | **Bindings and Targets** | Routable declarations, local checkouts and agent-authored Target Maps backed by deterministic inspection |
 | **Front Door** | Static Floor Plan, Routable Items, tracked Console and optional Wake-up |
@@ -101,6 +101,12 @@ my-home/
 
 `AGENTS.md`, `CLAUDE.md`, `.agents/`, `.claude/` and `.codex/` are generated
 views. Change the Home, Desk or Asset source, then rebuild the projections.
+
+Home, Workspace, Workstream and Target sources may declare an optional `emoji`.
+The Resolved Home preserves it in normalized HUD items. Asset accessors may use
+`"forEach": "workspace"`, `"workstream"` or `"target"` to generate one
+provider alias bound to each resolved identity; aliases remain rebuildable
+projections, never canonical context.
 
 ## Work across repositories
 

@@ -26,13 +26,14 @@ test('create builds a source-owned Home and tracks shared provider projections',
   const temporary = await mkdtemp(join(tmpdir(), 'hairness-kernel-'))
   try {
     const home = join(temporary, 'home')
-    await createHome(home, { providers: ['codex', 'claude'], prefix: 'acme' })
+    await createHome(home, { providers: ['codex', 'claude'], prefix: 'acme', emoji: '🏠' })
     const document = JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8'))
     await validateDocument(document, 'home')
     assert.deepEqual(document, {
       $schema: 'https://hairness.dev/schema/home.json',
       name: 'home',
-      runtime: '@hairness/cli@0.5.0-alpha.1',
+      emoji: '🏠',
+      runtime: '@hairness/cli@0.5.0-alpha.2',
       mode: 'solo',
       providers: ['codex', 'claude'],
       prefix: 'acme',
@@ -89,6 +90,89 @@ test('create builds a source-owned Home and tracks shared provider projections',
     document.runtime = '@hairness/cli@9.0.0'
     await writeFile(join(home, 'hairness.json'), `${JSON.stringify(document, null, 2)}\n`)
     await assert.rejects(() => assertRuntime(home), (error) => error.code === 'runtime_mismatch' && /node \.\/hairness\.mjs/.test(error.message))
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('forEach accessors bind generated aliases to resolved Home items', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-accessors-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home)
+    const workspace = join(home, '.desk', 'workspaces', 'demo')
+    await mkdir(join(workspace, 'workstreams', 'delivery'), { recursive: true })
+    await writeFile(join(workspace, 'workspace.md'), [
+      '---',
+      'emoji: "🎛️"',
+      'summary: "Demo Workspace."',
+      'when: ["Working on the demo."]',
+      'tags: ["demo"]',
+      '---',
+      '',
+    ].join('\n'))
+    await writeFile(join(workspace, 'workstreams', 'delivery', 'workstream.md'), [
+      '---',
+      'emoji: "🚚"',
+      'summary: "Deliver the demo."',
+      'when: ["Shipping the demo."]',
+      'tags: ["delivery"]',
+      '---',
+      '',
+      '## Status',
+      '',
+      '`active`',
+      '',
+    ].join('\n'))
+    const homePath = join(home, 'hairness.json')
+    const document = JSON.parse(await readFile(homePath, 'utf8'))
+    document.settings = {
+      'hairness/targets': {
+        targets: [{
+          id: 'product',
+          emoji: '📦',
+          repository: 'github.com/example/product',
+          source: 'https://github.com/example/product.git',
+        }],
+      },
+    }
+    await writeFile(homePath, `${JSON.stringify(document, null, 2)}\n`)
+    const source = await writeAsset(join(temporary, 'routing'), asset({
+      skills: [],
+      commands: [
+        { id: 'workspace', capability: 'review', description: 'Review one Workspace.', forEach: 'workspace' },
+        { id: 'workstream', capability: 'review', description: 'Review one Workstream.', forEach: 'workstream' },
+        { id: 'target', capability: 'review', description: 'Review one Target.', forEach: 'target' },
+      ],
+    }), {
+      'capabilities/review.md': 'Review the bound item.\n',
+    })
+    await addAssets(home, [source])
+    await buildHome(home)
+
+    const plan = await resolveHome(home)
+    assert.deepEqual(
+      plan.commands.filter(({ owner }) => owner === 'fixture/review').map(({ projectedId, binding }) => [projectedId, binding.ref, binding.emoji]),
+      [
+        ['review-workspace-demo', 'workspace:demo', '🎛️'],
+        ['review-workstream-demo-delivery', 'workstream:demo/delivery', '🚚'],
+        ['review-target-product', 'target:product', '📦'],
+      ],
+    )
+    assert.match(
+      await readFile(join(home, '.agents/skills/review-workstream-demo-delivery/SKILL.md'), 'utf8'),
+      /bound to workstream:demo\/delivery 🚚/,
+    )
+    assert.match(
+      await readFile(join(home, '.claude/skills/review-target-product/SKILL.md'), 'utf8'),
+      /bound to target:product 📦/,
+    )
+    const json = captureIo()
+    assert.equal(await runCli(['hud', 'json', '--home', home], json.io), 0, json.stderr())
+    assert.ok(JSON.parse(json.stdout()).items.capabilities.some(({ id }) => id === 'review-workspace-demo'))
+    const prompt = captureIo()
+    assert.equal(await runCli(['hud', 'prompt', '--home', home], prompt.io), 0, prompt.stderr())
+    assert.doesNotMatch(prompt.stdout(), /review-workspace-demo/)
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }
@@ -161,7 +245,7 @@ process.stdout.write('<wake-up source="' + process.env.HAIRNESS_RUNTIME_SOURCE +
     assert.equal(npm.stdout, '<wake-up source="npm"/>\n')
     assert.deepEqual(JSON.parse(await readFile(argsPath, 'utf8')), [
       '--yes',
-      '@hairness/cli@0.5.0-alpha.1',
+      '@hairness/cli@0.5.0-alpha.2',
       'hud',
       'prompt',
     ])

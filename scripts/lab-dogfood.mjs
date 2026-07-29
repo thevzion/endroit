@@ -49,7 +49,7 @@ process.exitCode = result.status ?? 1
   assert.deepEqual(doctor.assets.map((entry) => entry.id), ['hairness/artifacts', 'hairness/hud', 'hairness/onboarding', 'hairness/scratch', 'hairness/targets'])
   const targets = JSON.parse((await exec(process.execPath, [...consoleArgs, 'target', 'list', '--json'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
   assert.equal(targets.targets[0].bindings[0].id, 'main')
-  assert.equal(JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8')).runtime, '@hairness/cli@0.5.0-alpha.1')
+  assert.equal(JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8')).runtime, '@hairness/cli@0.5.0-alpha.2')
   console.log(`packed lab passed (${home})`)
 } finally {
   await rm(temporary, { recursive: true, force: true })

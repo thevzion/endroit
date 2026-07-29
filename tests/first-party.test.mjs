@@ -17,7 +17,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
   const temporary = await mkdtemp(join(tmpdir(), 'hairness-hud-'))
   try {
     const home = join(temporary, 'home')
-    await createHome(home)
+    await createHome(home, { emoji: '🏠' })
     const desk = JSON.parse(await readFile(join(home, '.desk/desk.json'), 'utf8'))
     desk.settings = { 'hairness/onboarding': { addressAs: 'Alexis', responseLanguage: 'fr' } }
     await writeFile(join(home, '.desk/desk.json'), `${JSON.stringify(desk, null, 2)}\n`)
@@ -31,6 +31,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     await mkdir(workspace, { recursive: true })
     await writeFile(join(workspace, 'workspace.md'), [
       '---',
+      'emoji: "🎛️"',
       'summary: "Demo Workspace."',
       'when: ["Working on the demo."]',
       'tags: ["demo"]',
@@ -47,6 +48,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.equal(await dispatchRuntime(home, 'hud', ['json'], json.io), 0)
     const model = JSON.parse(json.stdout())
     assert.equal(model.home.name, 'home')
+    assert.equal(model.home.emoji, '🏠')
     assert.equal(model.home.root, await exec('git', ['rev-parse', '--show-toplevel'], { cwd: home }).then((value) => value.stdout.trim()))
     assert.equal(model.kernel.source, 'npm')
     assert.equal(model.kernel.invoke, 'node ./hairness.mjs')
@@ -74,15 +76,16 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
       model.items.workspaces.map(({ id, routable }) => [id, routable]),
       [['demo', false]],
     )
+    assert.equal(model.items.workspaces[0].emoji, '🎛️')
     assert.ok(model.items.capabilities.some(({ id }) => id === 'hairness-home'))
     assert.deepEqual(Object.keys(model.attention), ['blocking', 'warning', 'advisory'])
 
     const prompt = captureIo()
     await dispatchRuntime(home, 'hud', ['prompt'], prompt.io)
     assert.match(prompt.stdout(), /^<hairness-hud version="2" status="ready" generated-at="[^"]+" event="command">/)
-    assert.match(prompt.stdout(), new RegExp(`<home name="home" mode="solo" root="${escapeRegex(model.home.root)}" providers="codex,claude"/>`))
-    assert.match(prompt.stdout(), /<kernel runtime="@hairness\/cli@0\.5\.0-alpha\.1" source="npm" invoke="node \.\/hairness\.mjs"\/>/)
-    assert.match(prompt.stdout(), /<item id="demo" state="local" routable="false" access="model,user" summary="Demo Workspace\." tags="demo"/)
+    assert.match(prompt.stdout(), new RegExp(`<home name="home" emoji="🏠" mode="solo" root="${escapeRegex(model.home.root)}" providers="codex,claude"/>`))
+    assert.match(prompt.stdout(), /<kernel runtime="@hairness\/cli@0\.5\.0-alpha\.2" source="npm" invoke="node \.\/hairness\.mjs"\/>/)
+    assert.match(prompt.stdout(), /<item id="demo" emoji="🎛️" state="local" routable="false" access="model,user" summary="Demo Workspace\." tags="demo"/)
     assert.match(prompt.stdout(), /<runtime namespace="target" commands="list,discover,doctor,add,bind,clone,worktree,unbind,remove,inspect"\/>/)
     assert.match(prompt.stdout(), /<instruction owner="hairness\/desk" id="desk" source="DESK\.md">/)
     assert.match(prompt.stdout(), /<advisory>\s+<item subject="home" code="home-dirty">/)
@@ -105,7 +108,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
 
     const human = captureIo()
     await dispatchRuntime(home, 'hud', ['show'], human.io)
-    assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.5.0-alpha.1 · npm · ready')
+    assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.5.0-alpha.2 · npm · ready')
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }
@@ -170,7 +173,11 @@ test('Targets separate deterministic inspection from agent-authored Map Artifact
     await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'initial'], { cwd: target })
     await exec('git', ['remote', 'add', 'origin', 'https://github.com/example/demo.git'], { cwd: target })
     const added = captureIo()
-    assert.equal(await dispatchRuntime(home, 'target', ['add', target, '--id', 'demo'], added.io), 0, added.stderr())
+    assert.equal(await dispatchRuntime(home, 'target', ['add', target, '--id', 'demo', '--emoji', '🧪'], added.io), 0, added.stderr())
+    assert.equal(
+      JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8')).settings['hairness/targets'].targets[0].emoji,
+      '🧪',
+    )
     const second = join(temporary, 'target-worktree')
     await exec('git', ['worktree', 'add', '--quiet', '--detach', second, 'HEAD'], { cwd: target })
     const bound = captureIo()

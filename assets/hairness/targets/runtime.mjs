@@ -23,7 +23,7 @@ const TARGET_HELP = {
     summary: 'Check Target identities and Binding health.',
   },
   add: {
-    usage: 'hairness target add <repository-or-path> [--id <id>] [--summary <text>] [--binding <id>] [--json]',
+    usage: 'hairness target add <repository-or-path> [--id <id>] [--emoji <emoji>] [--summary <text>] [--binding <id>] [--json]',
     effect: 'mutating — adds a shared Target declaration and may bind a local checkout',
     summary: 'Declare a Target from a remote identity or existing checkout.',
   },
@@ -179,7 +179,13 @@ async function addTarget(input, repository, flags) {
   const id = flags.id ?? slug(basename(normalized))
   assertId(id)
   if (settings.targets.some((target) => target.id === id)) throw failure('target_exists', `Target ${id} already exists.`)
-  settings.targets.push({ id, repository: normalized, source, ...(flags.summary ? { summary: flags.summary } : {}) })
+  settings.targets.push({
+    id,
+    repository: normalized,
+    source,
+    ...(flags.emoji ? { emoji: assertEmoji(flags.emoji) } : {}),
+    ...(flags.summary ? { summary: flags.summary } : {}),
+  })
   settings.targets.sort((left, right) => left.id.localeCompare(right.id))
   home.settings ??= {}
   home.settings['hairness/targets'] = settings
@@ -630,5 +636,9 @@ function required(value, label) { if (!value) throw failure('usage', `${label} i
 function truthy(value) { return value === true || value === 'true' || value === 'yes' || value === '1' }
 function slug(value) { return value.toLowerCase().replace(/\.git$/, '').replace(/[^a-z0-9._-]+/g, '-').replace(/^-|-$/g, '') }
 function assertId(value) { if (!/^[a-z0-9][a-z0-9._-]{0,127}$/.test(value)) throw failure('target_id_invalid', `Invalid Target id ${value}.`) }
+function assertEmoji(value) {
+  if (typeof value !== 'string' || !value.trim() || [...value].length > 16) throw failure('target_emoji_invalid', 'Target emoji must contain 1 to 16 characters.')
+  return value
+}
 function failure(code, message, exitCode = 4) { const error = new Error(message); error.code = code; error.exitCode = exitCode; return error }
 function stdin() { return new Promise((resolvePromise, reject) => { const chunks = []; process.stdin.on('data', (chunk) => chunks.push(chunk)); process.stdin.on('end', () => resolvePromise(Buffer.concat(chunks).toString('utf8'))); process.stdin.on('error', reject) }) }

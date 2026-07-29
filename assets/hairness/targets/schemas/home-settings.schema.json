@@ -11,6 +11,7 @@
         "required": ["id", "repository", "source"],
         "properties": {
           "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+          "emoji": { "type": "string", "minLength": 1, "maxLength": 16 },
           "repository": { "type": "string", "minLength": 1 },
           "source": { "type": "string", "minLength": 1 },
           "summary": { "type": "string", "minLength": 1, "maxLength": 500 },
