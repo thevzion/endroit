@@ -61,6 +61,7 @@ export async function initHome(root = process.cwd(), options = {}) {
     const home = homeDocument({
       destination: root,
       name: options.name,
+      emoji: options.emoji,
       providers: options.providers,
       mode,
       prefix: options.prefix,

@@ -1,5 +1,5 @@
 import Ajv2020 from 'ajv/dist/2020.js'
-import { readFile } from 'node:fs/promises'
+import { readFile, readdir } from 'node:fs/promises'
 import { basename, join, relative } from 'node:path'
 import { allInstalledAssets } from './assets.mjs'
 import { loadDesk } from './desk.mjs'
@@ -28,6 +28,7 @@ export async function resolveHome(root) {
   }
 
   const assets = [...effective.values()].sort((left, right) => left.id.localeCompare(right.id))
+  const bindings = await accessorBindings(root, home, desk)
   const plan = {
     root,
     home,
@@ -77,8 +78,16 @@ export async function resolveHome(root) {
     for (const item of manifest.instructions ?? []) plan.instructions.push(material(entry, item))
     for (const item of manifest.capabilities ?? []) plan.capabilities.push(material(entry, item))
     for (const item of manifest.references ?? []) plan.references.push(material(entry, item))
-    for (const item of manifest.skills ?? []) plan.skills.push(accessor(home, entry, item, 'model'))
-    for (const item of manifest.commands ?? []) plan.commands.push(accessor(home, entry, item, 'user'))
+    for (const item of manifest.skills ?? []) {
+      for (const binding of item.forEach ? bindings[item.forEach] : [null]) {
+        plan.skills.push(accessor(home, entry, item, 'model', binding))
+      }
+    }
+    for (const item of manifest.commands ?? []) {
+      for (const binding of item.forEach ? bindings[item.forEach] : [null]) {
+        plan.commands.push(accessor(home, entry, item, 'user', binding))
+      }
+    }
     for (const item of manifest.artifactKinds ?? []) {
       plan.artifactKinds.push({
         ...item,
@@ -146,9 +155,9 @@ function material(entry, item) {
   }
 }
 
-function accessor(home, entry, item, invocation) {
+function accessor(home, entry, item, invocation, binding) {
   const assetPrefix = entry.manifest.prefix ?? basename(entry.id)
-  const projectedId = [home.prefix, assetPrefix, item.id].filter(Boolean).join('-')
+  const projectedId = [home.prefix, assetPrefix, item.id, binding && slug(binding.id)].filter(Boolean).join('-')
   return {
     ...item,
     id: canonical(entry.id, item.id),
@@ -156,10 +165,60 @@ function accessor(home, entry, item, invocation) {
     projectedId,
     capability: canonical(entry.id, item.capability),
     invocation,
+    ...(binding ? { binding } : {}),
     owner: entry.id,
     scope: entry.scope,
     root: entry.root,
   }
+}
+
+async function accessorBindings(root, home, desk) {
+  const values = { workspace: [], workstream: [], target: [] }
+  if (desk) {
+    const workspacesRoot = join(root, '.desk', 'workspaces')
+    for (const workspace of await directories(workspacesRoot)) {
+      values.workspace.push({
+        kind: 'workspace',
+        id: workspace,
+        ref: `workspace:${workspace}`,
+        emoji: await documentEmoji(join(workspacesRoot, workspace, 'workspace.md')),
+      })
+      for (const workstream of await directories(join(workspacesRoot, workspace, 'workstreams'))) {
+        values.workstream.push({
+          kind: 'workstream',
+          id: `${workspace}/${workstream}`,
+          ref: `workstream:${workspace}/${workstream}`,
+          emoji: await documentEmoji(join(workspacesRoot, workspace, 'workstreams', workstream, 'workstream.md')),
+        })
+      }
+    }
+  }
+  for (const target of home.settings?.['hairness/targets']?.targets ?? []) {
+    values.target.push({
+      kind: 'target',
+      id: target.id,
+      ref: `target:${target.id}`,
+      emoji: target.emoji ?? null,
+    })
+  }
+  return values
+}
+
+async function directories(path) {
+  return (await readdir(path, { withFileTypes: true }).catch((error) => error.code === 'ENOENT' ? [] : Promise.reject(error)))
+    .filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
+    .map((entry) => entry.name)
+    .sort()
+}
+
+async function documentEmoji(path) {
+  const content = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? '' : Promise.reject(error))
+  const raw = content.match(/^emoji:\s*(.+)$/m)?.[1]?.trim()
+  return raw ? raw.replace(/^"|"$/g, '') : null
+}
+
+function slug(value) {
+  return String(value).replace(/[^a-z0-9._-]+/g, '-').replace(/^-|-$/g, '')
 }
 
 async function validateSettings(entry, homeSettings, deskSettings) {

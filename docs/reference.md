@@ -166,9 +166,18 @@ Runtime stderr is never injected. Static Floor Plan orientation is unaffected.
 `hud show` renders dense text for humans, `hud prompt` deterministic XML for
 Ness, `hud json` a stable tool contract and `hud show --full` the full
 inventory. HUD v2 exposes Workspaces, Workstreams, Targets and Capabilities
-through a normalized Routable Item envelope: `kind`, `id`, `state`, `summary`,
-`when`, `tags`, `ref`, `access` and `routable`. The owning Markdown, Target
-settings, Asset manifest or Artifact metadata remains canonical.
+through a normalized Routable Item envelope: `kind`, `id`, optional `emoji`,
+`state`, `summary`, `when`, `tags`, `ref`, `access` and `routable`. Home,
+Workspace and Workstream sources may declare `emoji`; Target declarations
+accept the same field. The owning Markdown, Target settings, Asset manifest or
+Artifact metadata remains canonical.
+
+An Asset Skill or Command accessor may declare `forEach` with `workspace`,
+`workstream` or `target`. Resolution expands that accessor into one stable
+provider alias per matching Home item, suffixes the projected id with the
+item's stable identity and embeds its exact `ref` and emoji in the generated
+surface. The Capability remains the single source; aliases are rebuilt when
+the resolved inventory changes.
 
 `hud activity [--since <duration|date>] [--scope <ref>] [--json]` computes at
 most 100 recent events. Supported scopes are `home`, `desk`,
@@ -195,7 +204,7 @@ An Asset runtime receives one JSON document on stdin:
   "assetRoot": "/absolute/home/assets/company/security",
   "resolvedHome": {},
   "kernel": {
-    "runtime": "@hairness/cli@0.5.0-alpha.1",
+    "runtime": "@hairness/cli@0.5.0-alpha.2",
     "source": "npm",
     "invoke": "node ./hairness.mjs"
   },

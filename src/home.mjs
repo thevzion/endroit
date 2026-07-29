@@ -49,6 +49,7 @@ export function homeDocument(options = {}) {
   return {
     $schema: API.home,
     name: assertId(options.name ?? homeId(options.destination ?? process.cwd()), 'Home name'),
+    ...(options.emoji ? { emoji: options.emoji } : {}),
     runtime: RUNTIME,
     mode: options.mode ?? 'solo',
     providers: [...new Set(options.providers ?? ['codex', 'claude'])],

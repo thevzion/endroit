@@ -346,6 +346,7 @@ async function hud(input) {
     event: input.invocation?.kind ?? 'command',
     home: {
       name: plan.home.name,
+      emoji: plan.home.emoji ?? null,
       mode: plan.home.mode,
       root: homeRoot,
       providers: plan.home.providers,
@@ -446,6 +447,9 @@ async function orientationDocument(path) {
 }
 
 function orientationError(value) {
+  if (value.emoji !== undefined && (typeof value.emoji !== 'string' || !value.emoji.trim() || [...value.emoji].length > 16)) {
+    return 'emoji must contain 1 to 16 characters.'
+  }
   if (typeof value.summary !== 'string' || !value.summary.trim()) return 'summary must be a non-empty string.'
   if (!Array.isArray(value.when) || value.when.length < 1 || value.when.length > 3 || value.when.some((entry) => typeof entry !== 'string' || !entry.trim())) {
     return 'when must contain one to three non-empty situations.'
@@ -486,6 +490,7 @@ function targetItem(target) {
   return {
     kind: 'target',
     id: target.id,
+    emoji: target.emoji ?? null,
     state: target.state,
     summary: target.summary ?? null,
     when: target.when ?? [],
@@ -772,7 +777,7 @@ async function xml(model, input) {
   const deskInstructions = await resolvedDeskInstructions(input.resolvedHome)
   const lines = [
     `<hairness-hud version="2" status="${model.status}" generated-at="${model.generatedAt}" event="${escape(model.event)}">`,
-    `  <home name="${escape(model.home.name)}" mode="${model.home.mode}" root="${escape(model.home.root)}" providers="${model.home.providers.join(',')}"/>`,
+    `  <home name="${escape(model.home.name)}"${model.home.emoji ? ` emoji="${escape(model.home.emoji)}"` : ''} mode="${model.home.mode}" root="${escape(model.home.root)}" providers="${model.home.providers.join(',')}"/>`,
     `  <kernel runtime="${escape(model.kernel.runtime)}" source="${model.kernel.source}" invoke="${escape(model.kernel.invoke)}"/>`,
   ]
   if (model.collaborator) {
@@ -818,6 +823,7 @@ async function xml(model, input) {
 function itemAttributes(entry) {
   return [
     `id="${escape(entry.id)}"`,
+    ...(entry.emoji ? [`emoji="${escape(entry.emoji)}"`] : []),
     `state="${entry.state}"`,
     ...(entry.routable ? [] : ['routable="false"']),
     `access="${entry.access.join(',')}"`,

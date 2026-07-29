@@ -1,5 +1,14 @@
 # Changelog
 
+## 0.5.0-alpha.2
+
+- Preserve optional emoji metadata for Homes, Workspaces, Workstreams and
+  Targets through the normalized HUD.
+- Expand Asset Skill and Command accessors over resolved Workspaces,
+  Workstreams or Targets with `forEach`.
+- Bind each generated provider alias to its exact Home reference without
+  duplicating Capability sources.
+
 ## 0.5.0-alpha.1
 
 - Give Hairness a product-focused README and link the framework to its website
