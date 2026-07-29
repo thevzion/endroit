@@ -18,13 +18,13 @@ async function files(directory) {
 }
 
 assert.deepEqual(await compileSchemas(), ['home', 'desk', 'asset', 'runtime'])
-for (const name of ['onboarding', 'hud', 'artifacts', 'targets', 'scratch']) {
+for (const name of ['onboarding', 'hud', 'artifacts', 'targets', 'workspaces', 'research', 'planning', 'publishing', 'scratch', 'project']) {
   await validateDocument(JSON.parse(await readFile(join(root, 'assets', 'hairness', name, 'asset.json'), 'utf8')), 'asset')
 }
 await validateDocument({
   $schema: 'https://hairness.dev/schema/home.json',
   name: 'check',
-  runtime: '@hairness/cli@0.5.0-alpha.2',
+  runtime: '@hairness/cli@0.6.0-alpha.0',
   mode: 'solo',
   providers: ['codex'],
   frontDoor: { wakeUp: 'hairness/hud:prompt' },

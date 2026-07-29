@@ -7,7 +7,7 @@
 ```mermaid
 flowchart LR
   source["Local · HTTPS · Git"] --> lifecycle["Kernel Asset lifecycle"]
-  lifecycle --> home["HOME.md + DESK.md + Asset sources + frontDoor"]
+  lifecycle --> home["HOME.md + Workspaces + DESK.md + Asset sources + frontDoor"]
   home --> resolve["Resolved Home"]
   resolve --> floor["Static Floor Plan"]
   floor --> projection["Tracked provider entrypoints"]
@@ -74,12 +74,12 @@ First-party sources live under `assets/hairness/*`, exactly where third-party
 Assets live in a Home. Their `asset.json` manifests declare every public
 surface. Runtime code lives beside the manifest that owns it.
 
-HUD intentionally understands the official Artifact and Target contracts so it
+HUD intentionally understands the official Workspace, Artifact and Target contracts so it
 can render a coherent first-party view without executing other runtimes. It
 normalizes Workspaces, Workstreams, Targets and Capabilities as Routable Items:
 `kind`, `id`, `state`, `summary`, `when`, `tags`, `ref`, `access` and
 `routable`. Their owning sources remain authoritative; HUD is only a projection.
-Generic third-party HUD contributions are outside 0.5.
+Generic third-party HUD contributions are outside 0.6.
 
 Activity is another HUD view. It computes recent attributed observations from
 Git, regular files and Hairness metadata without creating an event store.
@@ -88,15 +88,16 @@ Hairness metadata is `authoritative`; Git and filesystem evidence is
 
 ## Ownership
 
-- Home sources and shared projections are Git-tracked.
-- Desk sources are personal to `Collaborator × Home`.
-- Artifacts name their owner and lineage.
+- Home sources, shared Workspaces and projections are Git-tracked.
+- Desk Workspaces are personal to `Collaborator × Home`.
+- Artifacts live under their owning Workspace namespace and name their lineage.
 - Targets retain independent repositories.
+- External systems are projections linked to local Publications by Handles.
 - Provider projections are derived views.
 - `.hairness/` contains local rebuildable state and approvals only.
 
-This arrangement keeps the Home legible while leaving methods and project
-repositories sovereign.
+This arrangement keeps the Home legible while leaving methodologies, external
+systems and project repositories sovereign.
 
 `HOME.md` is the shared constitution. `DESK.md` specializes it for one
 collaborator without replacing it. Home Asset Instructions follow `HOME.md` in

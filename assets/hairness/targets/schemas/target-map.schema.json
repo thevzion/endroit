@@ -1,10 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["id", "kind", "owner", "state", "createdBy", "createdAt", "derivedFrom", "targets"],
+  "required": ["id", "kind", "owner", "status", "created_at", "updated_at", "derived_from", "targets"],
   "properties": {
     "kind": { "const": "hairness/targets:target-map" },
-    "owner": { "const": "desk" },
-    "state": { "enum": ["current", "stale"] }
+    "owner": { "type": "string" },
+    "status": { "enum": ["current", "stale"] },
+    "derived_from": { "type": "array", "items": { "type": "string" } }
   }
 }

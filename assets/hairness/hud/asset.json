@@ -1,7 +1,7 @@
 {
   "$schema": "https://hairness.dev/schema/asset.json",
   "name": "hairness/hud",
-  "version": "0.5.0-alpha.0",
+  "version": "0.6.0-alpha.0",
   "description": "Dense local orientation for Ness at session start and on demand.",
   "prefix": "hairness",
   "files": [

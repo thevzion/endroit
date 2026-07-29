@@ -1,8 +1,8 @@
 {
   "$schema": "https://hairness.dev/schema/asset.json",
   "name": "hairness/project",
-  "version": "0.5.0-alpha.0",
-  "description": "Maintain Hairness as an independent Target.",
+  "version": "0.6.0-alpha.0",
+  "description": "Maintain Hairness as an independent Target while consuming generic Planning contracts.",
   "prefix": "hairness",
   "files": [
     "instructions/maintaining-hairness.md",

@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process'
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { PassThrough } from 'node:stream'
 import { promisify } from 'node:util'
 import test from 'node:test'
 import { buildHome } from '../src/build.mjs'
@@ -19,6 +20,42 @@ import { asset, captureIo, writeAsset } from './helpers.mjs'
 
 const exec = promisify(execFile)
 
+test('create supports a TTY preview and explicit optional native Assets', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-create-wizard-'))
+  try {
+    const home = join(temporary, 'home')
+    const input = new PassThrough()
+    const output = new PassThrough()
+    const errors = new PassThrough()
+    input.isTTY = true
+    output.isTTY = true
+    let text = ''
+    output.on('data', (chunk) => { text += chunk })
+    input.write('research,publishing\n')
+    setTimeout(() => input.end('y\n'), 20)
+    assert.equal(await runCli(['create', home], { stdin: input, stdout: output, stderr: errors }), 0)
+    assert.match(text, /Required foundation:/)
+    assert.equal(await readFile(join(home, 'workspaces/home/workspace.md'), 'utf8').then((value) => value.includes('workspace:home/home')), true)
+    assert.equal(await readFile(join(home, 'assets/hairness/research/asset.json'), 'utf8').then(Boolean), true)
+    assert.equal(await readFile(join(home, 'assets/hairness/publishing/asset.json'), 'utf8').then(Boolean), true)
+    await assert.rejects(readFile(join(home, 'assets/hairness/planning/asset.json')), (error) => error.code === 'ENOENT')
+    const catalog = captureIo()
+    assert.equal(await runCli(['asset', 'catalog', '--home', home, '--json'], catalog.io), 0, catalog.stderr())
+    const native = JSON.parse(catalog.stdout()).assets
+    assert.equal(native.find((entry) => entry.id === 'hairness/research').installed.includes('home'), true)
+    assert.equal(native.find((entry) => entry.id === 'hairness/planning').installed.length, 0)
+
+    const automatic = join(temporary, 'automatic')
+    const captured = captureIo()
+    assert.equal(await runCli(['create', automatic, '--with', 'all', '--no-interactive', '--yes'], captured.io), 0, captured.stderr())
+    for (const id of ['research', 'planning', 'publishing', 'scratch']) {
+      assert.equal(await readFile(join(automatic, `assets/hairness/${id}/asset.json`), 'utf8').then(Boolean), true)
+    }
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
 test('create builds a source-owned Home and tracks shared provider projections', async () => {
   assert.deepEqual(await compileSchemas(), ['home', 'desk', 'asset', 'runtime'])
   const help = captureIo()
@@ -33,7 +70,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
       $schema: 'https://hairness.dev/schema/home.json',
       name: 'home',
       emoji: '🏠',
-      runtime: '@hairness/cli@0.5.0-alpha.2',
+      runtime: '@hairness/cli@0.6.0-alpha.0',
       mode: 'solo',
       providers: ['codex', 'claude'],
       prefix: 'acme',
@@ -74,7 +111,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
     assert.equal((await doctorHome(home)).status, 'ready')
     await buildHome(home, { check: true })
     const plan = await resolveHome(home)
-    assert.deepEqual(plan.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'target'])
+    assert.deepEqual(plan.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'target', 'workspace'])
     assert.deepEqual(plan.frontDoor, {
       route: 'hairness/hud:prompt',
       owner: 'hairness/hud',
@@ -154,14 +191,15 @@ test('forEach accessors bind generated aliases to resolved Home items', async ()
     assert.deepEqual(
       plan.commands.filter(({ owner }) => owner === 'fixture/review').map(({ projectedId, binding }) => [projectedId, binding.ref, binding.emoji]),
       [
-        ['review-workspace-demo', 'workspace:demo', '🎛️'],
-        ['review-workstream-demo-delivery', 'workstream:demo/delivery', '🚚'],
+        ['review-workspace-home', 'workspace:home/home', null],
+        ['review-workspace-demo', 'workspace:desk/demo', '🎛️'],
+        ['review-workstream-demo-delivery', 'workstream:desk/demo/delivery', '🚚'],
         ['review-target-product', 'target:product', '📦'],
       ],
     )
     assert.match(
       await readFile(join(home, '.agents/skills/review-workstream-demo-delivery/SKILL.md'), 'utf8'),
-      /bound to workstream:demo\/delivery 🚚/,
+      /bound to workstream:desk\/demo\/delivery 🚚/,
     )
     assert.match(
       await readFile(join(home, '.claude/skills/review-target-product/SKILL.md'), 'utf8'),
@@ -245,7 +283,7 @@ process.stdout.write('<wake-up source="' + process.env.HAIRNESS_RUNTIME_SOURCE +
     assert.equal(npm.stdout, '<wake-up source="npm"/>\n')
     assert.deepEqual(JSON.parse(await readFile(argsPath, 'utf8')), [
       '--yes',
-      '@hairness/cli@0.5.0-alpha.2',
+      '@hairness/cli@0.6.0-alpha.0',
       'hud',
       'prompt',
     ])

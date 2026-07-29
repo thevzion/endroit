@@ -1,16 +1,18 @@
 #!/usr/bin/env node
 import { pathToFileURL } from 'node:url'
+import { createInterface } from 'node:readline/promises'
 import {
   addAssets,
+  catalogAssets,
   overrideAsset,
-  publishAsset,
+  promoteAsset,
   removeAsset,
   statusAssets,
   syncAssets,
   validateAssetSource,
 } from './assets.mjs'
 import { buildHome } from './build.mjs'
-import { createHome } from './create.mjs'
+import { bootstrapAssets, createHome } from './create.mjs'
 import { cloneDesk, initDesk } from './desk.mjs'
 import { doctorHome } from './doctor.mjs'
 import { assertRuntime, findHome } from './home.mjs'
@@ -36,13 +38,7 @@ export async function runCli(argv = process.argv.slice(2), io = process) {
 
 async function route(command, action, rest, flags, argv, io) {
   if (!command) return help()
-  if (command === 'create') return createHome(required(action, 'destination'), {
-    providers: csv(flags.providers),
-    name: flags.name,
-    mode: flags.mode,
-    deskId: flags.desk,
-    prefix: flags.prefix,
-  })
+  if (command === 'create') return createRoute(required(action, 'destination'), flags, io)
   if (command === 'asset' && action === 'validate') {
     return validateAssetSource(flags.home ?? process.cwd(), required(rest[0], 'Asset source'))
   }
@@ -55,6 +51,59 @@ async function route(command, action, rest, flags, argv, io) {
   if (command === 'doctor') return doctorHome(root)
   const runtimeArgs = withoutHomeFlag(argv.slice(argv.indexOf(command) + 1))
   return { passthrough: true, exitCode: await dispatchRuntime(root, command, runtimeArgs, io) }
+}
+
+const optionalCreateAssets = ['research', 'planning', 'publishing', 'scratch']
+
+async function createRoute(destination, flags, io) {
+  const interactive = !booleanFlag(flags['no-interactive']) && io.stdin?.isTTY && io.stdout?.isTTY
+  let selected = createAssetSelection(flags.with)
+  let prompt
+  if (interactive) {
+    prompt = createInterface({ input: io.stdin, output: io.stdout })
+    io.stdout.write([
+      'A Home owns shared rules and Workspaces; its Desk keeps personal continuity.',
+      'Solo tracks the Desk except Target bindings. Team keeps the Desk local.',
+      'Targets remain independent product repositories.',
+      '',
+      `Required foundation: ${bootstrapAssetNames().join(', ')}`,
+      `Optional Assets: ${optionalCreateAssets.join(', ')}`,
+      '',
+    ].join('\n'))
+    if (flags.with === undefined) {
+      selected = createAssetSelection(await prompt.question('Optional Assets (comma-separated, blank for none): '))
+    }
+    io.stdout.write(`Will create ${destination} with ${[...bootstrapAssetNames(), ...selected].join(', ')}.\n`)
+    if (!booleanFlag(flags.yes) && !/^y(?:es)?\s*$/i.test(await prompt.question('Continue? [y/N] '))) {
+      prompt.close()
+      throw new HairnessError('confirmation_required', 'Home creation cancelled. Pass -y for non-interactive confirmation.')
+    }
+    prompt.close()
+  }
+  return createHome(destination, {
+    providers: csv(flags.providers),
+    name: flags.name,
+    mode: flags.mode,
+    deskId: flags.desk,
+    prefix: flags.prefix,
+    assets: selected.map((id) => `@hairness/${id}`),
+  })
+}
+
+function createAssetSelection(value) {
+  if (value === undefined || value === true || String(value).trim() === '' || value === 'none') return []
+  const selected = csv(value)
+  if (selected.includes('all')) {
+    if (selected.length !== 1) throw usage('--with all cannot be combined with another Asset.')
+    return optionalCreateAssets
+  }
+  const unknown = selected.filter((id) => !optionalCreateAssets.includes(id))
+  if (unknown.length) throw usage(`Unknown optional Asset: ${unknown.join(', ')}.`)
+  return [...new Set(selected)]
+}
+
+function bootstrapAssetNames() {
+  return bootstrapAssets.map((id) => id.replace('@hairness/', ''))
 }
 
 async function deskRoute(root, action, rest, flags) {
@@ -86,12 +135,16 @@ async function assetRoute(root, action, rest, flags, io) {
   }
   if (action === 'remove') return removeAsset(root, required(rest[0], 'Asset'), { overwrite: booleanFlag(flags.overwrite), scope })
   if (action === 'override') return overrideAsset(root, required(rest[0], 'Asset'))
-  if (action === 'publish') {
-    if (flags.to !== 'home') throw usage('hairness asset publish <id> --to home')
-    return publishAsset(root, required(rest[0], 'Asset'))
+  if (action === 'catalog') return { status: 'catalogued', assets: await catalogAssets(root) }
+  if (action === 'promote' || action === 'publish') {
+    if (flags.to !== 'home') throw usage(`hairness asset ${action} <id> --to home`)
+    const result = await promoteAsset(root, required(rest[0], 'Asset'))
+    return action === 'publish'
+      ? { ...result, deprecated: 'asset publish is deprecated; use asset promote.' }
+      : result
   }
   if (action === 'trust') return runtimeTrust(root, required(rest[0], 'Asset'), { digest: flags.digest, revoke: booleanFlag(flags.revoke) })
-  throw usage('hairness asset validate|add|status|sync|remove|override|publish|trust')
+  throw usage('hairness asset validate|add|status|sync|remove|override|promote|catalog|trust')
 }
 
 function help() {
@@ -100,7 +153,7 @@ function help() {
     next: ['hairness create <home>', 'open an agent in <home>', 'invoke hairness-onboarding'],
     commands: [
       'create <home>', 'desk init|clone',
-      'asset validate|add|status|sync|remove|override|publish|trust',
+      'asset validate|add|status|sync|remove|override|promote|catalog|trust',
       'validate', 'build [--check]', 'doctor',
       '<Asset runtime namespace> <command...>',
     ],
@@ -125,6 +178,7 @@ function parseArguments(argv) {
 function renderHuman(value) {
   if (value?.summary && value?.commands) return [value.summary, '', 'Next:', ...value.next.map((item) => `  ${item}`), '', 'Commands:', ...value.commands.map((item) => `  hairness ${item}`)].join('\n')
   if (value?.status === 'created') return ['Hairness Home created', value.home, `Mode: ${value.mode}`, `Assets: ${value.assets.join(', ')}`, '', ...value.launch.flatMap((entry) => [`${entry.provider}: ${entry.command}`, `Then invoke ${entry.onboarding}.`])].join('\n')
+  if (value?.status === 'catalogued') return value.assets.map((entry) => `- ${entry.id}${entry.installed.length ? ` [${entry.installed.join(',')}]` : ''}: ${entry.description}`).join('\n')
   if (value?.home?.name && value?.limits) return [`Hairness doctor — ${value.status}`, `Home: ${value.home.name}`, `Desk: ${value.desk.configured ? value.desk.id : 'not configured'}`, `Assets: ${value.assets.length}`, `Build: ${value.build}`, ...(value.limits.length ? ['', 'Limits:', ...value.limits.map((item) => `  - ${item}`)] : []), ...(value.warnings?.length ? ['', 'Warnings:', ...value.warnings.map((item) => `  - ${item}`)] : [])].join('\n')
   if (Array.isArray(value)) return value.length ? value.map((entry) => `- ${entry.name ?? entry.id ?? JSON.stringify(entry)}${entry.state ? `: ${entry.state}` : ''}`).join('\n') : 'No entries.'
   return Object.entries(value ?? {}).map(([key, entry]) => `${key}: ${typeof entry === 'object' ? JSON.stringify(entry) : entry}`).join('\n')

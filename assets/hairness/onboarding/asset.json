@@ -1,7 +1,7 @@
 {
   "$schema": "https://hairness.dev/schema/asset.json",
   "name": "hairness/onboarding",
-  "version": "0.5.0-alpha.0",
+  "version": "0.6.0-alpha.0",
   "description": "A consent-first orientation for a new Hairness Home or Desk.",
   "prefix": "hairness",
   "files": [

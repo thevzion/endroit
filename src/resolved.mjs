@@ -1,7 +1,7 @@
 import Ajv2020 from 'ajv/dist/2020.js'
 import { readFile, readdir } from 'node:fs/promises'
 import { basename, join, relative } from 'node:path'
-import { allInstalledAssets } from './assets.mjs'
+import { allInstalledAssets, catalogAssets } from './assets.mjs'
 import { loadDesk } from './desk.mjs'
 import { renderFloorPlan } from './front-door.mjs'
 import { loadHome } from './home.mjs'
@@ -10,7 +10,12 @@ import { HairnessError } from './lib/errors.mjs'
 import { resolvePackageFile } from './lib/io.mjs'
 
 export async function resolveHome(root) {
-  const [home, desk, installed] = await Promise.all([loadHome(root), loadDesk(root), allInstalledAssets(root)])
+  const [home, desk, installed, catalog] = await Promise.all([
+    loadHome(root),
+    loadDesk(root),
+    allInstalledAssets(root),
+    catalogAssets(root),
+  ])
   await readInstructionFile(join(root, HOME_INSTRUCTION), 'home_instruction')
   if (desk) await readInstructionFile(join(root, '.desk', DESK_INSTRUCTION), 'desk_instruction')
   const invalid = installed.find((entry) => entry.invalid)
@@ -29,6 +34,7 @@ export async function resolveHome(root) {
 
   const assets = [...effective.values()].sort((left, right) => left.id.localeCompare(right.id))
   const bindings = await accessorBindings(root, home, desk)
+  assertWorkspaceIdentities(bindings.workspace)
   const plan = {
     root,
     home,
@@ -48,6 +54,10 @@ export async function resolveHome(root) {
       path: DESK_INSTRUCTION,
     } : null,
     assets: [],
+    catalog,
+    workspaces: bindings.workspace,
+    workstreams: bindings.workstream,
+    workspaceNamespaces: [],
     instructions: [],
     capabilities: [],
     skills: [],
@@ -66,6 +76,7 @@ export async function resolveHome(root) {
       id: entry.id,
       version: manifest.version,
       description: manifest.description,
+      workspaceNamespace: manifest.workspaceNamespace ?? null,
       scope: entry.scope,
       root: entry.root,
       overridden: entry.scope === 'desk' && homeAssets.some((asset) => asset.id === entry.id),
@@ -75,6 +86,13 @@ export async function resolveHome(root) {
         commands: manifest.runtime.commands,
       } : null,
     })
+    if (manifest.workspaceNamespace) {
+      plan.workspaceNamespaces.push({
+        id: manifest.workspaceNamespace,
+        owner: entry.id,
+        scope: entry.scope,
+      })
+    }
     for (const item of manifest.instructions ?? []) plan.instructions.push(material(entry, item))
     for (const item of manifest.capabilities ?? []) plan.capabilities.push(material(entry, item))
     for (const item of manifest.references ?? []) plan.references.push(material(entry, item))
@@ -94,6 +112,7 @@ export async function resolveHome(root) {
         id: canonical(entry.id, item.id),
         localId: item.id,
         owner: entry.id,
+        workspaceNamespace: manifest.workspaceNamespace ?? null,
         scope: entry.scope,
         root: entry.root,
       })
@@ -112,6 +131,7 @@ export async function resolveHome(root) {
   }
 
   assertUnique(plan.runtimes, (entry) => entry.namespace, 'runtime namespace')
+  assertUnique(plan.workspaceNamespaces, (entry) => entry.id, 'Workspace namespace')
   assertUnique(plan.artifactKinds, (entry) => entry.id, 'Artifact kind')
   assertAccessors(plan.skills, plan.commands)
   plan.frontDoor = resolveFrontDoor(home.frontDoor, plan)
@@ -131,6 +151,10 @@ export function publicPlan(plan) {
     homeInstruction: withoutRoot(plan.homeInstruction),
     deskInstruction: plan.deskInstruction ? withoutRoot(plan.deskInstruction) : null,
     assets: plan.assets.map(withoutRoot),
+    catalog: plan.catalog,
+    workspaces: plan.workspaces,
+    workstreams: plan.workstreams,
+    workspaceNamespaces: plan.workspaceNamespaces,
     instructions: plan.instructions.map(withoutRoot),
     capabilities: plan.capabilities.map(withoutRoot),
     skills: plan.skills.map(withoutRoot),
@@ -174,20 +198,29 @@ function accessor(home, entry, item, invocation, binding) {
 
 async function accessorBindings(root, home, desk) {
   const values = { workspace: [], workstream: [], target: [] }
-  if (desk) {
-    const workspacesRoot = join(root, '.desk', 'workspaces')
+  const scopes = [
+    { scope: 'home', root: join(root, 'workspaces') },
+    ...(desk ? [{ scope: 'desk', root: join(root, '.desk', 'workspaces') }] : []),
+  ]
+  for (const candidate of scopes) {
+    const workspacesRoot = candidate.root
     for (const workspace of await directories(workspacesRoot)) {
       values.workspace.push({
         kind: 'workspace',
         id: workspace,
-        ref: `workspace:${workspace}`,
+        scope: candidate.scope,
+        ref: `workspace:${candidate.scope}/${workspace}`,
+        path: relative(root, join(workspacesRoot, workspace, 'workspace.md')),
         emoji: await documentEmoji(join(workspacesRoot, workspace, 'workspace.md')),
       })
       for (const workstream of await directories(join(workspacesRoot, workspace, 'workstreams'))) {
         values.workstream.push({
           kind: 'workstream',
           id: `${workspace}/${workstream}`,
-          ref: `workstream:${workspace}/${workstream}`,
+          scope: candidate.scope,
+          workspace,
+          ref: `workstream:${candidate.scope}/${workspace}/${workstream}`,
+          path: relative(root, join(workspacesRoot, workspace, 'workstreams', workstream, 'workstream.md')),
           emoji: await documentEmoji(join(workspacesRoot, workspace, 'workstreams', workstream, 'workstream.md')),
         })
       }
@@ -202,6 +235,17 @@ async function accessorBindings(root, home, desk) {
     })
   }
   return values
+}
+
+function assertWorkspaceIdentities(workspaces) {
+  const scopes = new Map()
+  for (const workspace of workspaces) {
+    const current = scopes.get(workspace.id)
+    if (current) {
+      throw new HairnessError('workspace_collision', `Workspace ${workspace.id} exists in both ${current} and ${workspace.scope} scope.`)
+    }
+    scopes.set(workspace.id, workspace.scope)
+  }
 }
 
 async function directories(path) {

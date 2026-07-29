@@ -23,8 +23,8 @@ For each Target:
    separate from interpretation.
 6. Revalidate the Target version. Stop rather than preserving a mixed-version
    result when it changed during the work.
-7. Create and validate one Desk Target Map whose lineage names the observed
-   Target version.
+7. Create and validate one Target Map under the owning Desk Workspace's
+   `targeting/` namespace. Its lineage names the observed Target version.
 
 Each worker inherits the same read-only boundary and result contract. Never
 write mapping files into a Target.

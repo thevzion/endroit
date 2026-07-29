@@ -1,9 +1,10 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "type": "object",
-  "required": ["id", "kind", "owner", "state", "createdBy", "createdAt"],
+  "required": ["id", "kind", "owner", "status", "created_at", "updated_at", "derived_from"],
   "properties": {
     "kind": { "const": "hairness/scratch:scratch" },
-    "state": { "enum": ["active", "complete"] }
+    "status": { "enum": ["active", "complete"] },
+    "derived_from": { "type": "array", "items": { "type": "string" } }
   }
 }

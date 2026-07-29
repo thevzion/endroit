@@ -2,16 +2,17 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://hairness.dev/schema/artifact.json",
   "type": "object",
-  "required": ["$schema", "id", "kind", "owner", "state", "createdBy", "createdAt"],
+  "required": ["$schema", "id", "kind", "status", "owner", "created_at", "updated_at", "derived_from"],
   "properties": {
     "$schema": { "const": "https://hairness.dev/schema/artifact.json" },
     "id": { "type": "string" },
     "kind": { "type": "string" },
     "owner": { "type": "string" },
-    "state": { "type": "string" },
-    "createdBy": { "type": "string" },
-    "createdAt": { "type": "string" },
-    "derivedFrom": { "type": "string" },
+    "status": { "type": "string" },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "derived_from": { "type": "array", "items": { "type": "string" } },
+    "source_digest": { "type": "string" },
     "targets": { "type": "array", "items": { "type": "string" } }
   }
 }

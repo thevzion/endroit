@@ -19,7 +19,7 @@ export async function ensureDevelopmentHome(options = {}) {
   const document = join(home, 'hairness.json')
   if (!await exists(document)) {
     if (await exists(home)) throw new Error(`${home} exists but is not a Hairness Home.`)
-    await hairness(['create', home, '--mode', 'team', '--providers', 'codex,claude', '--name', 'hairness-development-home'])
+    await hairness(['create', home, '--mode', 'team', '--providers', 'codex,claude', '--name', 'hairness-development-home', '--with', 'planning'])
   }
 
   const config = JSON.parse(await readFile(document, 'utf8'))
@@ -33,6 +33,13 @@ export async function ensureDevelopmentHome(options = {}) {
   if (!await exists(join(home, '.desk', 'desk.json'))) {
     if (options.deskRepository) await hairness(['desk', 'clone', options.deskRepository, '--home', home])
     else await hairness(['desk', 'init', '--id', options.deskId ?? process.env.USER ?? 'local', '--home', home])
+  }
+  if (!await exists(join(home, 'assets', 'hairness', 'planning', 'asset.json'))) {
+    await hairness(['asset', 'add', '@hairness/planning', '-y', '--home', home])
+  }
+  const workspaces = await hairnessJson(['workspace', 'list', '--home', home, '--json'])
+  if (!workspaces.workspaces.some((entry) => entry.id === 'hairness')) {
+    await hairness(['workspace', 'create', 'hairness', '--scope', 'desk', '--home', home])
   }
 
   await hairness(['asset', 'sync', '--all', '--home', home])

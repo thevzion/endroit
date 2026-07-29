@@ -221,6 +221,12 @@ test('symlinks and runtime namespace collisions are rejected before installation
       },
     }), { 'runtime.mjs': '' })
     await assert.rejects(() => addAssets(home, [colliding]), (error) => error.code === 'capability_collision')
+
+    const namespaceCollision = await writeAsset(join(temporary, 'namespace-collision'), asset({
+      name: 'fixture/target-notes',
+      workspaceNamespace: 'targeting',
+    }), { 'capabilities/review.md': 'Target notes.\n' })
+    await assert.rejects(() => addAssets(home, [namespaceCollision]), (error) => error.code === 'capability_collision')
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

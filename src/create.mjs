@@ -10,7 +10,7 @@ import { HOME_INSTRUCTION, renderInstructionTemplate } from './instructions.mjs'
 import { HairnessError } from './lib/errors.mjs'
 import { exists, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
 
-const bootstrapAssets = ['@hairness/onboarding', '@hairness/hud', '@hairness/artifacts', '@hairness/targets']
+export const bootstrapAssets = ['@hairness/onboarding', '@hairness/hud', '@hairness/artifacts', '@hairness/targets', '@hairness/workspaces']
 
 export async function createHome(destination, options = {}) {
   const target = resolve(destination)
@@ -24,7 +24,8 @@ export async function createHome(destination, options = {}) {
       name: options.name ?? homeId(target),
       frontDoor: { wakeUp: 'hairness/hud:prompt' },
     })
-    const result = await addAssets(stage, bootstrapAssets)
+    const result = await addAssets(stage, [...bootstrapAssets, ...(options.assets ?? [])])
+    await bootstrapHomeWorkspace(stage)
     await buildHome(stage)
     const doctor = await doctorHome(stage)
     if (doctor.status !== 'ready') throw new HairnessError('create_qualification_failed', `Created Home is ${doctor.status}: ${doctor.limits.join(', ')}.`)
@@ -42,6 +43,29 @@ export async function createHome(destination, options = {}) {
   } catch (error) {
     await rm(stage, { recursive: true, force: true })
     throw error
+  }
+}
+
+async function bootstrapHomeWorkspace(root) {
+  const workspaceRoot = join(root, 'workspaces', 'home')
+  const assetRoot = join(root, 'assets', 'hairness', 'workspaces')
+  const timestamp = new Date().toISOString()
+  const home = JSON.parse(await readFile(join(root, 'hairness.json'), 'utf8'))
+  const values = {
+    id: 'home',
+    scope: 'home',
+    timestamp,
+    title: 'Home',
+    summary: `Improve and maintain ${home.name}.`,
+  }
+  await mkdir(workspaceRoot, { recursive: true })
+  for (const file of ['workspace.md', 'inbox.md']) {
+    const template = await readFile(join(assetRoot, 'templates', file), 'utf8')
+    const content = template.replace(/\{\{([a-z_]+)\}\}/g, (_match, key) => {
+      if (!(key in values)) throw new HairnessError('workspace_template_invalid', `Unknown Workspace template value ${key}.`)
+      return String(values[key]).replaceAll('"', '\\"')
+    })
+    await writeFileAtomic(join(workspaceRoot, file), content, 0o644)
   }
 }
 

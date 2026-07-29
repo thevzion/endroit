@@ -112,15 +112,14 @@ async function activity(input, options) {
     ? model.items.workspaces.filter((entry) => entry.id === scope.id)
     : scope ? [] : model.items.workspaces
   for (const workspace of workspaces) {
-    events.push(...await fileActivity(join(input.deskRoot, 'workspaces', workspace.id), since, workspace.ref, input.homeRoot))
+    events.push(...await fileActivity(dirname(join(input.homeRoot, workspace.path)), since, workspace.ref, input.homeRoot))
   }
 
   const workstreams = scope?.kind === 'workstream'
     ? model.items.workstreams.filter((entry) => entry.id === scope.id)
     : []
   for (const workstream of workstreams) {
-    const [workspace, id] = workstream.id.split('/')
-    events.push(...await fileActivity(join(input.deskRoot, 'workspaces', workspace, 'workstreams', id), since, workstream.ref, input.homeRoot))
+    events.push(...await fileActivity(dirname(join(input.homeRoot, workstream.path)), since, workstream.ref, input.homeRoot))
   }
 
   const targets = scope?.kind === 'target'
@@ -201,10 +200,11 @@ function resolveActivityScope(value, model) {
     target: model.items.targets,
     artifact: model.artifacts.items,
   }
-  if (!known[kind] || !id || !known[kind].some((entry) => entry.id === id)) {
+  const selected = known[kind]?.find((entry) => entry.id === id || entry.ref === value)
+  if (!selected) {
     throw failure('activity_scope_unknown', `Unknown Activity scope: ${value}.`)
   }
-  return { kind, id }
+  return { kind, id: selected.id }
 }
 
 async function gitActivity(root, since, subject, pathspec = null) {
@@ -279,10 +279,10 @@ async function hud(input) {
   const [homeGit, deskGit, artifacts, recentDesk, projections, orientation] = await Promise.all([
     gitProbe(homeRoot),
     deskRoot ? gitProbe(deskRoot) : null,
-    scanArtifacts(homeRoot, deskRoot),
+    scanArtifacts(homeRoot, deskRoot, plan),
     deskRoot ? recentFiles(deskRoot) : [],
     projectionProbe(homeRoot, plan.home.providers),
-    scanOrientation(homeRoot, deskRoot),
+    scanOrientation(homeRoot, plan),
   ])
   const targets = await scanTargets(plan.home.settings?.['hairness/targets']?.targets ?? [], deskRoot, artifacts)
   const items = {
@@ -361,10 +361,12 @@ async function hud(input) {
         id: asset.id,
         version: asset.version,
         description: asset.description,
+        workspaceNamespace: asset.workspaceNamespace,
         scope: asset.scope,
         overridden: asset.overridden,
         runtime: asset.runtime,
       })),
+      catalog: plan.catalog,
       skills: plan.skills.map((entry) => surface(entry)),
       commands: plan.commands.map((entry) => surface(entry)),
       runtimes: plan.runtimes.map((entry) => ({
@@ -388,50 +390,44 @@ async function hud(input) {
   }
 }
 
-async function scanOrientation(homeRoot, deskRoot) {
-  if (!deskRoot) return { workspaces: [], workstreams: [] }
-  const home = await readFile(join(homeRoot, 'HOME.md'), 'utf8')
-  const registry = new Set([...(home.match(/## Active Workspaces([\s\S]*?)(?=\n## )/)?.[1] ?? '')
-    .matchAll(/^- `([^`]+)`/gm)]
-    .map((match) => match[1]))
+async function scanOrientation(homeRoot, plan) {
   const workspaces = []
   const workstreams = []
-  const root = join(deskRoot, 'workspaces')
-  for (const entry of await safeReadDir(root)) {
-    if (!entry.isDirectory() || entry.isSymbolicLink()) continue
-    const path = join(root, entry.name, 'workspace.md')
+  for (const entry of plan.workspaces) {
+    const path = join(homeRoot, entry.path)
     const document = await orientationDocument(path)
-    const active = registry.has(entry.name)
+    const state = document.metadata.status || 'active'
     workspaces.push({
       kind: 'workspace',
-      id: entry.name,
-      state: active ? 'active' : 'local',
+      id: entry.id,
+      scope: entry.scope,
+      state,
       ...document.metadata,
-      ref: `workspace:${entry.name}`,
-      path: relative(homeRoot, path),
+      ref: entry.ref,
+      path: entry.path,
       access: ['model', 'user'],
-      routable: active && !document.error,
+      routable: state === 'active' && !document.error,
       ...(document.error ? { metadataError: document.error } : {}),
     })
-    for (const stream of await safeReadDir(join(root, entry.name, 'workstreams'))) {
-      if (!stream.isDirectory() || stream.isSymbolicLink()) continue
-      const streamPath = join(root, entry.name, 'workstreams', stream.name, 'workstream.md')
-      const streamDocument = await orientationDocument(streamPath)
-      const content = await readFile(streamPath, 'utf8').catch(() => '')
-      const state = /^## Status\s*\n+\s*`active`/m.test(content) ? 'active' : 'local'
-      workstreams.push({
-        kind: 'workstream',
-        id: `${entry.name}/${stream.name}`,
-        workspace: entry.name,
-        state,
-        ...streamDocument.metadata,
-        ref: `workstream:${entry.name}/${stream.name}`,
-        path: relative(homeRoot, streamPath),
-        access: ['model', 'user'],
-        routable: active && state === 'active' && !streamDocument.error,
-        ...(streamDocument.error ? { metadataError: streamDocument.error } : {}),
-      })
-    }
+  }
+  for (const entry of plan.workstreams) {
+    const path = join(homeRoot, entry.path)
+    const document = await orientationDocument(path)
+    const content = await readFile(path, 'utf8').catch(() => '')
+    const state = document.metadata.status || (/^## Status\s*\n+\s*`active`/m.test(content) ? 'active' : 'local')
+    workstreams.push({
+      kind: 'workstream',
+      id: entry.id,
+      scope: entry.scope,
+      workspace: entry.workspace,
+      state,
+      ...document.metadata,
+      ref: entry.ref,
+      path: entry.path,
+      access: ['model', 'user'],
+      routable: workspaces.some((workspace) => workspace.id === entry.workspace && workspace.routable) && state === 'active' && !document.error,
+      ...(document.error ? { metadataError: document.error } : {}),
+    })
   }
   return { workspaces, workstreams }
 }
@@ -465,23 +461,27 @@ function capabilityItems(plan) {
     const skills = plan.skills.filter((entry) => entry.capability === capability.id)
     const commands = plan.commands.filter((entry) => entry.capability === capability.id)
     if (!skills.length && !commands.length) return []
-    const access = [...(skills.length ? ['model'] : []), ...(commands.length ? ['user'] : [])]
-    return [{
-      kind: 'capability',
-      id: skills[0]?.projectedId ?? commands[0].projectedId,
-      state: 'available',
-      summary: capability.description,
-      when: [...new Set(skills.map((entry) => entry.description))].slice(0, 3),
-      tags: [...new Set([...capability.owner.split('/'), capability.localId])],
-      ref: `capability:${capability.id}`,
-      path: capability.path,
-      access,
-      routable: access.length > 0,
-      entrypoint: {
-        ...(skills[0] ? { model: skills[0].projectedId } : {}),
-        ...(commands[0] ? { user: commands[0].projectedId } : {}),
-      },
-    }]
+    return [...new Set([...skills, ...commands].map((entry) => entry.projectedId))].map((projectedId) => {
+      const skill = skills.find((entry) => entry.projectedId === projectedId)
+      const command = commands.find((entry) => entry.projectedId === projectedId)
+      const access = [...(skill ? ['model'] : []), ...(command ? ['user'] : [])]
+      return {
+        kind: 'capability',
+        id: projectedId,
+        state: 'available',
+        summary: capability.description,
+        when: [...new Set(skills.map((entry) => entry.description))].slice(0, 3),
+        tags: [...new Set([...capability.owner.split('/'), capability.localId])],
+        ref: `capability:${capability.id}`,
+        path: capability.path,
+        access,
+        routable: access.length > 0,
+        entrypoint: {
+          ...(skill ? { model: skill.projectedId } : {}),
+          ...(command ? { user: command.projectedId } : {}),
+        },
+      }
+    })
   })
 }
 
@@ -560,7 +560,10 @@ async function scanTargets(targets, deskRoot, artifacts) {
         binding: registered.get(worktree.path) ?? null,
       })
     }
-    const current = maps.find((artifact) => heads.has(String(artifact.derivedFrom ?? '').replace(`target:${target.id}@`, '')))
+    const current = maps.find((artifact) => {
+      const sources = Array.isArray(artifact.derivedFrom) ? artifact.derivedFrom : [artifact.derivedFrom]
+      return sources.some((source) => heads.has(String(source ?? '').replace(`target:${target.id}@`, '')))
+    })
     const selected = current ?? maps[0] ?? null
     return {
       ...target,
@@ -579,17 +582,32 @@ async function scanTargets(targets, deskRoot, artifacts) {
   }))
 }
 
-async function scanArtifacts(homeRoot, deskRoot) {
+async function scanArtifacts(homeRoot, deskRoot, plan) {
   const items = []
-  for (const [scope, root] of [['home', join(homeRoot, 'artifacts')], ['desk', deskRoot && join(deskRoot, 'artifacts')]]) {
+  const roots = [
+    ...plan.workspaces.map((workspace) => [workspace.scope, dirname(join(homeRoot, workspace.path)), workspace.id, false]),
+    ['home', join(homeRoot, 'artifacts'), null, true],
+    ['desk', deskRoot && join(deskRoot, 'artifacts'), null, true],
+  ]
+  for (const [scope, root, workspace, legacy] of roots) {
     if (!root) continue
     for (const path of await findNamed(root, 'artifact.md')) {
       const directory = dirname(path)
       try {
         const metadata = frontmatter(await readFile(path, 'utf8'))
-        items.push({ ...metadata, scope, path: directory })
+        items.push({
+          ...metadata,
+          status: metadata.status ?? metadata.state,
+          state: metadata.status ?? metadata.state,
+          createdAt: metadata.created_at ?? metadata.createdAt,
+          derivedFrom: metadata.derived_from ?? metadata.derivedFrom,
+          scope,
+          workspace,
+          legacy,
+          path: directory,
+        })
       } catch (error) {
-        items.push({ scope, path: directory, invalid: error.message })
+        items.push({ scope, workspace, legacy, path: directory, invalid: error.message })
       }
     }
   }
@@ -744,7 +762,7 @@ function human(model, full) {
     `HOME GIT    ${homeGit}`,
     `DESK        ${model.desk.configured ? `${model.desk.id} · ${model.desk.root} · ${deskGit}` : 'missing'} · recent:${model.recentDesk.length}`,
     `ITEMS       ${model.items.workspaces.length} workspaces · ${model.items.workstreams.length} workstreams · ${model.items.targets.length} targets · ${model.items.capabilities.length} capabilities`,
-    `SURFACES    ${model.surfaces.assets.length} assets · ${model.surfaces.runtimes.map((entry) => entry.namespace).join(',')}`,
+    `SURFACES    ${model.surfaces.assets.length} assets · ${model.surfaces.catalog.filter((entry) => !entry.installed.length).length} native available · ${model.surfaces.runtimes.map((entry) => entry.namespace).join(',')}`,
     `ARTIFACTS   ${model.artifacts.count} · ${Object.entries(model.artifacts.counts).map(([key, value]) => `${key}:${value}`).join(' ') || 'none'}`,
     `TARGETS     ${model.targets.length} declared · ${model.targets.reduce((sum, target) => sum + target.bindings.length, 0)} bindings`,
   ]
@@ -760,6 +778,7 @@ function human(model, full) {
     lines.push('ROUTABLE ITEMS', ...Object.values(model.items).flat().map((entry) => `  ${entry.kind}:${entry.id} · ${entry.state} · ${entry.access.join(',')} · routable:${entry.routable} · ${entry.ref}`))
     lines.push('PROJECTIONS', ...model.projections.map((entry) => `  ${entry.id} · ${entry.status} · ${entry.instruction} · ${entry.hook}`))
     lines.push('ASSETS', ...model.surfaces.assets.map((asset) => `  ${asset.id}@${asset.version} · ${asset.scope}${asset.overridden ? ' · override' : ''}${asset.runtime ? ` · ${asset.runtime.namespace}` : ''}`))
+    lines.push('NATIVE ASSETS', ...model.surfaces.catalog.map((asset) => `  ${asset.id}@${asset.version} · ${asset.installed.length ? `installed:${asset.installed.join(',')}` : 'available'}`))
     lines.push('SKILLS', ...model.surfaces.skills.map((entry) => `  ${entry.projectedId} · ${entry.owner}`))
     lines.push('COMMANDS', ...model.surfaces.commands.map((entry) => `  ${entry.projectedId} · ${entry.owner}`))
     lines.push('RUNTIMES', ...model.surfaces.runtimes.map((entry) => `  ${entry.namespace} · ${entry.owner} · ${entry.commands.map((command) => command.name).join(',')}`))
@@ -804,7 +823,8 @@ async function xml(model, input) {
   for (const runtime of model.surfaces.runtimes) {
     lines.push(`    <runtime namespace="${escape(runtime.namespace)}" commands="${escape(runtime.commands.map((command) => command.name).join(','))}"/>`)
   }
-  lines.push('  </runtimes>', `  <context instructions-bytes="${model.context.instructionBytes}" desk-instructions-bytes="${model.context.deskInstructionBytes}" model-descriptions-bytes="${model.context.modelDescriptionBytes}"${model.context.promptBudgetBytes === null ? '' : ` hud-budget-bytes="${model.context.promptBudgetBytes}"`}/>`)
+  const available = model.surfaces.catalog.filter((entry) => !entry.installed.length).map((entry) => entry.id)
+  lines.push('  </runtimes>', `  <available-assets ids="${escape(available.join(','))}"/>`, `  <context instructions-bytes="${model.context.instructionBytes}" desk-instructions-bytes="${model.context.deskInstructionBytes}" model-descriptions-bytes="${model.context.modelDescriptionBytes}"${model.context.promptBudgetBytes === null ? '' : ` hud-budget-bytes="${model.context.promptBudgetBytes}"`}/>`)
   lines.push(`  <trust bundled="${model.trust.bundled}" approved="${model.trust.approved}" pending="${model.trust.pending}">`)
   for (const runtime of model.trust.runtimes) lines.push(`    <runtime owner="${escape(runtime.owner)}" namespace="${escape(runtime.namespace)}" trust="${runtime.trust}"/>`)
   lines.push('  </trust>', '  <desk-instructions>')
@@ -824,16 +844,17 @@ async function xml(model, input) {
 }
 
 function itemAttributes(entry) {
+  const capability = entry.kind === 'capability'
   return [
     `id="${escape(entry.id)}"`,
     ...(entry.emoji ? [`emoji="${escape(entry.emoji)}"`] : []),
-    `state="${entry.state}"`,
+    ...(capability ? [] : [`state="${entry.state}"`]),
     ...(entry.routable ? [] : ['routable="false"']),
-    `access="${entry.access.join(',')}"`,
+    ...(capability ? [] : [`access="${entry.access.join(',')}"`]),
     `summary="${escape(entry.summary ?? '')}"`,
-    `tags="${escape(entry.tags.join(','))}"`,
+    ...(capability ? [] : [`tags="${escape(entry.tags.join(','))}"`]),
     ...(entry.when.length ? [`when="${escape(entry.when.join(' | '))}"`] : []),
-    ...(entry.kind === 'capability' ? [] : [`ref="${escape(entry.ref)}"`]),
+    ...(capability ? [] : [`ref="${escape(entry.ref)}"`]),
     ...(entry.bindings ? [`bindings="${escape(entry.bindings.map((binding) => `${binding.id}:${binding.state}${binding.head ? `@${short(binding.head)}` : ''}`).join(','))}"`] : []),
     ...(entry.map ? [`map="${entry.map.state}:${entry.map.count}${entry.map.derivedFrom ? `@${short(String(entry.map.derivedFrom).split('@').at(-1))}` : ''}"`] : []),
     ...(entry.metadataError ? [`metadata-error="${escape(entry.metadataError)}"`] : []),

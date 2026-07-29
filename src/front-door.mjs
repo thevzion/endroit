@@ -11,13 +11,14 @@ export function renderFloorPlan(plan) {
 
 - Home: \`${plan.home.name}\` (\`${plan.home.mode}\`)
 - Providers: ${plan.home.providers.map((provider) => `\`${provider}\``).join(', ')}
-- Canonical sources: \`hairness.json\`, \`HOME.md\`, \`assets/\`, \`artifacts/\`
-- Collaborator sources: \`.desk/DESK.md\`, \`.desk/assets/\`, \`.desk/artifacts/\`, \`.desk/targets/\`
+- Home sources: \`hairness.json\`, \`HOME.md\`, \`assets/\`, \`workspaces/\`
+- Desk sources: \`.desk/DESK.md\`, \`.desk/assets/\`, \`.desk/workspaces/\`, \`.desk/targets/\`
 - Local rebuildable state: \`.hairness/\`
 
-The Home owns shared sources and projections. The Desk owns collaborator-local
-continuity. Targets remain independent repositories. Generated provider files
-are never canonical.
+The Home owns its constitution, shared Workspaces and projections. The Desk
+owns collaborator-local Workspaces. Targets own product sources. Artifacts live
+inside their owning Workspace; legacy Artifact roots are read-only. Generated
+provider files and external systems are never canonical.
 
 Use the tracked Home Console for every Kernel or Asset route:
 
@@ -26,7 +27,7 @@ Use the tracked Home Console for every Kernel or Asset route:
 Kernel routes:
 
 - \`desk init|clone\`
-- \`asset validate|add|status|sync|remove|override|publish|trust\`
+- \`asset validate|add|status|sync|remove|override|promote|catalog|trust\`
 - \`validate\`, \`build\`, \`doctor\`
 
 Asset runtime namespaces:

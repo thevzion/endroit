@@ -18,7 +18,7 @@ valid only with both `desk.json` and `DESK.md`.
 ```text
 validate source → add → clean
                          ├─ edit Home source → customized → sync --check blocks
-                         └─ override → Desk variant → publish → Home diff/PR
+                         └─ override → Desk variant → promote → Home diff/PR
 ```
 
 `asset validate <source>` works outside a Home and validates the manifest,
@@ -28,11 +28,11 @@ effective digest. `sync --check` resolves the recorded or selected source and
 returns the complete upstream diff without writing. `remove` deletes only
 declared source-owned files and preserves unknown files.
 
-An override records the Home base digests. Publishing replaces the Home Asset
+An override records the Home base digests. Promotion replaces the Home Asset
 only if those bytes are unchanged; no automatic merge occurs.
 
 If the Home selected an Asset command for `frontDoor.wakeUp`, add, sync, remove,
-override and publish compute the effective post-mutation composition first.
+override and promote compute the effective post-mutation composition first.
 They refuse any write that would remove its runtime or command.
 
 ## Runtime trust
@@ -55,30 +55,54 @@ anything else           → pending
 Only `bundled` and `approved` runtimes can execute. Any byte change returns an
 approved runtime to `pending`.
 
+## Workspace
+
+```text
+create Home → workspace:home/home
+durable personal milestone → workspace create <id> --scope desk
+```
+
+Every live Workspace has `workspace.md` and `inbox.md`. Home and Desk IDs are
+unique in one Resolved Home. `workstreams/` and `decisions/` remain sparse.
+`workspace doctor` is read-only and never repairs or archives implicitly.
+
 ## Artifact
 
 ```text
-create/import at Desk → validate → publish to Home or Target
-                              └── Desk source remains
+create/import in Workspace → validate → promote to Home Workspace or Target
+                                   └── source remains
 ```
 
 An Artifact kind is declared by an Asset. The kind owns allowed owners, states,
 schema and template. `--from <directory>` imports a tree atomically after
 rejecting symbolic links and the reserved `artifact.md`.
 
-Home and Desk Artifact paths preserve the kind hierarchy:
-`artifacts/<namespace>/<asset>/<kind>/<id>`. A kind such as
-`hairness/scratch:scratch` is never flattened to
-`hairness-scratch-scratch`.
+New Artifact sources use
+`<workspace>/<workspaceNamespace>/<kind>/<id>/artifact.md`. Legacy
+`artifacts/` and `.desk/artifacts/` roots are read-only: list, inspect,
+validate and promote can consume them, but create never writes there.
 
-Publishing preserves content, records lineage and never removes the Desk
-source. Transformations create a new Artifact with `--derived-from`.
+Promotion preserves content, records the canonical source ref and digest, and
+never removes the source. Desk → Home or Target and Home → Target are allowed;
+Home → Desk is not.
 
-Artifact-to-Asset curation is a separate human authoring step. Hairness 0.5 has
-no promotion command: a collaborator selects reusable material, authors a new
-or improved Asset, validates it through the Asset lifecycle and reviews the Git
-diff. `artifact publish` preserves the Artifact kind, changes its owner and
-records lineage; it does not produce an Asset.
+Artifact-to-Asset curation is a separate human authoring step. `artifact
+publish` and `asset publish` are deprecated prerelease aliases for promotion.
+
+## Publishing
+
+```text
+outline → draft → ready → exact consent → observed remote success → published
+                                                        └── Handle
+```
+
+A Publication Artifact requires `content.md`, the exact projectable source.
+The instruction-only Publishing Capability obtains consent for content,
+account and destination, uses an available connector, verifies the external
+result and only then writes a Handle. Without a connector it returns a manual
+handoff and records neither a Handle nor `published`. Revalidation updates
+dated observations and drift status without importing remote content
+implicitly.
 
 ## Target
 

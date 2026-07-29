@@ -16,7 +16,7 @@ Claude, and connects independent repositories as Targets.
 [![CI](https://github.com/thevzion/hairness/actions/workflows/ci.yml/badge.svg)](https://github.com/thevzion/hairness/actions/workflows/ci.yml)
 [![MIT](https://img.shields.io/badge/license-MIT-d8996a.svg)](https://github.com/thevzion/hairness/blob/main/LICENSE)
 
-<sub>Hairness 0.5 is an alpha. Keep each Home in a dedicated Git repository and inspect executable Asset runtimes before trusting them.</sub>
+<sub>Hairness 0.6 is an alpha. Keep each Home in a dedicated Git repository and inspect executable Asset runtimes before trusting them.</sub>
 
 </div>
 
@@ -31,10 +31,16 @@ codex
 claude
 ```
 
-The command initializes Git, installs the first-party Assets, creates the
-Codex and Claude projections, runs Doctor and commits the result. The Home pins
-its runtime in `hairness.json` and exposes every operation through its tracked
-console:
+In a TTY, `create` explains Home, Desk and Targets, previews the required
+foundation plus optional Assets, and asks before writing. Automation may use
+`--with research,planning,publishing`, `--with all`, `--with none`,
+`--no-interactive` and `--yes`.
+
+The command initializes Git, creates `workspaces/home`, installs Workspaces,
+Onboarding, HUD, Artifacts and Targets, creates the Codex and Claude
+projections, runs Doctor and commits the result. No optional Asset is selected
+by default. The Home pins its runtime in `hairness.json` and exposes every
+operation through its tracked console:
 
 ```bash
 node ./hairness.mjs <namespace> <command> [...arguments]
@@ -74,14 +80,15 @@ folder names.
 
 ## Hairness Today
 
-Hairness `0.5.0-alpha.2` ships these inspectable contracts:
+Hairness `0.6.0-alpha.0` ships these inspectable contracts:
 
 | Contract | Current implementation |
 | --- | --- |
-| **Home** | `hairness.json`, `HOME.md` and Git history |
-| **Desk** | Solo and team modes with collaborator-owned continuity |
-| **Assets** | Validation, installation, overrides, sync, publication, runtime trust and resolved `forEach` accessors |
-| **Artifacts** | Typed results with owner, state, source files, lineage and readable hierarchical paths |
+| **Home** | Constitution, shared Workspaces, Assets, projections and Git history |
+| **Desk** | Solo and team modes with collaborator-owned Workspaces and local Bindings |
+| **Assets** | Validation, installation, overrides, sync, promotion, local catalogue, runtime trust and resolved `forEach` accessors |
+| **Workspaces** | Globally unique `home/<id>` and `desk/<id>` domains with required orientation and Inbox |
+| **Artifacts** | Typed, Workspace-owned results with status, source files and lineage |
 | **Bindings and Targets** | Routable declarations, local checkouts and agent-authored Target Maps backed by deterministic inspection |
 | **Front Door** | Static Floor Plan, Routable Items, tracked Console and optional Wake-up |
 | **Provider projections** | Deterministic Codex and Claude Instructions, Skills, Commands and hooks |
@@ -94,8 +101,14 @@ my-home/
 ├── hairness.json
 ├── HOME.md
 ├── assets/
-├── artifacts/
+├── workspaces/
+│   └── home/
+├── archive/
 ├── .desk/
+│   ├── workspaces/
+│   ├── archive/
+│   ├── tmp/
+│   └── targets/
 └── hairness.mjs
 ```
 
@@ -133,17 +146,23 @@ node ./hairness.mjs hud activity --since 2d
 node ./hairness.mjs hud activity --scope target:payments --json
 ```
 
-Keep a result when it deserves a durable contract:
+Create a personal Workspace at its first durable milestone, then keep a result
+there when it deserves a contract:
 
 ```bash
-node ./hairness.mjs artifact create hairness/scratch:scratch api-redesign --owner desk
+node ./hairness.mjs workspace create product-thinking --scope desk
+node ./hairness.mjs asset add @hairness/scratch -y
+node ./hairness.mjs artifact create hairness/scratch:scratch api-redesign \
+  --workspace desk/product-thinking
 node ./hairness.mjs artifact inspect api-redesign
 node ./hairness.mjs artifact validate api-redesign
-node ./hairness.mjs artifact publish api-redesign --to home
+node ./hairness.mjs artifact promote api-redesign --to workspace:home/home
 ```
 
-Publishing records ownership and lineage. Turning a useful Artifact into a new
-or improved Asset remains a deliberate authoring and review step.
+Promotion preserves ownership and lineage. `artifact publish` remains a
+deprecated prerelease alias. External publication is a separate
+`hairness/publishing` Capability that requires exact consent and a verified
+Handle.
 
 ## Trust and alpha limits
 
@@ -161,7 +180,7 @@ node ./hairness.mjs doctor
 Hairness does not provide an operating-system sandbox. Provider sessions,
 models and external tools remain outside its authority.
 
-The alpha has no Registry, marketplace, dependency solver, daemon, automatic
+The alpha has no remote Registry, marketplace, dependency solver, daemon, automatic
 merge, public Adapter SDK, agent scheduler or live collaboration service.
 Codex and Claude are the qualified providers today. Other runtimes and
 specialized Homes remain product directions.

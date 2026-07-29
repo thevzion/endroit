@@ -1,6 +1,6 @@
 {
   "name": "@hairness/cli",
-  "version": "0.5.0-alpha.2",
+  "version": "0.6.0-alpha.0",
   "description": "A Home-first framework for source-owned human-agent work across independent repositories.",
   "keywords": [
     "ai-agents",
@@ -36,9 +36,13 @@
     "bin/",
     "docs/reference.md",
     "assets/hairness/onboarding/",
+    "assets/hairness/planning/",
+    "assets/hairness/publishing/",
+    "assets/hairness/research/",
     "assets/hairness/hud/",
     "assets/hairness/artifacts/",
     "assets/hairness/targets/",
+    "assets/hairness/workspaces/",
     "assets/hairness/scratch/",
     "templates/",
     "schemas/v5/",

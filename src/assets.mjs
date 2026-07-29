@@ -86,6 +86,41 @@ export async function allInstalledAssets(root) {
   return [...home, ...desk]
 }
 
+export async function catalogAssets(root) {
+  const installed = await allInstalledAssets(root).catch(() => [])
+  const scopes = new Map()
+  for (const entry of installed.filter((candidate) => !candidate.invalid)) {
+    const values = scopes.get(entry.id) ?? []
+    values.push(entry.scope)
+    scopes.set(entry.id, values)
+  }
+  const values = []
+  for (const entry of await readdir(builtinRoot, { withFileTypes: true })) {
+    if (!entry.isDirectory() || entry.isSymbolicLink()) continue
+    const manifestPath = join(builtinRoot, entry.name, 'asset.json')
+    if (!await exists(manifestPath)) continue
+    const asset = await resolveAsset(root, `@hairness/${entry.name}`)
+    const manifest = asset.manifest
+    values.push({
+      id: manifest.name,
+      version: manifest.version,
+      description: manifest.description,
+      installed: (scopes.get(manifest.name) ?? []).sort(),
+      workspaceNamespace: manifest.workspaceNamespace ?? null,
+      capabilities: (manifest.capabilities ?? []).map(({ id, description }) => ({ id, description })),
+      surfaces: [
+        ...(manifest.skills ?? []).map(({ id, description }) => ({ kind: 'skill', id, description })),
+        ...(manifest.commands ?? []).map(({ id, description }) => ({ kind: 'command', id, description })),
+      ],
+      runtime: manifest.runtime ? {
+        namespace: manifest.runtime.namespace,
+        commands: manifest.runtime.commands,
+      } : null,
+    })
+  }
+  return values.sort((left, right) => left.id.localeCompare(right.id))
+}
+
 export async function validateAssetSource(root, source) {
   const asset = await resolveAsset(root, source)
   const files = new Map(asset.files.map((entry) => [entry.path, entry.content]))
@@ -134,7 +169,7 @@ export async function overrideAsset(root, selector) {
   return { status: 'overridden', name: home.id, path: relative(root, destination) }
 }
 
-export async function publishAsset(root, selector) {
+export async function promoteAsset(root, selector) {
   const desk = await requireValid(await findInstalled(root, selector, { scope: 'desk' }))
   if (desk.manifest.origin.kind !== 'override') throw new HairnessError('asset_not_override', `${desk.id} is not a Desk override.`)
   const home = await requireValid(await findInstalled(root, desk.id, { scope: 'home' }))
@@ -166,8 +201,10 @@ export async function publishAsset(root, selector) {
   ])
   await applyTransaction(root, writes, deletes)
   await removeEmptyParents(desk.root, join(root, '.desk', 'assets'))
-  return { status: 'published', name: desk.id, path: relative(root, home.root) }
+  return { status: 'promoted', name: desk.id, path: relative(root, home.root) }
 }
+
+export const publishAsset = promoteAsset
 
 export async function statusAssets(root, selector, options = {}) {
   const entries = selector ? [await findInstalled(root, selector, options)] : await installedAssets(root, options)
@@ -430,6 +467,7 @@ function assertCapabilityCollisions(manifests) {
   const claims = new Map()
   for (const manifest of manifests) {
     if (manifest.runtime) claim(`runtime:${manifest.runtime.namespace}`, manifest.name)
+    if (manifest.workspaceNamespace) claim(`workspace-namespace:${manifest.workspaceNamespace}`, manifest.name)
   }
   function claim(id, owner) {
     const current = claims.get(id)

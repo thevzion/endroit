@@ -1,6 +1,6 @@
-# Hairness 0.5 technical reference
+# Hairness 0.6 technical reference
 
-Hairness 0.5 is an alpha. The schemas under `schemas/v5` are authoritative.
+Hairness 0.6 is an alpha. The schemas under `schemas/v5` are authoritative.
 
 ## Home
 
@@ -34,9 +34,13 @@ once from the bundled template with `home.name` and `home.mode`.
 Unknown template variables are rejected. The resulting file is source-owned
 and is never re-rendered automatically.
 
-`create <directory>` creates a Git repository, initializes a Home, installs
-Onboarding, HUD, Artifacts and Targets, selects `hairness/hud:prompt`, builds
-shared projections, runs Doctor and commits the result.
+`create <directory>` uses a TTY wizard when available. It creates a Git
+repository, installs Workspaces, Onboarding, HUD, Artifacts and Targets,
+bootstraps `workspaces/home`, selects `hairness/hud:prompt`, builds shared
+projections, runs Doctor and commits atomically. Optional native Assets are
+selected with `--with research,planning,publishing`, `--with all` or
+`--with none`; no option is selected by default. `--no-interactive` and
+`--yes` support automation.
 
 ## Desk
 
@@ -75,6 +79,8 @@ The manifest may declare:
 - `settings`: Home and Desk JSON schemas;
 - `setup`: Capability IDs proposed by onboarding;
 - `runtime`: one namespace, entrypoint and static command inventory;
+- `workspaceNamespace`: one optional unique directory name used for new
+  Workspace-owned Artifact sources;
 - `origin`: installation provenance and base digests.
 
 Every referenced path must appear in `files`. Directories are conventions, not
@@ -112,6 +118,13 @@ the same deterministic order. That is HUD behavior, not Kernel grammar.
 
 A Desk Asset may replace a Home Asset only when its origin marks an explicit
 override.
+
+The Resolved Home discovers `workspaces/<id>` in Home scope and
+`.desk/workspaces/<id>` in Desk scope. IDs are globally unique for that
+Resolved Home. References are `workspace:home/<id>`,
+`workspace:desk/<id>` and
+`workstream:<scope>/<workspace>/<id>`. Installed Asset Workspace namespaces
+must also be unique.
 
 `validate` exposes a root-free JSON view of the resolved Home: Assets,
 Instructions, Capabilities, Skills, Commands, References, Artifact kinds,
@@ -186,7 +199,7 @@ its session context.
 
 `hud activity [--since <duration|date>] [--scope <ref>] [--json]` computes at
 most 100 recent events. Supported scopes are `home`, `desk`,
-`workspace:<id>`, `workstream:<workspace>/<id>`, `target:<id>` and
+`workspace:<scope>/<id>`, `workstream:<scope>/<workspace>/<id>`, `target:<id>` and
 `artifact:<id>`. An unknown scope fails without searching outside the resolved
 inventory. Artifact metadata is attributed `authoritative`; Git, filesystem,
 current status and HUD freshness observations are `observed`. Activity stores
@@ -209,7 +222,7 @@ An Asset runtime receives one JSON document on stdin:
   "assetRoot": "/absolute/home/assets/company/security",
   "resolvedHome": {},
   "kernel": {
-    "runtime": "@hairness/cli@0.5.0-alpha.2",
+    "runtime": "@hairness/cli@0.6.0-alpha.0",
     "source": "npm",
     "invoke": "node ./hairness.mjs"
   },
@@ -266,23 +279,30 @@ worktree and never deletes a branch or runs `--force`, `prune`, `repair`,
 
 ## First-party Assets
 
+- `hairness/workspaces`: required scoped Workspace lifecycle and runtime
+  `workspace create|list|inspect|doctor`;
 - `hairness/onboarding`: static, user-invoked, consent-first setup;
 - `hairness/hud`: optional Wake-up and on-demand orientation through
   `show|prompt|json|activity`;
-- `hairness/artifacts`: generic Artifact lifecycle;
+- `hairness/artifacts`: generic Workspace-owned Artifact lifecycle;
 - `hairness/targets`: routable declarations, named Bindings, deterministic
   inspection and agent-authored Target Maps;
+- `hairness/research`: optional instruction-only Studies under `researching`;
+- `hairness/planning`: optional instruction-only roadmaps and Initiatives under
+  `planning`;
+- `hairness/publishing`: optional instruction-only Publications and external
+  Handles under `publishing`;
 - `hairness/scratch`: bundled, opt-in Scratch Artifact kind;
-- `hairness/project`: external maintenance Asset, excluded from the package.
+- `hairness/project`: Hairness maintenance methodology consuming Planning.
 
 ## CLI
 
 ```text
-create <directory>
+create <directory> [--with <ids|all|none>] [--no-interactive] [--yes]
 desk init|clone
 asset validate <source>
 asset add|status|sync|remove
-asset override|publish|trust
+asset override|promote|catalog|trust
 validate
 build [--check]
 doctor

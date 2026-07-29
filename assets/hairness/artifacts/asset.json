@@ -1,8 +1,8 @@
 {
   "$schema": "https://hairness.dev/schema/asset.json",
   "name": "hairness/artifacts",
-  "version": "0.5.0-alpha.0",
-  "description": "The generic lifecycle for inspectable Artifacts owned by a Desk, Home or Target.",
+  "version": "0.6.0-alpha.0",
+  "description": "The generic lifecycle for inspectable Workspace-owned Artifacts and explicit projections.",
   "prefix": "hairness",
   "files": [
     "capabilities/manage.md",
@@ -13,7 +13,7 @@
     {
       "id": "manage",
       "path": "capabilities/manage.md",
-      "description": "Create, inspect, validate and publish source-owned Artifacts."
+      "description": "Create, inspect, validate and promote Workspace-owned Artifacts."
     }
   ],
   "skills": [
@@ -35,10 +35,11 @@
     "entry": "runtime.mjs",
     "commands": [
       { "name": "create", "description": "Create an Artifact, optionally importing a directory." },
-      { "name": "list", "description": "List Artifacts across Desk, Home and bound Targets." },
+      { "name": "list", "description": "List Workspace Artifacts, legacy roots and Target projections." },
       { "name": "inspect", "description": "Inspect one Artifact." },
       { "name": "validate", "description": "Validate one Artifact against its owning kind." },
-      { "name": "publish", "description": "Publish a Desk Artifact to the Home or a Target." }
+      { "name": "promote", "description": "Promote a Workspace Artifact to a Home Workspace or Target." },
+      { "name": "publish", "description": "Deprecated compatibility alias for Artifact promotion." }
     ]
   }
 }

@@ -8,6 +8,7 @@ import test from 'node:test'
 import { addAssets } from '../src/assets.mjs'
 import { buildHome } from '../src/build.mjs'
 import { createHome } from '../src/create.mjs'
+import { resolveHome } from '../src/resolved.mjs'
 import { dispatchRuntime } from '../src/runtime.mjs'
 import { captureIo } from './helpers.mjs'
 
@@ -28,9 +29,16 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
       await utimes(path, time, time)
     }
     const workspace = join(home, '.desk', 'workspaces', 'demo')
-    await mkdir(workspace, { recursive: true })
+    assert.equal(await dispatchRuntime(home, 'workspace', ['create', 'demo', '--scope', 'desk'], captureIo().io), 0)
     await writeFile(join(workspace, 'workspace.md'), [
       '---',
+      'id: "demo"',
+      'kind: "workspace"',
+      'status: "active"',
+      'owner: "workspace:desk/demo"',
+      'created_at: "2026-01-01T00:00:00.000Z"',
+      'updated_at: "2026-01-01T00:00:00.000Z"',
+      'derived_from: []',
       'emoji: "🎛️"',
       'summary: "Demo Workspace."',
       'when: ["Working on the demo."]',
@@ -54,18 +62,19 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.equal(model.kernel.invoke, 'node ./hairness.mjs')
     assert.deepEqual(model.desk.preferences, { addressAs: 'Alexis', responseLanguage: 'fr' })
     assert.equal(model.projections.every((entry) => entry.status === 'fresh'), true)
-    assert.deepEqual(model.surfaces.assets.map((entry) => entry.id), ['hairness/artifacts', 'hairness/hud', 'hairness/onboarding', 'hairness/targets'])
-    assert.deepEqual(model.surfaces.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'target'])
+    assert.deepEqual(model.surfaces.assets.map((entry) => entry.id), ['hairness/artifacts', 'hairness/hud', 'hairness/onboarding', 'hairness/targets', 'hairness/workspaces'])
+    assert.deepEqual(model.surfaces.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'target', 'workspace'])
     assert.deepEqual(
       model.trust.runtimes.map((entry) => [entry.owner, entry.trust]),
       [
         ['hairness/artifacts', 'bundled'],
         ['hairness/hud', 'bundled'],
         ['hairness/targets', 'bundled'],
+        ['hairness/workspaces', 'bundled'],
       ],
     )
     assert.deepEqual({ bundled: model.trust.bundled, approved: model.trust.approved, pending: model.trust.pending }, {
-      bundled: 3,
+      bundled: 4,
       approved: 0,
       pending: 0,
     })
@@ -74,9 +83,9 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.equal(model.recentDesk.some((entry) => entry.path === 'outside-link'), false)
     assert.deepEqual(
       model.items.workspaces.map(({ id, routable }) => [id, routable]),
-      [['demo', false]],
+      [['home', true], ['demo', true]],
     )
-    assert.equal(model.items.workspaces[0].emoji, '🎛️')
+    assert.equal(model.items.workspaces[1].emoji, '🎛️')
     assert.ok(model.items.capabilities.some(({ id }) => id === 'hairness-home'))
     assert.deepEqual(Object.keys(model.attention), ['blocking', 'warning', 'advisory'])
 
@@ -84,8 +93,8 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     await dispatchRuntime(home, 'hud', ['prompt'], prompt.io)
     assert.match(prompt.stdout(), /^<hairness-hud version="2" status="ready" generated-at="[^"]+" event="command">/)
     assert.match(prompt.stdout(), new RegExp(`<home name="home" emoji="🏠" mode="solo" root="${escapeRegex(model.home.root)}" providers="codex,claude"/>`))
-    assert.match(prompt.stdout(), /<kernel runtime="@hairness\/cli@0\.5\.0-alpha\.2" source="npm" invoke="node \.\/hairness\.mjs"\/>/)
-    assert.match(prompt.stdout(), /<item id="demo" emoji="🎛️" state="local" routable="false" access="model,user" summary="Demo Workspace\." tags="demo"/)
+    assert.match(prompt.stdout(), /<kernel runtime="@hairness\/cli@0\.6\.0-alpha\.0" source="npm" invoke="node \.\/hairness\.mjs"\/>/)
+    assert.match(prompt.stdout(), /<item id="demo" emoji="🎛️" state="active" access="model,user" summary="Demo Workspace\." tags="demo" when="Working on the demo\." ref="workspace:desk\/demo"/)
     assert.match(prompt.stdout(), /<runtime namespace="target" commands="list,discover,doctor,add,bind,clone,worktree,unbind,remove,inspect"\/>/)
     assert.match(prompt.stdout(), /<instruction owner="hairness\/desk" id="desk" source="DESK\.md">/)
     assert.match(prompt.stdout(), /<advisory>\s+<item subject="home" code="home-dirty">/)
@@ -93,10 +102,10 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.doesNotMatch(prompt.stdout(), /outside-link/)
 
     const activity = captureIo()
-    assert.equal(await dispatchRuntime(home, 'hud', ['activity', '--since', '1d', '--scope', 'workspace:demo', '--json'], activity.io), 0)
+    assert.equal(await dispatchRuntime(home, 'hud', ['activity', '--since', '1d', '--scope', 'workspace:desk/demo', '--json'], activity.io), 0)
     const activityModel = JSON.parse(activity.stdout())
     assert.equal(activityModel.apiVersion, 'hairness.dev/hud/activity/v1alpha1')
-    assert.equal(activityModel.scope, 'workspace:demo')
+    assert.equal(activityModel.scope, 'workspace:desk/demo')
     assert.ok(activityModel.events.some(({ source }) => source.ref.endsWith('workspace.md')))
     assert.equal(activityModel.events.some(({ source }) => source.ref.includes('outside-link')), false)
     const unknown = captureIo()
@@ -108,7 +117,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
 
     const human = captureIo()
     await dispatchRuntime(home, 'hud', ['show'], human.io)
-    assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.5.0-alpha.2 · npm · ready')
+    assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.6.0-alpha.0 · npm · ready')
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }
@@ -131,6 +140,31 @@ test('the HUD owns its prompt budget through namespaced Home settings', async ()
   }
 })
 
+test('Workspace runtime enforces scoped identity and Doctor remains read-only', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-workspaces-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home)
+    assert.equal(await dispatchRuntime(home, 'workspace', ['create', 'demo', '--scope', 'desk'], captureIo().io), 0)
+    const duplicate = captureIo()
+    assert.equal(await dispatchRuntime(home, 'workspace', ['create', 'demo', '--scope', 'home'], duplicate.io), 4)
+    assert.match(duplicate.stderr(), /already exists/)
+    const before = await tree(join(home, 'workspaces'))
+    const doctor = captureIo()
+    assert.equal(await dispatchRuntime(home, 'workspace', ['doctor', '--json'], doctor.io), 0)
+    assert.equal(JSON.parse(doctor.stdout()).status, 'ready')
+    assert.deepEqual(await tree(join(home, 'workspaces')), before)
+
+    const team = join(temporary, 'team')
+    await createHome(team, { mode: 'team' })
+    const missingDesk = captureIo()
+    assert.equal(await dispatchRuntime(team, 'workspace', ['create', 'private', '--scope', 'desk'], missingDesk.io), 4)
+    assert.match(missingDesk.stderr(), /configured Desk/)
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
 test('Artifacts import directories atomically and publish while preserving the Desk source', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'hairness-artifacts-'))
   try {
@@ -138,13 +172,17 @@ test('Artifacts import directories atomically and publish while preserving the D
     await createHome(home)
     await addAssets(home, ['@hairness/scratch'])
     await buildHome(home)
+    assert.equal(await dispatchRuntime(home, 'workspace', ['create', 'demo', '--scope', 'desk'], captureIo().io), 0)
     const source = join(temporary, 'notes')
     await mkdir(source)
     await writeFile(join(source, 'decision.md'), 'Choose boring primitives.\n')
+    const missingWorkspace = captureIo()
+    assert.equal(await dispatchRuntime(home, 'artifact', ['create', 'hairness/scratch:scratch', 'missing'], missingWorkspace.io), 2)
+    assert.match(missingWorkspace.stderr(), /Workspace is required/)
     const create = captureIo()
-    assert.equal(await dispatchRuntime(home, 'artifact', ['create', 'hairness/scratch:scratch', 'demo', '--from', source, '--json'], create.io), 0)
+    assert.equal(await dispatchRuntime(home, 'artifact', ['create', 'hairness/scratch:scratch', 'demo', '--workspace', 'desk/demo', '--from', source, '--json'], create.io), 0)
     const created = JSON.parse(create.stdout())
-    assert.equal(created.path, '.desk/artifacts/hairness/scratch/scratch/demo')
+    assert.equal(created.path, '.desk/workspaces/demo/exploring/scratch/demo')
     assert.equal(created.path.includes('hairness-scratch-scratch'), false)
     const path = join(home, created.path, 'artifact.md')
     assert.match(await readFile(path, 'utf8'), /kind: "hairness\/scratch:scratch"/)
@@ -153,8 +191,76 @@ test('Artifacts import directories atomically and publish while preserving the D
     const publish = captureIo()
     assert.equal(await dispatchRuntime(home, 'artifact', ['publish', path, '--to', 'home', '--json'], publish.io), 0, publish.stderr())
     const published = JSON.parse(publish.stdout())
+    assert.equal(publish.stdout().includes('deprecated'), true)
     assert.equal((await lstat(path)).isFile(), true)
     assert.equal((await lstat(join(home, published.path, 'artifact.md'))).isFile(), true)
+    assert.match(await readFile(join(home, published.path, 'artifact.md'), 'utf8'), /source_digest: "sha256:[a-f0-9]{64}"/)
+    const reverse = captureIo()
+    assert.equal(await dispatchRuntime(home, 'artifact', ['promote', published.path, '--to', 'workspace:desk/demo'], reverse.io), 2)
+    assert.match(reverse.stderr(), /workspace:home/)
+
+    const legacy = join(home, '.desk/artifacts/hairness/scratch/scratch/legacy')
+    await mkdir(legacy, { recursive: true })
+    await writeFile(join(legacy, 'artifact.md'), [
+      '---',
+      '$schema: "https://hairness.dev/schema/artifact.json"',
+      'id: "legacy"',
+      'kind: "hairness/scratch:scratch"',
+      'owner: "desk"',
+      'state: "active"',
+      'createdBy: "hairness/scratch"',
+      'createdAt: "2026-01-01T00:00:00.000Z"',
+      'derivedFrom: ""',
+      '---',
+      '',
+      '# Legacy',
+      '',
+    ].join('\n'))
+    const legacyValidation = captureIo()
+    assert.equal(await dispatchRuntime(home, 'artifact', ['validate', legacy, '--json'], legacyValidation.io), 0, legacyValidation.stderr())
+    assert.equal(JSON.parse(legacyValidation.stdout()).legacy, true)
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('Publishing keeps exact local content and observable Handles instruction-only', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-publishing-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home, { assets: ['@hairness/publishing'] })
+    await dispatchRuntime(home, 'workspace', ['create', 'editorial', '--scope', 'desk'], captureIo().io)
+    const created = captureIo()
+    assert.equal(await dispatchRuntime(home, 'artifact', [
+      'create',
+      'hairness/publishing:publication',
+      'launch',
+      '--workspace',
+      'desk/editorial',
+      '--status',
+      'ready',
+      '--field',
+      'format="post"',
+      '--field',
+      'title="Launch"',
+      '--field',
+      'audience="users"',
+      '--field',
+      'language="en"',
+      '--field',
+      'channel="web"',
+      '--json',
+    ], created.io), 0, created.stderr())
+    const publication = JSON.parse(created.stdout())
+    assert.equal(await readFile(join(home, publication.path, 'content.md'), 'utf8'), '# Draft\n')
+    assert.equal((await resolveHome(home)).runtimes.some((entry) => entry.namespace === 'publishing'), false)
+    const contract = await readFile(join(home, 'assets/hairness/publishing/capabilities/publish.md'), 'utf8')
+    assert.match(contract, /exact content, assets,\s+links, account, destination/)
+    assert.match(contract, /Do not create the Handle/)
+    await rm(join(home, publication.path, 'content.md'))
+    const invalid = captureIo()
+    assert.equal(await dispatchRuntime(home, 'artifact', ['validate', publication.path], invalid.io), 4)
+    assert.match(invalid.stderr(), /requires content.md/)
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }
@@ -166,6 +272,7 @@ test('Targets separate deterministic inspection from agent-authored Map Artifact
     const home = join(temporary, 'home')
     const target = join(temporary, 'target')
     await createHome(home)
+    assert.equal(await dispatchRuntime(home, 'workspace', ['create', 'maps', '--scope', 'desk'], captureIo().io), 0)
     await exec('git', ['init', '--quiet', '--initial-branch=main', target])
     await writeFile(join(target, 'README.md'), '# Demo\n')
     await writeFile(join(target, 'package.json'), '{\"name\":\"demo\"}\n')
@@ -200,21 +307,19 @@ test('Targets separate deterministic inspection from agent-authored Map Artifact
       'create',
       'hairness/targets:target-map',
       'demo-main',
-      '--owner',
-      'desk',
-      '--state',
+      '--workspace',
+      'desk/maps',
+      '--status',
       'current',
-      '--created-by',
-      'hairness/targets',
       '--derived-from',
       `target:demo@${inspected.head}`,
-      '--target',
-      'demo',
+      '--field',
+      'targets=["demo"]',
       '--json',
     ], mappedOutput.io), 0, mappedOutput.stderr())
     const mapped = JSON.parse(mappedOutput.stdout())
     const map = join(home, mapped.path, 'artifact.md')
-    assert.match(await readFile(map, 'utf8'), /derivedFrom: "target:demo@[a-f0-9]{40}"/)
+    assert.match(await readFile(map, 'utf8'), /derived_from: \["target:demo@[a-f0-9]{40}"\]/)
     for (const name of ['EVIDENCE.json', 'STACK.md', 'INTEGRATIONS.md', 'ARCHITECTURE.md', 'STRUCTURE.md', 'CONVENTIONS.md', 'TESTING.md', 'CONCERNS.md']) {
       assert.equal((await lstat(join(home, mapped.path, name))).isFile(), true)
     }

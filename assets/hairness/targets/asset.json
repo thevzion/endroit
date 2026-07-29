@@ -1,9 +1,10 @@
 {
   "$schema": "https://hairness.dev/schema/asset.json",
   "name": "hairness/targets",
-  "version": "0.5.0-alpha.0",
+  "version": "0.6.0-alpha.0",
   "description": "Independent repositories declared by a Home and bound from a collaborator's Desk.",
   "prefix": "hairness",
+  "workspaceNamespace": "targeting",
   "files": [
     "capabilities/configure.md",
     "capabilities/manage.md",

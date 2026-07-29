@@ -1,9 +1,10 @@
 {
   "$schema": "https://hairness.dev/schema/asset.json",
   "name": "hairness/scratch",
-  "version": "0.5.0-alpha.0",
+  "version": "0.6.0-alpha.0",
   "description": "Optional lightweight working memory for uncertain or non-trivial work.",
   "prefix": "hairness",
+  "workspaceNamespace": "exploring",
   "files": [
     "capabilities/scratch.md",
     "schemas/scratch.schema.json",
