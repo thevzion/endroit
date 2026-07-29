@@ -27,6 +27,7 @@ for (const entry of manifest.packages) {
   const remote = await remoteIntegrity(entry)
   if (remote) {
     if (remote !== entry.integrity) throw new Error(`${entry.name}@${entry.version} exists with different integrity.`)
+    await verifyRegistry(entry, manifest.tag)
     process.stdout.write(`verified ${entry.name}@${entry.version}; publication skipped\n`)
     continue
   }
