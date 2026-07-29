@@ -50,6 +50,8 @@ export async function ensureDevelopmentHome(options = {}) {
       '--id', 'hairness',
       '--binding', 'main',
       '--summary', 'Hairness framework under development',
+      '--when', 'Developing or releasing Hairness.',
+      '--tag', 'hairness',
       '--home', home,
     ])
   } else {

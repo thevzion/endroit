@@ -21,6 +21,8 @@ test('the repository recipe creates and safely recreates its Development Home', 
     const projectPackage = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
     assert.equal(document.mode, 'team')
     assert.deepEqual(document.providers, ['codex', 'claude'])
+    assert.deepEqual(document.settings['hairness/targets'].targets[0].when, ['Developing or releasing Hairness.'])
+    assert.deepEqual(document.settings['hairness/targets'].targets[0].tags, ['hairness'])
     document.runtime = '@hairness/cli@0.0.0'
     await writeFile(join(home, 'hairness.json'), `${JSON.stringify(document, null, 2)}\n`)
     assert.equal((await ensureDevelopmentHome({ home, deskId: 'alexis' })).status, 'ready')

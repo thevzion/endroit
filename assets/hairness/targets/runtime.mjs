@@ -23,7 +23,7 @@ const TARGET_HELP = {
     summary: 'Check Target identities and Binding health.',
   },
   add: {
-    usage: 'hairness target add <repository-or-path> [--id <id>] [--emoji <emoji>] [--summary <text>] [--binding <id>] [--json]',
+    usage: 'hairness target add <repository-or-path> [--id <id>] [--emoji <emoji>] [--summary <text>] [--when <situation>] [--tag <tag>] [--binding <id>] [--json]',
     effect: 'mutating — adds a shared Target declaration and may bind a local checkout',
     summary: 'Declare a Target from a remote identity or existing checkout.',
   },
@@ -177,7 +177,12 @@ async function addTarget(input, repository, flags) {
     assertRemoteSource(repository)
   }
   const id = flags.id ?? slug(basename(normalized))
+  const when = flags.when === undefined ? undefined : String(flags.when).trim()
+  const tag = flags.tag === undefined ? undefined : String(flags.tag).trim()
   assertId(id)
+  if (flags.when !== undefined && !when) throw failure('usage', '--when requires a non-empty situation.', 2)
+  if (tag && !/^[a-z0-9][a-z0-9._-]*$/.test(tag)) throw failure('target_tag_invalid', `Invalid Target tag ${tag}.`)
+  if (flags.tag !== undefined && !tag) throw failure('usage', '--tag requires a stable identifier.', 2)
   if (settings.targets.some((target) => target.id === id)) throw failure('target_exists', `Target ${id} already exists.`)
   settings.targets.push({
     id,
@@ -185,6 +190,8 @@ async function addTarget(input, repository, flags) {
     source,
     ...(flags.emoji ? { emoji: assertEmoji(flags.emoji) } : {}),
     ...(flags.summary ? { summary: flags.summary } : {}),
+    ...(when ? { when: [when] } : {}),
+    ...(tag ? { tags: [tag] } : {}),
   })
   settings.targets.sort((left, right) => left.id.localeCompare(right.id))
   home.settings ??= {}
