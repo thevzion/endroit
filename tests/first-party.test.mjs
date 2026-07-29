@@ -83,7 +83,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.match(prompt.stdout(), new RegExp(`<home name="home" mode="solo" root="${escapeRegex(model.home.root)}" providers="codex,claude"/>`))
     assert.match(prompt.stdout(), /<kernel runtime="@hairness\/cli@0\.5\.0-alpha\.1" source="npm" invoke="node \.\/hairness\.mjs"\/>/)
     assert.match(prompt.stdout(), /<item id="demo" state="local" routable="false" access="model,user" summary="Demo Workspace\." tags="demo"/)
-    assert.match(prompt.stdout(), /<runtime namespace="target" commands="list,discover,doctor,add,bind,clone,unbind,remove,inspect"\/>/)
+    assert.match(prompt.stdout(), /<runtime namespace="target" commands="list,discover,doctor,add,bind,clone,worktree,unbind,remove,inspect"\/>/)
     assert.match(prompt.stdout(), /<instruction owner="hairness\/desk" id="desk" source="DESK\.md">/)
     assert.match(prompt.stdout(), /<advisory>\s+<item subject="home" code="home-dirty">/)
     assert.doesNotMatch(prompt.stdout(), /<assets>|<skills>|<commands>|<recent-desk>/)

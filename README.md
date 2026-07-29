@@ -109,11 +109,16 @@ Declare existing repositories as Targets:
 ```bash
 node ./hairness.mjs target add ../payments-api --id payments
 node ./hairness.mjs target add ../product-app --id app
+node ./hairness.mjs target worktree payments --binding billing-fix \
+  --new-branch billing-fix --from-binding main
 node ./hairness.mjs target list
 ```
 
 The Home records Target identities. The active Desk records local Bindings.
-Hairness does not install agent infrastructure in those repositories.
+Managed checkouts live below `.desk/targets/<target>/<binding>`; an existing
+checkout is bound by symlink. `target worktree` uses only local Git state,
+keeps the Binding ID distinct from the branch and never copies uncommitted
+changes. Hairness does not install agent infrastructure in those repositories.
 
 Inspect recent evidence without creating an event log:
 

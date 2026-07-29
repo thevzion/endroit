@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
 import { lstat, mkdir, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, dirname, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
@@ -36,6 +36,11 @@ const TARGET_HELP = {
     usage: 'hairness target clone <target> [--binding <id>] [--json]',
     effect: 'mutating — clones a managed Binding into the Desk',
     summary: 'Clone the declared Target source as a managed Binding.',
+  },
+  worktree: {
+    usage: 'hairness target worktree <target> --binding <id> [--from-binding <id>] (--branch <existing> | --new-branch <name> [--start-point <ref>]) [--json]',
+    effect: 'mutating — creates a managed linked worktree in the Desk',
+    summary: 'Create a linked worktree from a usable Binding without fetching or copying local changes.',
   },
   unbind: {
     usage: 'hairness target unbind <target> [--binding <id>] [--delete] [--json]',
@@ -76,24 +81,36 @@ async function route(input, command, args, flags) {
   if (command === 'add') return addTarget(input, required(args[0], 'Repository'), flags)
   if (command === 'bind') return bindTarget(input, required(args[0], 'Target id'), required(args[1], 'Repository path'), flags.binding)
   if (command === 'clone') return cloneTarget(input, required(args[0], 'Target id'), flags.binding)
+  if (command === 'worktree') return createWorktree(input, required(args[0], 'Target id'), flags)
   if (command === 'unbind') return unbindTarget(input, required(args[0], 'Target id'), flags.binding, flags)
   if (command === 'remove') return removeTarget(input, required(args[0], 'Target id'))
   if (command === 'inspect') return inspectTarget(input, required(args[0], 'Target id'), flags)
-  throw failure('usage', 'hairness target list|discover|doctor|add|bind|clone|unbind|remove|inspect', 2)
+  throw failure('usage', 'hairness target list|discover|doctor|add|bind|clone|worktree|unbind|remove|inspect', 2)
 }
 
 async function listTargets(input) {
   const targets = declarations(input)
   return Promise.all(targets.map(async (target) => {
     const bindings = await targetBindings(input, target.id)
+    const inspected = await Promise.all(bindings.map(async (binding) => {
+      const evidence = binding.path ? await inspectRepository(binding.path).catch((error) => ({ available: false, error: error.message })) : { available: false, error: 'Broken Binding.' }
+      const matches = evidence.available !== false && evidence.remotes.some((remote) => remote.repository === target.repository)
+      return { ...binding, matches, evidence }
+    }))
+    const registered = new Map(inspected.filter((binding) => binding.path).map((binding) => [binding.path, binding.id]))
+    const worktrees = new Map()
+    for (const binding of inspected.filter((entry) => entry.matches)) {
+      for (const worktree of binding.evidence.worktrees) worktrees.set(worktree.path, {
+        ...worktree,
+        binding: registered.get(worktree.path) ?? null,
+        registered: registered.has(worktree.path),
+      })
+    }
     return {
       ...target,
       state: bindings.length ? 'bound' : 'declared',
-      bindings: await Promise.all(bindings.map(async (binding) => {
-        const evidence = binding.path ? await inspectRepository(binding.path).catch((error) => ({ available: false, error: error.message })) : { available: false, error: 'Broken Binding.' }
-        const matches = evidence.available !== false && evidence.remotes.some((remote) => remote.repository === target.repository)
-        return { ...binding, matches, evidence }
-      })),
+      bindings: inspected,
+      worktrees: [...worktrees.values()].sort((left, right) => left.path.localeCompare(right.path)),
     }
   }))
 }
@@ -130,6 +147,12 @@ async function doctorTargets(input) {
       if (binding.evidence.available === false) limits.push(`target-binding-broken:${target.id}:${binding.id}`)
       else if (!binding.matches) limits.push(`target-remote-mismatch:${target.id}:${binding.id}`)
       if (binding.evidence.conflicts) limits.push(`target-conflicts:${target.id}:${binding.id}`)
+    }
+    const unbound = target.worktrees.filter((worktree) => !worktree.registered)
+    if (unbound.length) limits.push(`target-worktrees-unbound:${target.id}:${unbound.length}`)
+    for (const worktree of target.worktrees) {
+      if (worktree.locked) limits.push(`target-worktree-locked:${target.id}:${worktree.path}`)
+      if (worktree.prunable) limits.push(`target-worktree-prunable:${target.id}:${worktree.path}`)
     }
   }
   return { status: limits.length ? 'partial' : 'ready', targets, limits }
@@ -178,7 +201,7 @@ async function bindTarget(input, id, repositoryPath, bindingId = 'main', declare
   if (await exists(link)) throw failure('target_binding_exists', `Binding ${id}/${bindingId} already exists.`)
   await mkdir(dirname(link), { recursive: true })
   await symlink(evidence.root, link)
-  return { status: 'bound', id, binding: bindingId, type: 'bound', path: evidence.root }
+  return { status: 'bound', id, binding: bindingId, type: 'bound', checkout: evidence.checkout, path: evidence.root }
 }
 
 async function cloneTarget(input, id, bindingId = 'main') {
@@ -192,24 +215,113 @@ async function cloneTarget(input, id, bindingId = 'main') {
     await git(['clone', '--quiet', '--', target.source, destination], input.homeRoot)
     const evidence = await inspectRepository(destination)
     if (!evidence.remotes.some((remote) => remote.repository === target.repository)) throw failure('target_remote_mismatch', `${target.source} does not match ${target.repository}.`)
-    return { status: 'cloned', id, binding: bindingId, type: 'managed', path: evidence.root }
+    return { status: 'cloned', id, binding: bindingId, type: 'managed', checkout: evidence.checkout, path: evidence.root }
   } catch (error) {
     await rm(destination, { recursive: true, force: true })
     throw error
   }
 }
 
+async function createWorktree(input, id, flags) {
+  requireDesk(input)
+  const bindingId = required(flags.binding, 'Binding id')
+  assertId(bindingId)
+  const existingBranch = flags.branch
+  const newBranch = flags['new-branch']
+  if (Boolean(existingBranch) === Boolean(newBranch)) {
+    throw failure('target_worktree_branch_mode', 'Pass exactly one of --branch or --new-branch.', 2)
+  }
+  if (flags['start-point'] && !newBranch) throw failure('target_worktree_start_point', '--start-point requires --new-branch.', 2)
+
+  const target = declaration(input, id)
+  const source = await selectBinding(input, id, flags['from-binding'], '--from-binding')
+  const sourceEvidence = await inspectRepository(source.path)
+  if (!sourceEvidence.remotes.some((remote) => remote.repository === target.repository)) {
+    throw failure('target_remote_mismatch', `${sourceEvidence.root} does not match ${target.repository}.`)
+  }
+
+  const branch = String(existingBranch ?? newBranch)
+  await validateBranch(source.path, branch)
+  const destinationRoot = join(input.deskRoot, 'targets', id)
+  const destination = join(destinationRoot, bindingId)
+  const nested = relative(destinationRoot, destination)
+  if (!nested || nested.startsWith('..') || resolve(destinationRoot, nested) !== destination) {
+    throw failure('target_worktree_destination', 'Managed worktree destination must stay below the Target Binding root.')
+  }
+  if (await exists(destination)) throw failure('target_binding_exists', `Binding ${id}/${bindingId} already exists.`)
+
+  const branchExists = await localBranchExists(source.path, branch)
+  let expectedHead
+  let command
+  if (existingBranch) {
+    if (!branchExists) throw failure('target_branch_missing', `Local branch ${branch} does not exist.`)
+    if (sourceEvidence.worktrees.some((worktree) => worktree.branch === branch)) {
+      throw failure('target_branch_in_use', `Local branch ${branch} is already checked out.`)
+    }
+    expectedHead = await git(['rev-parse', '--verify', `refs/heads/${branch}^{commit}`], source.path)
+    command = ['worktree', 'add', '--', destination, branch]
+  } else {
+    if (branchExists) throw failure('target_branch_exists', `Local branch ${branch} already exists.`)
+    const startPoint = String(flags['start-point'] ?? sourceEvidence.head)
+    if (!startPoint || startPoint.startsWith('-') || startPoint.includes('\0')) throw failure('target_start_point_invalid', 'Invalid local start point.')
+    expectedHead = await git(['rev-parse', '--verify', `${startPoint}^{commit}`], source.path)
+      .catch(() => { throw failure('target_start_point_missing', `Local start point ${startPoint} does not resolve to a commit.`) })
+    command = ['worktree', 'add', '-b', branch, '--', destination, expectedHead]
+  }
+
+  await mkdir(destinationRoot, { recursive: true })
+  await git(command, source.path)
+  const created = await inspectRepository(destination)
+  if (created.checkout !== 'linked-worktree' || created.commonGitDir !== sourceEvidence.commonGitDir) {
+    throw failure('target_worktree_repository_mismatch', 'Created checkout is not a linked worktree of the source repository.')
+  }
+  if (!created.remotes.some((remote) => remote.repository === target.repository)) {
+    throw failure('target_remote_mismatch', `${created.root} does not match ${target.repository}.`)
+  }
+  if (created.branch !== branch || created.head !== expectedHead) {
+    throw failure('target_worktree_revalidation', 'Created worktree branch or HEAD did not match the requested checkout.')
+  }
+  return {
+    status: 'created',
+    target: id,
+    binding: bindingId,
+    path: created.root,
+    branch: created.branch,
+    head: created.head,
+    sourceBinding: source.id,
+    type: 'managed',
+    checkout: 'linked-worktree',
+  }
+}
+
 async function unbindTarget(input, id, bindingId, flags) {
   const binding = await selectBinding(input, id, bindingId)
   const info = await lstat(binding.link)
-  if (!info.isSymbolicLink()) {
+  if (info.isSymbolicLink()) {
+    await rm(binding.link)
+  } else {
     if (!truthy(flags.delete)) throw failure('target_managed_delete_required', `Binding ${id}/${binding.id} is managed; pass --delete.`)
     const evidence = await inspectRepository(binding.path)
     if (!evidence.clean) throw failure('target_binding_dirty', `Managed Binding ${id}/${binding.id} has local changes.`)
+    const current = evidence.worktrees.find((worktree) => worktree.path === evidence.root)
+    if (binding.checkout === 'linked-worktree') {
+      if (!current) throw failure('target_worktree_metadata_missing', `Linked worktree ${id}/${binding.id} is missing from Git metadata; repair it explicitly.`)
+      if (current.locked) throw failure('target_worktree_locked', `Linked worktree ${id}/${binding.id} is locked; unlock it explicitly before deletion.`)
+      if (current.prunable) throw failure('target_worktree_prunable', `Linked worktree ${id}/${binding.id} has prunable metadata; repair or prune it explicitly.`)
+      const commandRoot = evidence.worktrees.find((worktree) => worktree.path !== evidence.root && !worktree.prunable && !worktree.locked && worktree.available)?.path
+      if (!commandRoot) throw failure('target_worktree_source_missing', `No usable sibling checkout can remove ${id}/${binding.id}; repair the repository explicitly.`)
+      await git(['worktree', 'remove', '--', evidence.root], commandRoot)
+    } else {
+      const dependants = evidence.worktrees.filter((worktree) => worktree.path !== evidence.root)
+      if (dependants.length) {
+        const condition = dependants.some((worktree) => worktree.prunable) ? 'prunable worktree metadata' : 'dependent worktrees'
+        throw failure('target_clone_has_worktrees', `Managed clone ${id}/${binding.id} still has ${condition}.`)
+      }
+      await rm(binding.link, { recursive: true })
+    }
   }
-  await rm(binding.link, { recursive: true, force: true })
   await removeEmpty(join(input.deskRoot, 'targets', id), join(input.deskRoot, 'targets'))
-  return { status: 'unbound', id, binding: binding.id }
+  return { status: 'unbound', id, binding: binding.id, type: binding.type, checkout: binding.checkout }
 }
 
 async function removeTarget(input, id) {
@@ -240,6 +352,8 @@ async function inspectTarget(input, id, flags) {
     status: 'inspected',
     target: target.id,
     binding: binding.id,
+    type: binding.type,
+    checkout: binding.checkout,
     repository: target.repository,
     root: evidence.root,
     head: evidence.head,
@@ -284,12 +398,13 @@ async function targetBindings(input, id) {
     if (!entry.isSymbolicLink() && !entry.isDirectory()) continue
     const link = join(root, entry.name)
     const path = await realpath(link).catch(() => null)
-    values.push({ id: entry.name, type: entry.isSymbolicLink() ? 'bound' : 'managed', link, path })
+    const layout = path ? await repositoryLayout(path).catch(() => null) : null
+    values.push({ id: entry.name, type: entry.isSymbolicLink() ? 'bound' : 'managed', checkout: layout?.checkout ?? null, link, path })
   }
   return values
 }
 
-async function selectBinding(input, id, bindingId) {
+async function selectBinding(input, id, bindingId, flag = '--binding') {
   const bindings = await targetBindings(input, id)
   if (bindingId) {
     const selected = bindings.find((binding) => binding.id === bindingId)
@@ -299,20 +414,21 @@ async function selectBinding(input, id, bindingId) {
   }
   const usable = bindings.filter((binding) => binding.path)
   if (!usable.length) throw failure('target_unbound', `${id} has no usable Binding.`)
-  if (usable.length > 1) throw failure('target_binding_ambiguous', `${id} has multiple Bindings; pass --binding.`)
+  if (usable.length > 1) throw failure('target_binding_ambiguous', `${id} has multiple Bindings; pass ${flag}.`)
   return usable[0]
 }
 
 async function inspectRepository(path) {
   const run = (args) => git(args, path)
   const root = await run(['rev-parse', '--show-toplevel'])
-  const [head, branch, status, remoteOutput, committedAt, worktreeOutput] = await Promise.all([
+  const [head, branch, status, remoteOutput, committedAt, worktreeOutput, layout] = await Promise.all([
     run(['rev-parse', 'HEAD']),
     run(['symbolic-ref', '--quiet', '--short', 'HEAD']).catch(() => null),
     run(['status', '--porcelain=v2', '--branch', '--untracked-files=all']),
     run(['config', '--get-regexp', '^remote\\..*\\.url$']).catch(() => ''),
     run(['log', '-1', '--format=%cI']).catch(() => null),
-    run(['worktree', 'list', '--porcelain']).catch(() => ''),
+    run(['worktree', 'list', '--porcelain', '-z']).catch(() => ''),
+    repositoryLayout(path),
   ])
   const remotes = remoteOutput.split('\n').filter(Boolean).map((line) => {
     const separator = line.indexOf(' ')
@@ -321,6 +437,15 @@ async function inspectRepository(path) {
     return { name, url, repository: normalizeRepository(url) }
   })
   const changes = status.split('\n').filter((line) => /^(1 |2 |u |\? )/.test(line))
+  const worktrees = await Promise.all(parseWorktrees(worktreeOutput).map(async ({ locked, prunable, ...worktree }) => ({
+    ...worktree,
+    path: await canonicalPath(worktree.path),
+    available: await exists(worktree.path),
+    locked: Boolean(locked),
+    prunable: Boolean(prunable),
+    ...(typeof locked === 'string' ? { lockedReason: locked } : {}),
+    ...(typeof prunable === 'string' ? { prunableReason: prunable } : {}),
+  })))
   return {
     available: true,
     root,
@@ -331,9 +456,65 @@ async function inspectRepository(path) {
     conflicts: changes.filter((line) => line.startsWith('u ')).length,
     committedAt,
     operation: await gitOperation(root),
-    worktrees: worktreeOutput.split('\n').filter((line) => line.startsWith('worktree ')),
+    worktrees,
+    ...layout,
     remotes,
   }
+}
+
+async function repositoryLayout(path) {
+  const [gitDirectory, commonDirectory] = await Promise.all([
+    git(['rev-parse', '--git-dir'], path),
+    git(['rev-parse', '--git-common-dir'], path),
+  ])
+  const gitDir = await canonicalPath(resolve(path, gitDirectory))
+  const commonGitDir = await canonicalPath(resolve(path, commonDirectory))
+  return { gitDir, commonGitDir, checkout: gitDir === commonGitDir ? 'main' : 'linked-worktree' }
+}
+
+function parseWorktrees(value) {
+  const entries = []
+  let current = null
+  for (const field of value.split('\0')) {
+    if (!field) {
+      if (current) entries.push(current)
+      current = null
+      continue
+    }
+    const separator = field.indexOf(' ')
+    const key = separator < 0 ? field : field.slice(0, separator)
+    const entry = separator < 0 ? true : field.slice(separator + 1)
+    if (key === 'worktree') {
+      if (current) entries.push(current)
+      current = { path: String(entry) }
+    } else if (current && key === 'HEAD') current.head = entry
+    else if (current && key === 'branch') current.branch = String(entry).replace(/^refs\/heads\//, '')
+    else if (current && key === 'detached') current.detached = true
+    else if (current && key === 'locked') current.locked = entry
+    else if (current && key === 'prunable') current.prunable = entry
+    else if (current && key === 'bare') current.bare = true
+  }
+  if (current) entries.push(current)
+  return entries
+}
+
+async function validateBranch(root, branch) {
+  if (!branch || branch.startsWith('-') || branch.includes('\0')) throw failure('target_branch_invalid', `Invalid branch ${branch}.`)
+  await git(['check-ref-format', '--branch', branch], root)
+    .catch(() => { throw failure('target_branch_invalid', `Invalid branch ${branch}.`) })
+}
+
+async function localBranchExists(root, branch) {
+  try {
+    await git(['show-ref', '--verify', '--quiet', `refs/heads/${branch}`], root)
+    return true
+  } catch {
+    return false
+  }
+}
+
+async function canonicalPath(path) {
+  return realpath(path).catch(() => resolve(path))
 }
 
 async function gitOperation(root) {
@@ -423,7 +604,7 @@ function argumentsOf(argv) {
 
 function human(value) {
   if (value.targets) return value.targets.length
-    ? value.targets.map((target) => `${target.id} · ${target.state} · ${target.bindings?.map((binding) => `${binding.id}:${binding.evidence?.clean ? 'clean' : binding.evidence?.available === false ? 'broken' : 'dirty'}`).join(', ') || 'no bindings'}`).join('\n')
+    ? value.targets.map((target) => `${target.id} · ${target.state} · ${target.bindings?.map((binding) => `${binding.id}:${binding.checkout ?? 'unknown'}:${binding.evidence?.clean ? 'clean' : binding.evidence?.available === false ? 'broken' : 'dirty'}`).join(', ') || 'no bindings'} · ${target.worktrees?.filter((worktree) => !worktree.registered).length ?? 0} unbound worktrees`).join('\n')
     : 'No Targets.'
   return Object.entries(value).map(([key, entry]) => `${key}: ${typeof entry === 'object' ? JSON.stringify(entry) : entry}`).join('\n')
 }
