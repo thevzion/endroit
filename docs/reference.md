@@ -222,6 +222,34 @@ A digest change returns an approved runtime to `pending`.
 `add`, `sync`, `build`, `doctor` and resolution never execute Asset runtimes.
 HUD executes no other Asset runtime while composing its own output.
 
+## Target runtime
+
+`hairness/targets` provides:
+
+```text
+target list|discover|doctor|add|bind|clone|worktree|unbind|remove|inspect
+```
+
+Target declarations are Home-owned. Named Binding paths are local Desk state
+under `.desk/targets/<target>/<binding>` and never enter settings.
+
+`target bind` symlinks an existing checkout. `target clone` creates a physical
+managed clone. `target worktree` creates a physical managed linked worktree
+from one usable source Binding, either by checking out an unused local branch
+or by creating a new branch at the source HEAD or an explicit locally resolved
+start point.
+
+Inspection reports compatible ownership `bound | managed` plus checkout
+`main | linked-worktree`. Its worktree inventory comes from
+`git worktree list --porcelain -z`, is deduplicated across usable Bindings and
+marks the Binding associated with each registered path. Discovery never binds
+an unregistered worktree.
+
+`target unbind --delete` requires a clean managed checkout. It refuses locked,
+prunable or dependent worktrees, uses `git worktree remove` for a linked
+worktree and never deletes a branch or runs `--force`, `prune`, `repair`,
+`unlock` or `fetch`.
+
 ## First-party Assets
 
 - `hairness/onboarding`: static, user-invoked, consent-first setup;

@@ -2,7 +2,7 @@
 import { createHash } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { lstat, readFile, readdir, realpath } from 'node:fs/promises'
-import { dirname, join, relative } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
@@ -314,6 +314,10 @@ async function hud(input) {
     if (!target.bindings.length) attention.push(item('warning', `target:${target.id}`, 'target-unbound', `${target.id} has no local Binding.`))
     if (target.map.state === 'missing') attention.push(item('advisory', `target:${target.id}`, 'target-map-missing', `${target.id} has no Target Map.`))
     if (target.map.state === 'stale') attention.push(item('advisory', `target:${target.id}`, 'target-map-stale', `${target.id} Target Map is stale.`))
+    const unboundWorktrees = target.worktrees.filter((worktree) => !worktree.binding)
+    if (unboundWorktrees.length) {
+      attention.push(item('advisory', `target:${target.id}`, 'target-worktrees-unbound', `${target.id} has ${unboundWorktrees.length} Git worktree(s) without a local Binding; inspect target list or target doctor.`))
+    }
     for (const binding of target.bindings) {
       if (!binding.git?.available) attention.push(item('blocking', `target:${target.id}/${binding.id}`, 'target-broken', 'Binding is not a usable Git checkout.'))
       else if (binding.git.conflicts) attention.push(item('blocking', `target:${target.id}/${binding.id}`, 'target-conflicts', `Binding has ${binding.git.conflicts} conflict(s).`))
@@ -496,6 +500,14 @@ function targetItem(target) {
       root: binding.root,
       head: binding.git?.head ?? null,
     })),
+    worktrees: target.worktrees.map((worktree) => ({
+      path: worktree.path,
+      head: worktree.head ?? null,
+      branch: worktree.branch ?? null,
+      binding: worktree.binding,
+      locked: Boolean(worktree.locked),
+      prunable: Boolean(worktree.prunable),
+    })),
     map: target.map,
     ...(metadataError ? { metadataError } : {}),
   }
@@ -535,12 +547,21 @@ async function scanTargets(targets, deskRoot, artifacts) {
       .filter((artifact) => artifact.kind === 'hairness/targets:target-map' && artifact.targets?.includes(target.id))
       .sort((left, right) => String(right.createdAt ?? '').localeCompare(String(left.createdAt ?? '')))
     const heads = new Set(bindings.map((binding) => binding.git?.head).filter(Boolean))
+    const registered = new Map(bindings.filter((binding) => binding.root).map((binding) => [binding.root, binding.id]))
+    const worktrees = new Map()
+    for (const binding of bindings) {
+      for (const worktree of binding.git?.worktrees ?? []) worktrees.set(worktree.path, {
+        ...worktree,
+        binding: registered.get(worktree.path) ?? null,
+      })
+    }
     const current = maps.find((artifact) => heads.has(String(artifact.derivedFrom ?? '').replace(`target:${target.id}@`, '')))
     const selected = current ?? maps[0] ?? null
     return {
       ...target,
       state: bindings.length ? 'bound' : 'declared',
       bindings,
+      worktrees: [...worktrees.values()].sort((left, right) => left.path.localeCompare(right.path)),
       map: {
         count: maps.length,
         state: current ? 'current' : maps.length ? 'stale' : 'missing',
@@ -604,13 +625,14 @@ async function gitProbe(root) {
       run(['symbolic-ref', '--quiet', '--short', 'HEAD']).then((value) => value.trim()).catch(() => null),
       run(['status', '--porcelain=v2', '--branch', '--untracked-files=all']),
       run(['log', '-1', '--format=%cI']).then((value) => value.trim()),
-      run(['worktree', 'list', '--porcelain']),
+      run(['worktree', 'list', '--porcelain', '-z']),
     ])
     const state = parseStatus(status)
     const worktrees = []
-    for (const entry of parseWorktrees(worktreeOutput)) {
-      const worktreeStatus = await run(['status', '--porcelain=v2', '--branch', '--untracked-files=all'], entry.path).catch(() => '')
-      worktrees.push({ ...entry, ...parseStatus(worktreeStatus), current: entry.path === top })
+    for (const parsed of parseWorktrees(worktreeOutput)) {
+      const path = await realpath(parsed.path).catch(() => resolve(parsed.path))
+      const worktreeStatus = await run(['status', '--porcelain=v2', '--branch', '--untracked-files=all'], path).catch(() => '')
+      worktrees.push({ ...parsed, path, ...parseStatus(worktreeStatus), current: path === top })
     }
     return {
       available: true,
@@ -641,14 +663,24 @@ function parseStatus(status) {
 
 function parseWorktrees(value) {
   const entries = []
-  let current
-  for (const line of value.split('\n')) {
-    if (line.startsWith('worktree ')) {
+  let current = null
+  for (const field of value.split('\0')) {
+    if (!field) {
       if (current) entries.push(current)
-      current = { path: line.slice(9) }
-    } else if (current && line.startsWith('HEAD ')) current.head = line.slice(5)
-    else if (current && line.startsWith('branch ')) current.branch = line.slice(7).replace('refs/heads/', '')
-    else if (current && line === 'detached') current.detached = true
+      current = null
+      continue
+    }
+    const separator = field.indexOf(' ')
+    const key = separator < 0 ? field : field.slice(0, separator)
+    const entry = separator < 0 ? true : field.slice(separator + 1)
+    if (key === 'worktree') {
+      if (current) entries.push(current)
+      current = { path: String(entry) }
+    } else if (current && key === 'HEAD') current.head = entry
+    else if (current && key === 'branch') current.branch = String(entry).replace(/^refs\/heads\//, '')
+    else if (current && key === 'detached') current.detached = true
+    else if (current && key === 'locked') current.locked = entry
+    else if (current && key === 'prunable') current.prunable = entry
   }
   if (current) entries.push(current)
   return entries

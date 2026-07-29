@@ -85,7 +85,8 @@ records lineage; it does not produce an Asset.
 ```text
 declare remote identity
   ├─ clone → managed Binding
-  └─ bind existing checkout → external Binding
+  ├─ bind existing checkout → external Binding
+  └─ usable Binding → managed linked worktree
           ↓
       deterministic inspect
           ↓
@@ -95,10 +96,26 @@ declare remote identity
 ```
 
 A Target accepts multiple named Bindings. A unique Binding is inferred;
-ambiguity requires `--binding`. `target inspect` reads tracked paths, manifests,
-test names and local Git evidence, caps inspection at 5,000 paths and never
-writes into the Target. The Target Map Capability then guides the agent to
-interpret the bounded evidence and create one inspectable Artifact per Target.
+ambiguity requires `--binding` or `--from-binding` while creating a worktree.
+Bindings preserve compatible ownership as `bound | managed` and separately
+identify their checkout as `main | linked-worktree`.
+
+`target worktree` creates only below `.desk/targets/<target>/<binding>`, from a
+local branch or a new branch at a locally resolved commit. It never fetches,
+forces or copies source working-tree changes. `target list` aggregates
+`git worktree list --porcelain -z` across usable Bindings and exposes
+unregistered worktrees without binding them.
+
+`target inspect` reads tracked paths, manifests, test names and local Git
+evidence, caps inspection at 5,000 paths and never writes into the Target. The
+Target Map Capability then guides the agent to interpret the bounded evidence
+and create one inspectable Artifact per Target.
+
+Unbinding a symlink removes only the link. Deleting a clean managed clone uses
+filesystem removal only when its common Git directory has no dependent
+worktrees. Deleting a clean, unlocked linked worktree uses
+`git worktree remove`; Hairness never deletes its branch or automatically
+forces, prunes, repairs or unlocks Git metadata.
 
 ## Front Door
 

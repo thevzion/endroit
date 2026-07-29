@@ -32,7 +32,7 @@
     {
       "id": "manage",
       "path": "capabilities/manage.md",
-      "description": "Declare, bind, clone and inspect independent Target repositories."
+      "description": "Declare, bind, clone, worktree and inspect independent Target repositories."
     },
     {
       "id": "map",
@@ -51,7 +51,7 @@
     {
       "id": "target-manage",
       "capability": "manage",
-      "description": "Use when a repository must be declared, bound or inspected as a Hairness Target."
+      "description": "Use when a repository must be declared, bound, given a managed worktree or inspected as a Hairness Target."
     },
     {
       "id": "target-map",
@@ -105,6 +105,7 @@
       { "name": "add", "description": "Declare a shared Target." },
       { "name": "bind", "description": "Bind an existing checkout." },
       { "name": "clone", "description": "Clone a managed Binding." },
+      { "name": "worktree", "description": "Create a managed linked worktree." },
       { "name": "unbind", "description": "Remove a local Binding." },
       { "name": "remove", "description": "Remove a Target declaration." },
       { "name": "inspect", "description": "Collect deterministic read-only evidence from a Target Binding." }
