@@ -59,6 +59,7 @@
     "check:providers": "node scripts/check-providers.mjs",
     "check:pack": "node scripts/check-pack.mjs",
     "check:lab": "node scripts/lab-dogfood.mjs",
+    "dev:bootstrap": "node scripts/bootstrap-home.mjs",
     "dev:home": "node scripts/development-home.mjs ensure",
     "dev:home:recreate": "node scripts/development-home.mjs recreate",
     "dev:session": "node scripts/development-home.mjs session",
@@ -68,6 +69,7 @@
     "release:dry-run": "node scripts/release-publish.mjs --dry-run"
   },
   "dependencies": {
+    "@clack/prompts": "1.7.0",
     "ajv": "8.20.0"
   }
 }

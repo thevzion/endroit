@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
-import { packHairness } from './lib/pack.mjs'
+import { installPackedRuntime, packHairness } from './lib/pack.mjs'
 
 const exec = promisify(execFile)
 const root = new URL('../', import.meta.url).pathname
@@ -15,14 +15,7 @@ try {
   const target = join(temporary, 'target')
   const command = ['--yes', '--package', packs.cli, 'hairness']
   await exec('npx', [...command, 'create', home], { cwd: temporary, maxBuffer: 20 * 1024 * 1024 })
-  const launcher = join(home, '.hairness', 'dev-cli')
-  await mkdir(join(home, '.hairness'), { recursive: true })
-  await writeFile(launcher, `#!/usr/bin/env node
-import { spawnSync } from 'node:child_process'
-const result = spawnSync(process.platform === 'win32' ? 'npx.cmd' : 'npx', ['--yes', '--package', ${JSON.stringify(packs.cli)}, 'hairness', ...process.argv.slice(2)], { stdio: 'inherit' })
-process.exitCode = result.status ?? 1
-`)
-  await chmod(launcher, 0o755)
+  await installPackedRuntime(home, packs.cli)
   const consoleArgs = [join(home, 'hairness.mjs')]
   await exec('git', ['init', '--quiet', '--initial-branch=main', target])
   await writeFile(join(target, 'README.md'), '# Lab Target\n')

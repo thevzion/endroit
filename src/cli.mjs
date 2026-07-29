@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import { pathToFileURL } from 'node:url'
-import { createInterface } from 'node:readline/promises'
 import {
   addAssets,
   catalogAssets,
@@ -13,6 +12,7 @@ import {
 } from './assets.mjs'
 import { buildHome } from './build.mjs'
 import { bootstrapAssets, createHome } from './create.mjs'
+import { runCreateWizard } from './create-wizard.mjs'
 import { cloneDesk, initDesk } from './desk.mjs'
 import { doctorHome } from './doctor.mjs'
 import { assertRuntime, findHome } from './home.mjs'
@@ -20,11 +20,12 @@ import { asHairnessError, HairnessError } from './lib/errors.mjs'
 import { publicPlan, resolveHome } from './resolved.mjs'
 import { dispatchRuntime, runtimeTrust } from './runtime.mjs'
 
-export async function runCli(argv = process.argv.slice(2), io = process) {
+export async function runCli(argv = process.argv.slice(2), io = process, dependencies = {}) {
   const { positionals, flags } = parseArguments(argv)
   const [command, action, ...rest] = positionals
   try {
-    const value = await route(command, action, rest, flags, argv, io)
+    const value = await route(command, action, rest, flags, argv, io, dependencies)
+    if (value?.rendered) return value.exitCode
     if (value?.passthrough) return value.exitCode
     return write(io.stdout, flags.json ? JSON.stringify(value, null, 2) : renderHuman(value))
   } catch (caught) {
@@ -36,9 +37,9 @@ export async function runCli(argv = process.argv.slice(2), io = process) {
   }
 }
 
-async function route(command, action, rest, flags, argv, io) {
+async function route(command, action, rest, flags, argv, io, dependencies) {
   if (!command) return help()
-  if (command === 'create') return createRoute(required(action, 'destination'), flags, io)
+  if (command === 'create') return createRoute(required(action, 'destination'), flags, io, dependencies.prompts)
   if (command === 'asset' && action === 'validate') {
     return validateAssetSource(flags.home ?? process.cwd(), required(rest[0], 'Asset source'))
   }
@@ -55,38 +56,33 @@ async function route(command, action, rest, flags, argv, io) {
 
 const optionalCreateAssets = ['research', 'planning', 'publishing', 'scratch']
 
-async function createRoute(destination, flags, io) {
-  const interactive = !booleanFlag(flags['no-interactive']) && io.stdin?.isTTY && io.stdout?.isTTY
-  let selected = createAssetSelection(flags.with)
-  let prompt
-  if (interactive) {
-    prompt = createInterface({ input: io.stdin, output: io.stdout })
-    io.stdout.write([
-      'A Home owns shared rules and Workspaces; its Desk keeps personal continuity.',
-      'Solo tracks the Desk except Target bindings. Team keeps the Desk local.',
-      'Targets remain independent product repositories.',
-      '',
-      `Required foundation: ${bootstrapAssetNames().join(', ')}`,
-      `Optional Assets: ${optionalCreateAssets.join(', ')}`,
-      '',
-    ].join('\n'))
-    if (flags.with === undefined) {
-      selected = createAssetSelection(await prompt.question('Optional Assets (comma-separated, blank for none): '))
-    }
-    io.stdout.write(`Will create ${destination} with ${[...bootstrapAssetNames(), ...selected].join(', ')}.\n`)
-    if (!booleanFlag(flags.yes) && !/^y(?:es)?\s*$/i.test(await prompt.question('Continue? [y/N] '))) {
-      prompt.close()
-      throw new HairnessError('confirmation_required', 'Home creation cancelled. Pass -y for non-interactive confirmation.')
-    }
-    prompt.close()
-  }
-  return createHome(destination, {
-    providers: csv(flags.providers),
+async function createRoute(destination, flags, io, prompts) {
+  const interactive = !booleanFlag(flags['no-interactive'])
+    && !booleanFlag(flags.json)
+    && io.stdin?.isTTY
+    && io.stdout?.isTTY
+  const selected = createAssetSelection(flags.with)
+  const providers = csv(flags.providers) ?? ['codex', 'claude']
+  const create = ({ mode = flags.mode, selected: chosen = selected } = {}) => createHome(destination, {
+    providers,
     name: flags.name,
-    mode: flags.mode,
+    mode,
     deskId: flags.desk,
     prefix: flags.prefix,
-    assets: selected.map((id) => `@hairness/${id}`),
+    assets: chosen.map((id) => `@hairness/${id}`),
+  })
+  if (!interactive) return create()
+  return runCreateWizard({
+    destination,
+    mode: flags.mode,
+    selected,
+    selectionProvided: flags.with !== undefined,
+    yes: booleanFlag(flags.yes),
+    providers,
+    foundation: bootstrapAssetNames(),
+    io,
+    prompts,
+    create,
   })
 }
 

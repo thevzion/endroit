@@ -3,11 +3,11 @@ import { execFile } from 'node:child_process'
 import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { PassThrough } from 'node:stream'
 import { promisify } from 'node:util'
 import test from 'node:test'
 import { buildHome } from '../src/build.mjs'
 import { runCli } from '../src/cli.mjs'
+import { CREATE_WORDMARK } from '../src/create-wizard.mjs'
 import { compileSchemas, validateDocument } from '../src/contracts.mjs'
 import { createHome, initHome } from '../src/create.mjs'
 import { cloneDesk, initDesk, loadDesk } from '../src/desk.mjs'
@@ -24,17 +24,20 @@ test('create supports a TTY preview and explicit optional native Assets', async 
   const temporary = await mkdtemp(join(tmpdir(), 'hairness-create-wizard-'))
   try {
     const home = join(temporary, 'home')
-    const input = new PassThrough()
-    const output = new PassThrough()
-    const errors = new PassThrough()
-    input.isTTY = true
-    output.isTTY = true
-    let text = ''
-    output.on('data', (chunk) => { text += chunk })
-    input.write('research,publishing\n')
-    setTimeout(() => input.end('y\n'), 20)
-    assert.equal(await runCli(['create', home], { stdin: input, stdout: output, stderr: errors }), 0)
-    assert.match(text, /Required foundation:/)
+    const io = captureTtyIo()
+    const ui = promptHarness({
+      mode: 'team',
+      selected: ['research', 'publishing'],
+      accepted: true,
+    })
+    assert.equal(await runCli(['create', home], io.io, { prompts: ui.prompts }), 0, io.stderr())
+    assert.deepEqual(ui.calls.filter(({ type }) => ['select', 'multiselect', 'confirm'].includes(type)).map(({ type }) => type), [
+      'select',
+      'multiselect',
+      'confirm',
+    ])
+    assert.ok(CREATE_WORDMARK.split('\n').every((line) => line.length < 64))
+    assert.equal(JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8')).mode, 'team')
     assert.equal(await readFile(join(home, 'workspaces/home/workspace.md'), 'utf8').then((value) => value.includes('workspace:home/home')), true)
     assert.equal(await readFile(join(home, 'assets/hairness/research/asset.json'), 'utf8').then(Boolean), true)
     assert.equal(await readFile(join(home, 'assets/hairness/publishing/asset.json'), 'utf8').then(Boolean), true)
@@ -48,8 +51,69 @@ test('create supports a TTY preview and explicit optional native Assets', async 
     const automatic = join(temporary, 'automatic')
     const captured = captureIo()
     assert.equal(await runCli(['create', automatic, '--with', 'all', '--no-interactive', '--yes'], captured.io), 0, captured.stderr())
+    assert.doesNotMatch(captured.stdout(), /\u001b\[/)
     for (const id of ['research', 'planning', 'publishing', 'scratch']) {
       assert.equal(await readFile(join(automatic, `assets/hairness/${id}/asset.json`), 'utf8').then(Boolean), true)
+    }
+
+    const flagged = join(temporary, 'flagged')
+    const flaggedIo = captureTtyIo()
+    const flaggedUi = promptHarness()
+    const previousNoColor = process.env.NO_COLOR
+    const previousForceColor = process.env.FORCE_COLOR
+    process.env.NO_COLOR = '1'
+    delete process.env.FORCE_COLOR
+    try {
+      assert.equal(await runCli([
+        'create', flagged,
+        '--mode', 'team',
+        '--with', 'scratch',
+        '--yes',
+      ], flaggedIo.io, { prompts: flaggedUi.prompts }), 0, flaggedIo.stderr())
+      assert.equal(process.env.NO_COLOR, '1')
+      assert.equal(process.env.FORCE_COLOR, undefined)
+    } finally {
+      if (previousNoColor === undefined) delete process.env.NO_COLOR
+      else process.env.NO_COLOR = previousNoColor
+      if (previousForceColor === undefined) delete process.env.FORCE_COLOR
+      else process.env.FORCE_COLOR = previousForceColor
+    }
+    assert.equal(flaggedUi.calls.some(({ type }) => type === 'select'), false)
+    assert.equal(flaggedUi.calls.some(({ type }) => type === 'multiselect'), false)
+    assert.equal(flaggedUi.calls.some(({ type }) => type === 'confirm'), false)
+    assert.deepEqual(flaggedUi.calls.find(({ type }) => type === 'intro').colorEnvironment, {
+      noColor: false,
+      forceColor: '0',
+    })
+    assert.equal(JSON.parse(await readFile(join(flagged, 'hairness.json'), 'utf8')).mode, 'team')
+    assert.equal(await readFile(join(flagged, 'assets/hairness/scratch/asset.json'), 'utf8').then(Boolean), true)
+
+    const structured = join(temporary, 'structured')
+    const structuredIo = captureTtyIo()
+    assert.equal(await runCli(['create', structured, '--json'], structuredIo.io, {
+      prompts: promptHarness({ failOnPrompt: true }).prompts,
+    }), 0, structuredIo.stderr())
+    assert.equal(JSON.parse(structuredIo.stdout()).status, 'created')
+    assert.doesNotMatch(structuredIo.stdout(), /\u001b\[/)
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('create cancellation is friendly and leaves no destination', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-create-cancel-'))
+  try {
+    for (const scenario of [
+      { name: 'declined', accepted: false },
+      { name: 'interrupted', cancelAt: 'select' },
+    ]) {
+      const home = join(temporary, scenario.name)
+      const io = captureTtyIo()
+      const ui = promptHarness(scenario)
+      assert.equal(await runCli(['create', home], io.io, { prompts: ui.prompts }), 0, io.stderr())
+      await assert.rejects(readFile(home), (error) => error.code === 'ENOENT')
+      assert.equal(ui.calls.some(({ type, message }) => type === 'cancel'
+        && message === 'Creation cancelled. No files were written.'), true)
     }
   } finally {
     await rm(temporary, { recursive: true, force: true })
@@ -483,6 +547,67 @@ test('team Desk projections remain local while Desk sources stay in the nested r
 async function executable(path, content) {
   await writeFile(path, content)
   await chmod(path, 0o755)
+}
+
+function captureTtyIo() {
+  const out = []
+  const err = []
+  return {
+    io: {
+      stdin: { isTTY: true },
+      stdout: { isTTY: true, write: (value) => out.push(String(value)) },
+      stderr: { write: (value) => err.push(String(value)) },
+    },
+    stdout: () => out.join(''),
+    stderr: () => err.join(''),
+  }
+}
+
+function promptHarness(options = {}) {
+  const calls = []
+  const cancellation = Symbol('cancelled')
+  const record = (type, message) => {
+    if (options.failOnPrompt) assert.fail(`Unexpected ${type} prompt`)
+    calls.push({
+      type,
+      message,
+      colorEnvironment: {
+        noColor: Object.hasOwn(process.env, 'NO_COLOR'),
+        forceColor: process.env.FORCE_COLOR,
+      },
+    })
+  }
+  const answer = (type, value) => options.cancelAt === type ? cancellation : value
+  return {
+    calls,
+    prompts: {
+      isCancel: (value) => value === cancellation,
+      intro: (message) => record('intro', message),
+      note: (message) => record('note', message),
+      select: async ({ message }) => {
+        record('select', message)
+        return answer('select', options.mode ?? 'solo')
+      },
+      multiselect: async ({ message }) => {
+        record('multiselect', message)
+        return answer('multiselect', options.selected ?? [])
+      },
+      confirm: async ({ message }) => {
+        record('confirm', message)
+        return answer('confirm', options.accepted ?? true)
+      },
+      spinner: () => {
+        record('spinner')
+        return {
+          start: (message) => record('spinner:start', message),
+          stop: (message) => record('spinner:stop', message),
+          error: (message) => record('spinner:error', message),
+        }
+      },
+      cancel: (message) => record('cancel', message),
+      outro: (message) => record('outro', message),
+    },
+  }
 }
 
 function escape(value) {

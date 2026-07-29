@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, readlink, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, readFile, readlink, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -9,6 +9,7 @@ import { ensureDevelopmentHome, recreateDevelopmentHome } from '../scripts/devel
 
 const exec = promisify(execFile)
 const cli = new URL('../bin/hairness.mjs', import.meta.url).pathname
+const bootstrap = new URL('../scripts/bootstrap-home.mjs', import.meta.url).pathname
 
 test('the repository recipe creates and safely recreates its Development Home', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'hairness-development-'))
@@ -57,6 +58,39 @@ test('the repository recipe creates and safely recreates its Development Home', 
     assert.equal(await git(join(home, '.desk'), ['rev-parse', 'HEAD']), deskHead)
     assert.equal(await readlink(join(home, '.desk/targets/hairness/main')), binding)
     assert.equal(JSON.parse(await readFile(join(home, '.hairness/recreate.json'), 'utf8')).backup, recreated.backup)
+  } finally {
+    await rm(temporary, { recursive: true, force: true })
+  }
+})
+
+test('dev bootstrap preserves the canonical first-run experience with a packed local runtime', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'hairness-bootstrap-test-'))
+  const home = join(temporary, 'home')
+  try {
+    const { stdout } = await exec(process.execPath, [
+      bootstrap,
+      home,
+      '--with', 'none',
+      '--no-interactive',
+      '--yes',
+    ], { maxBuffer: 20 * 1024 * 1024 })
+    assert.match(stdout, /Hairness Home created/)
+    assert.match(stdout, /Local packed runtime attached/)
+
+    const launcher = await lstat(join(home, '.hairness', 'dev-cli'))
+    assert.equal(launcher.isFile(), true)
+    assert.match(await readFile(join(home, '.hairness', 'dev-cli'), 'utf8'), /'packages'/)
+
+    const hud = JSON.parse((await exec(process.execPath, [
+      join(home, 'hairness.mjs'), 'hud', 'json',
+    ], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
+    assert.equal(hud.kernel.source, 'development')
+
+    const doctor = JSON.parse((await exec(process.execPath, [
+      join(home, 'hairness.mjs'), 'doctor', '--json',
+    ], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
+    assert.equal(doctor.status, 'ready')
+    assert.equal(await git(home, ['status', '--porcelain']), '')
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }
