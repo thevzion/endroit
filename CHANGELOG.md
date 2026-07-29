@@ -8,6 +8,8 @@
   Workstreams or Targets with `forEach`.
 - Bind each generated provider alias to its exact Home reference without
   duplicating Capability sources.
+- Keep command-only Capabilities out of the agent HUD while preserving them in
+  the normalized JSON inventory.
 
 ## 0.5.0-alpha.1
 

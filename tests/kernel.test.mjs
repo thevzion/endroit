@@ -167,6 +167,12 @@ test('forEach accessors bind generated aliases to resolved Home items', async ()
       await readFile(join(home, '.claude/skills/review-target-product/SKILL.md'), 'utf8'),
       /bound to target:product 📦/,
     )
+    const json = captureIo()
+    assert.equal(await runCli(['hud', 'json', '--home', home], json.io), 0, json.stderr())
+    assert.ok(JSON.parse(json.stdout()).items.capabilities.some(({ id }) => id === 'review-workspace-demo'))
+    const prompt = captureIo()
+    assert.equal(await runCli(['hud', 'prompt', '--home', home], prompt.io), 0, prompt.stderr())
+    assert.doesNotMatch(prompt.stdout(), /review-workspace-demo/)
   } finally {
     await rm(temporary, { recursive: true, force: true })
   }

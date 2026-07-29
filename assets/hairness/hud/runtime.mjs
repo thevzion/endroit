@@ -794,7 +794,10 @@ async function xml(model, input) {
   lines.push('  </providers>', '  <items>')
   for (const group of ['workspaces', 'workstreams', 'targets', 'capabilities']) {
     lines.push(`    <${group}>`)
-    for (const entry of model.items[group]) lines.push(`      <item ${itemAttributes(entry)}/>`)
+    const entries = group === 'capabilities'
+      ? model.items[group].filter((entry) => entry.access.includes('model'))
+      : model.items[group]
+    for (const entry of entries) lines.push(`      <item ${itemAttributes(entry)}/>`)
     lines.push(`    </${group}>`)
   }
   lines.push('  </items>', '  <runtimes>')

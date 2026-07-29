@@ -179,6 +179,11 @@ item's stable identity and embeds its exact `ref` and emoji in the generated
 surface. The Capability remains the single source; aliases are rebuilt when
 the resolved inventory changes.
 
+Command-only Capabilities remain available in `hud json` for user interfaces
+but are omitted from `hud prompt`. An explicit provider invocation loads the
+generated command itself; the agent does not need the full command catalogue in
+its session context.
+
 `hud activity [--since <duration|date>] [--scope <ref>] [--json]` computes at
 most 100 recent events. Supported scopes are `home`, `desk`,
 `workspace:<id>`, `workstream:<workspace>/<id>`, `target:<id>` and
