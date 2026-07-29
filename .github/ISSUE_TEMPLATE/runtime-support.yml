@@ -1,0 +1,89 @@
+name: Runtime support request
+description: Propose and help qualify an Agent Runtime for Hairness.
+title: "[runtime] "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Hairness qualifies runtimes through a real first-Home journey. A request is not a support commitment. Do not include secrets, private Home content or provider credentials.
+  - type: input
+    id: runtime
+    attributes:
+      label: Runtime
+      description: Use the exact public product name.
+      placeholder: Kimi Code
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Official source
+      description: Link the official repository or documentation.
+      placeholder: https://example.com/runtime
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: List the runtime and platform versions you can exercise.
+      placeholder: Runtime 1.2 on macOS 15 and Ubuntu 24.04
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Runtime shape
+      options:
+        - Terminal or CLI Agent Runtime
+        - IDE or Agent Client
+        - Persistent personal Agent Runtime
+        - Other or uncertain
+    validations:
+      required: true
+  - type: textarea
+    id: workflow
+    attributes:
+      label: Real workflow
+      description: Explain how you use this runtime and why a durable Home should work with it.
+    validations:
+      required: true
+  - type: textarea
+    id: surfaces
+    attributes:
+      label: Native surfaces
+      description: Describe instruction files, Skills, hooks, protocols, session continuity and tool access you know the runtime exposes.
+    validations:
+      required: true
+  - type: textarea
+    id: limits
+    attributes:
+      label: Known limits
+      description: Include unsupported platforms, unstable APIs or missing capabilities.
+    validations:
+      required: true
+  - type: dropdown
+    id: maintenance
+    attributes:
+      label: Maintenance
+      description: Can you help exercise and maintain this runtime support?
+      options:
+        - Yes, I can maintain it
+        - Yes, I can provide qualification evidence
+        - No, I am requesting it for another maintainer
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Existing evidence
+      description: Link a public reproduction, fixture or prior integration if one exists.
+  - type: checkboxes
+    id: contract
+    attributes:
+      label: Contribution contract
+      options:
+        - label: I understand that candidate status is not promised support.
+          required: true
+        - label: I will not include private Home content, secrets or credentials.
+          required: true
