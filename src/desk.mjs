@@ -1,11 +1,11 @@
-import { mkdir, readFile, rm } from 'node:fs/promises'
+import { mkdir, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { API, validateDocument } from './contracts.mjs'
 import { git } from './git.mjs'
 import { loadHome } from './home.mjs'
 import { DESK_INSTRUCTION, readInstructionFile, renderInstructionTemplate } from './instructions.mjs'
 import { HairnessError } from './lib/errors.mjs'
-import { assertId, exists, readJson, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
+import { assertId, exists, readJson, removeTree, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
 
 export async function loadDesk(root) {
   const path = join(root, '.desk', 'desk.json')
@@ -31,7 +31,7 @@ export async function initDesk(root, options = {}) {
     await writeFileAtomic(join(directory, '.gitignore'), '/targets/\n/.DS_Store\n', 0o644)
     return { status: 'initialized', id: options.id, repository: home.mode === 'team' && options.git !== false }
   } catch (error) {
-    await rm(directory, { recursive: true, force: true })
+    await removeTree(directory, { force: true })
     throw error
   }
 }
@@ -48,7 +48,7 @@ export async function cloneDesk(root, repository) {
     await readInstructionFile(join(directory, DESK_INSTRUCTION), 'desk_instruction')
     return { status: 'cloned', id: desk.id, repository }
   } catch (error) {
-    await rm(directory, { recursive: true, force: true })
+    await removeTree(directory, { force: true })
     throw error
   }
 }

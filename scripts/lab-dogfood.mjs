@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
+import { removeTree } from '../src/lib/io.mjs'
 import { installPackedRuntime, packHairness } from './lib/pack.mjs'
 
 const exec = promisify(execFile)
@@ -48,5 +49,5 @@ try {
   assert.equal(JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8')).runtime, '@hairness/cli@0.6.0-alpha.0')
   console.log(`packed lab passed (${home})`)
 } finally {
-  await rm(temporary, { recursive: true, force: true })
+  await removeTree(temporary, { force: true })
 }

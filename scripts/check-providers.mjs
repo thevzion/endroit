@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, rm } from 'node:fs/promises'
+import { mkdtemp, readFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildHome } from '../src/build.mjs'
 import { createHome } from '../src/create.mjs'
 import { addAssets } from '../src/assets.mjs'
+import { removeTree } from '../src/lib/io.mjs'
 
 const root = new URL('../', import.meta.url).pathname
 const temporary = await mkdtemp(join(tmpdir(), 'hairness-providers-'))
@@ -20,5 +21,5 @@ try {
   }
   console.log('provider parity passed')
 } finally {
-  await rm(temporary, { recursive: true, force: true })
+  await removeTree(temporary, { force: true })
 }

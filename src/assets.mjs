@@ -7,7 +7,7 @@ import { validateDocument } from './contracts.mjs'
 import { git } from './git.mjs'
 import { loadHome } from './home.mjs'
 import { HairnessError } from './lib/errors.mjs'
-import { assertInside, digest, exists, resolvePackageFile } from './lib/io.mjs'
+import { assertInside, digest, exists, removeTree, resolvePackageFile } from './lib/io.mjs'
 
 const builtinRoot = fileURLToPath(new URL('../assets/hairness', import.meta.url))
 const MAX_FILE_BYTES = 5 * 1024 * 1024
@@ -324,7 +324,7 @@ async function loadGithub(source, match) {
     const manifestPath = assetPath.endsWith('.json') ? assetPath : join(assetPath, 'asset.json')
     return await loadManifest(join(stage, manifestPath), { source, requestedRef: requestedRef ?? null, resolvedCommit, mobile: !pinned })
   } finally {
-    await rm(stage, { recursive: true, force: true })
+    await removeTree(stage, { force: true })
   }
 }
 
@@ -566,7 +566,7 @@ export async function applyTransaction(root, writes, deletes) {
         await rename(join(staged, relative(root, entry.path)), entry.path)
       }
     } catch (error) {
-      for (const entry of [...writes].reverse()) if (await exists(entry.path)) await rm(entry.path, { recursive: true, force: true })
+      for (const entry of [...writes].reverse()) if (await exists(entry.path)) await removeTree(entry.path, { force: true })
       for (const entry of backedUp.reverse()) {
         await mkdir(dirname(entry.path), { recursive: true })
         await rename(entry.destination, entry.path)
@@ -574,7 +574,7 @@ export async function applyTransaction(root, writes, deletes) {
       throw error
     }
   } finally {
-    await rm(transaction, { recursive: true, force: true })
+    await removeTree(transaction, { force: true })
   }
 }
 

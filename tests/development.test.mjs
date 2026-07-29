@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import test from 'node:test'
 import { ensureDevelopmentHome, recreateDevelopmentHome } from '../scripts/development-home.mjs'
+import { removeTree } from '../src/lib/io.mjs'
 
 const exec = promisify(execFile)
 const cli = new URL('../bin/hairness.mjs', import.meta.url).pathname
@@ -61,7 +62,7 @@ test('the repository recipe creates and safely recreates its Development Home', 
     assert.equal(await readlink(join(home, '.desk/targets/hairness/main')), binding)
     assert.equal(JSON.parse(await readFile(join(home, '.hairness/recreate.json'), 'utf8')).backup, recreated.backup)
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -94,7 +95,7 @@ test('dev bootstrap preserves the canonical first-run experience with a packed l
     assert.equal(doctor.status, 'ready')
     assert.equal(await git(home, ['status', '--porcelain']), '')
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 

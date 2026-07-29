@@ -4,6 +4,7 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
+import { removeTree } from '../src/lib/io.mjs'
 
 const exec = promisify(execFile)
 const projectRoot = await realpath(new URL('../', import.meta.url).pathname)
@@ -95,7 +96,7 @@ export async function recreateDevelopmentHome(options = {}) {
     await ensureDevelopmentHome({ home: stage, deskRepository: desk, deskId: options.deskId })
     await verifyHome(stage)
 
-    await rm(join(stage, '.desk'), { recursive: true, force: true })
+    await removeTree(join(stage, '.desk'), { force: true })
     await rename(desk, join(stage, '.desk'))
     deskMoved = true
     await ensureDevelopmentHome({ home: stage, deskId: options.deskId })
@@ -107,18 +108,18 @@ export async function recreateDevelopmentHome(options = {}) {
     swapped = true
     await writeFile(join(home, '.hairness', 'recreate.json'), `${JSON.stringify({ version: 1, backup }, null, 2)}\n`)
     await verifyHome(home)
-    await rm(stageRoot, { recursive: true, force: true })
+    await removeTree(stageRoot, { force: true })
     return { status: 'recreated', home, backup, next: 'npm run dev:verify' }
   } catch (error) {
     if (backupCreated && await exists(backup)) {
       const currentDesk = swapped ? join(home, '.desk') : join(stage, '.desk')
       if (await exists(currentDesk)) await rename(currentDesk, join(backup, '.desk'))
-      if (swapped) await rm(home, { recursive: true, force: true })
+      if (swapped) await removeTree(home, { force: true })
       await rename(backup, home)
     } else if (deskMoved && await exists(join(stage, '.desk')) && !await exists(desk)) {
       await rename(join(stage, '.desk'), desk)
     }
-    await rm(stageRoot, { recursive: true, force: true })
+    await removeTree(stageRoot, { force: true })
     throw error
   }
 }
@@ -147,7 +148,7 @@ export async function verifyDevelopmentHome(options = {}) {
     if (dirname(backup) !== dirname(home) || !basename(backup).startsWith(`${basename(home)}.backup-`)) {
       throw new Error(`Refusing unexpected recreate backup ${backup}.`)
     }
-    await rm(backup, { recursive: true, force: true })
+    await removeTree(backup, { force: true })
     await rm(statePath)
   }
   return { status: 'verified', home, full: Boolean(options.full), proof }

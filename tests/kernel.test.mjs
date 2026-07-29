@@ -12,6 +12,7 @@ import { compileSchemas, validateDocument } from '../src/contracts.mjs'
 import { createHome, initHome } from '../src/create.mjs'
 import { cloneDesk, initDesk, loadDesk } from '../src/desk.mjs'
 import { doctorHome } from '../src/doctor.mjs'
+import { removeTree } from '../src/lib/io.mjs'
 import { renderFloorPlan, sessionWrapper } from '../src/front-door.mjs'
 import { assertRuntime } from '../src/home.mjs'
 import { resolveHome } from '../src/resolved.mjs'
@@ -96,7 +97,7 @@ test('create supports a TTY preview and explicit optional native Assets', async 
     assert.equal(JSON.parse(structuredIo.stdout()).status, 'created')
     assert.doesNotMatch(structuredIo.stdout(), /\u001b\[/)
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -116,7 +117,7 @@ test('create cancellation is friendly and leaves no destination', async () => {
         && message === 'Creation cancelled. No files were written.'), true)
     }
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -192,7 +193,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
     await writeFile(join(home, 'hairness.json'), `${JSON.stringify(document, null, 2)}\n`)
     await assert.rejects(() => assertRuntime(home), (error) => error.code === 'runtime_mismatch' && /node \.\/hairness\.mjs/.test(error.message))
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -276,7 +277,7 @@ test('forEach accessors bind generated aliases to resolved Home items', async ()
     assert.equal(await runCli(['hud', 'prompt', '--home', home], prompt.io), 0, prompt.stderr())
     assert.doesNotMatch(prompt.stdout(), /review-workspace-demo/)
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -377,7 +378,7 @@ process.stdout.write('<wake-up source="' + process.env.HAIRNESS_RUNTIME_SOURCE +
       },
     ])
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -397,7 +398,7 @@ test('the Home Console is a fully owned regular projection', async () => {
     await assert.rejects(() => buildHome(home, { check: true }), (error) => error.code === 'generated_output_invalid')
     assert.equal((await doctorHome(home)).status, 'partial')
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -424,7 +425,7 @@ test('team Homes remain usable before a private Desk exists', async () => {
     await cloneDesk(second, join(home, '.desk'))
     assert.equal((await loadDesk(second)).id, 'alexis')
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -483,7 +484,7 @@ test('canonical Home and Desk instructions are required, source-owned and fully 
     await assert.rejects(() => cloneDesk(emptyDesk, deskRepository), (error) => error.code === 'desk_instruction_missing')
     await assert.rejects(readFile(join(emptyDesk, '.desk/desk.json')), (error) => error.code === 'ENOENT')
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -498,7 +499,7 @@ test('a clone is immediately usable from tracked projections without local build
     assert.equal((await doctorHome(clone)).status, 'ready')
     await buildHome(clone, { check: true })
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -513,7 +514,7 @@ test('doctor reports a missing runtime as a limit instead of crashing', async ()
     assert.equal(report.runtimes.find((entry) => entry.name === 'hairness/hud').error, 'ENOENT')
     assert.ok(report.limits.includes('runtime-invalid:hairness/hud:ENOENT'))
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -540,7 +541,7 @@ test('team Desk projections remain local while Desk sources stay in the nested r
     assert.equal(await runCli(['hud', 'prompt', '--home', home], prompt.io), 0, prompt.stderr())
     assert.match(prompt.stdout(), /Reply in French/)
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 

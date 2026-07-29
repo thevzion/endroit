@@ -6,6 +6,7 @@ import { join } from 'node:path'
 import { promisify } from 'node:util'
 import test from 'node:test'
 import { createHome } from '../src/create.mjs'
+import { removeTree } from '../src/lib/io.mjs'
 import { dispatchRuntime } from '../src/runtime.mjs'
 import { captureIo } from './helpers.mjs'
 
@@ -98,7 +99,7 @@ test('Target worktree validation rejects ambiguous or unsafe creation without im
     await mkdir(occupied)
     await runtimeFailure(home, ['worktree', 'demo', '--binding', 'occupied', '--from-binding', 'main', '--new-branch', 'occupied-branch'], 'target_binding_exists')
     assert.equal(await localBranch(repository, 'occupied-branch'), false)
-    await rm(occupied, { recursive: true })
+    await removeTree(occupied)
 
     await runtimeJson(home, ['worktree', 'demo', '--binding', 'second', '--new-branch', 'second', '--from-binding', 'main'])
     await runtimeFailure(home, ['worktree', 'demo', '--binding', 'ambiguous', '--new-branch', 'ambiguous'], 'target_binding_ambiguous')
@@ -139,7 +140,7 @@ test('Target unbind preserves dirty, locked, prunable, dependent and submodule w
     await runtimeJson(home, ['unbind', 'demo', '--binding', 'clone', '--delete'])
 
     const prunable = await runtimeJson(home, ['worktree', 'demo', '--binding', 'prunable', '--new-branch', 'prunable-work'])
-    await rm(prunable.path, { recursive: true })
+    await removeTree(prunable.path)
     const doctor = await runtimeJson(home, ['doctor'])
     assert.ok(doctor.limits.some((limit) => limit.startsWith('target-worktree-prunable:demo:')))
     assert.equal((await runtimeJson(home, ['list'])).targets[0].worktrees.find((worktree) => worktree.branch === 'prunable-work').prunable, true)
@@ -185,7 +186,7 @@ async function targetFixture() {
     repository,
     remote,
     temporary,
-    cleanup: () => rm(temporary, { recursive: true, force: true }),
+    cleanup: () => removeTree(temporary, { force: true }),
   }
 }
 

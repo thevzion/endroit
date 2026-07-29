@@ -8,6 +8,7 @@ import test from 'node:test'
 import { addAssets } from '../src/assets.mjs'
 import { buildHome } from '../src/build.mjs'
 import { createHome } from '../src/create.mjs'
+import { removeTree } from '../src/lib/io.mjs'
 import { resolveHome } from '../src/resolved.mjs'
 import { dispatchRuntime } from '../src/runtime.mjs'
 import { captureIo } from './helpers.mjs'
@@ -119,7 +120,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     await dispatchRuntime(home, 'hud', ['show'], human.io)
     assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.6.0-alpha.0 · npm · ready')
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -136,7 +137,7 @@ test('the HUD owns its prompt budget through namespaced Home settings', async ()
     assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], output.io), 5)
     assert.match(output.stderr(), /hud_budget_exceeded/)
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -161,7 +162,7 @@ test('Workspace runtime enforces scoped identity and Doctor remains read-only', 
     assert.equal(await dispatchRuntime(team, 'workspace', ['create', 'private', '--scope', 'desk'], missingDesk.io), 4)
     assert.match(missingDesk.stderr(), /configured Desk/)
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -220,7 +221,7 @@ test('Artifacts import directories atomically and publish while preserving the D
     assert.equal(await dispatchRuntime(home, 'artifact', ['validate', legacy, '--json'], legacyValidation.io), 0, legacyValidation.stderr())
     assert.equal(JSON.parse(legacyValidation.stdout()).legacy, true)
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -262,7 +263,7 @@ test('Publishing keeps exact local content and observable Handles instruction-on
     assert.equal(await dispatchRuntime(home, 'artifact', ['validate', publication.path], invalid.io), 4)
     assert.match(invalid.stderr(), /requires content.md/)
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -326,7 +327,7 @@ test('Targets separate deterministic inspection from agent-authored Map Artifact
     assert.equal(await dispatchRuntime(home, 'artifact', ['validate', mapped.path], captureIo().io), 0)
     assert.deepEqual(await tree(target), before)
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 

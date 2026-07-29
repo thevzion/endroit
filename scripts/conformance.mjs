@@ -1,9 +1,10 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { addAssets, statusAssets, syncAssets, validateAssetSource } from '../src/assets.mjs'
 import { createHome } from '../src/create.mjs'
+import { removeTree } from '../src/lib/io.mjs'
 
 const temporary = await mkdtemp(join(tmpdir(), 'hairness-conformance-'))
 try {
@@ -32,5 +33,5 @@ try {
   assert.equal(await readFile(join(home, 'assets/conformance/proof/proof.md'), 'utf8'), 'two\n')
   console.log('conformance passed')
 } finally {
-  await rm(temporary, { recursive: true, force: true, maxRetries: 3, retryDelay: 100 })
+  await removeTree(temporary, { force: true })
 }

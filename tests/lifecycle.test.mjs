@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
 import test from 'node:test'
+import { removeTree } from '../src/lib/io.mjs'
 import {
   addAssets,
   overrideAsset,
@@ -66,7 +67,7 @@ test('Asset add, sync and remove preserve source ownership and unknown files', a
     assert.equal(await readFile(unknown, 'utf8'), 'Local note.\n')
     await assert.rejects(readFile(sourceFile), (error) => error.code === 'ENOENT')
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -88,7 +89,7 @@ test('Desk overrides publish only while their Home base is unchanged', async () 
     await writeFile(join(home, 'assets/fixture/review/capabilities/review.md'), 'Concurrent Home edit.\n')
     await assert.rejects(() => publishAsset(home, 'fixture/review'), (error) => error.code === 'asset_base_drifted')
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -147,7 +148,7 @@ test('external runtimes stay pending until their exact digest is approved', asyn
     await writeFile(join(home, 'assets/hairness/echo/runtime.mjs'), "process.stdout.write('changed')\n")
     assert.equal((await runtimeTrustState(home, 'hairness/echo')).trust, 'pending')
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -193,7 +194,7 @@ test('HTTPS and Git sources retain pinned or mobile provenance', async () => {
       if (value === undefined) delete process.env[key]
       else process.env[key] = value
     }
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -228,7 +229,7 @@ test('symlinks and runtime namespace collisions are rejected before installation
     }), { 'capabilities/review.md': 'Target notes.\n' })
     await assert.rejects(() => addAssets(home, [namespaceCollision]), (error) => error.code === 'capability_collision')
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -266,7 +267,7 @@ test('Front Door routes remain valid across Asset mutations', async () => {
     assert.equal(doctor.status, 'partial')
     assert.deepEqual(doctor.limits, ['front_door_runtime_missing'])
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })
 
@@ -293,6 +294,6 @@ test('standalone Asset validation checks referenced schemas outside a Home', asy
     await writeFile(join(temporary, 'source/schemas/result.schema.json'), '{broken\n')
     await assert.rejects(() => validateAssetSource(temporary, source), (error) => error.code === 'asset_schema_invalid')
   } finally {
-    await rm(temporary, { recursive: true, force: true })
+    await removeTree(temporary, { force: true })
   }
 })

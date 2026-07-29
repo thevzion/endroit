@@ -8,7 +8,7 @@ import { git } from './git.mjs'
 import { homeDocument, homeId } from './home.mjs'
 import { HOME_INSTRUCTION, renderInstructionTemplate } from './instructions.mjs'
 import { HairnessError } from './lib/errors.mjs'
-import { exists, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
+import { exists, removeTree, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
 
 export const bootstrapAssets = ['@hairness/onboarding', '@hairness/hud', '@hairness/artifacts', '@hairness/targets', '@hairness/workspaces']
 
@@ -41,7 +41,7 @@ export async function createHome(destination, options = {}) {
       launch: launchInstructions(target, options.providers ?? ['codex', 'claude']),
     }
   } catch (error) {
-    await rm(stage, { recursive: true, force: true })
+    await removeTree(stage, { force: true })
     throw error
   }
 }
@@ -105,7 +105,7 @@ export async function initHome(root = process.cwd(), options = {}) {
   } catch (error) {
     await rm(join(root, 'hairness.json'), { force: true })
     await rm(instructionPath, { force: true })
-    await rm(deskPath, { recursive: true, force: true })
+    await removeTree(deskPath, { force: true })
     if (ignoreExisted) await writeFileAtomic(ignorePath, currentIgnore, 0o644)
     else await rm(ignorePath, { force: true })
     throw error

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto'
-import { lstat, mkdir, readFile, realpath, rename, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
 import { HairnessError } from './errors.mjs'
 
@@ -16,6 +16,10 @@ export async function exists(path) {
     if (error.code === 'ENOENT') return false
     throw error
   }
+}
+
+export function removeTree(path, options = {}) {
+  return rm(path, { recursive: true, maxRetries: 3, retryDelay: 100, ...options })
 }
 
 export async function readJson(path, fallback) {

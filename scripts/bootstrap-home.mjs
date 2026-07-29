@@ -1,9 +1,10 @@
 #!/usr/bin/env node
 import { execFile, spawn } from 'node:child_process'
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { removeTree } from '../src/lib/io.mjs'
 import { installPackedRuntime, packHairness } from './lib/pack.mjs'
 
 const exec = promisify(execFile)
@@ -33,7 +34,7 @@ Home: ${home}
 The Home is ready to open with the command shown above.
 `)
 } finally {
-  await rm(temporary, { recursive: true, force: true })
+  await removeTree(temporary, { force: true })
 }
 
 function run(command, args) {
