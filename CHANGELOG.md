@@ -1,15 +1,35 @@
 # Changelog
 
-## 0.5.0-alpha.2
+## 0.6.0-alpha.0
 
+- Make Home and Desk Workspaces the canonical owners of durable work, with
+  globally unique IDs, required orientation and Inbox documents, sparse
+  Workstreams and Decisions, and an explicit Workspace runtime.
+- Move new Artifacts under their owning Workspace and Asset namespace, add
+  guarded promotion to Home Workspaces or Targets, and retain legacy roots as
+  read-only compatibility surfaces.
+- Add the instruction-only Research, Planning and Publishing Assets plus
+  opt-in Scratch, with shared document envelopes and explicit source lineage.
+- Add Publication sources and external Handles without treating publication
+  state as confirmed before an observable result exists.
+- Add a local first-party Asset catalogue and `workspaceNamespace` collision
+  validation.
+- Replace the basic `create` prompt with a Clack wizard for mode, optional
+  Assets, preview, confirmation and launch guidance.
+- Add a packed-runtime `dev:bootstrap` path for qualifying the exact first-user
+  experience before publication.
 - Preserve optional emoji metadata for Homes, Workspaces, Workstreams and
   Targets through the normalized HUD.
 - Expand Asset Skill and Command accessors over resolved Workspaces,
-  Workstreams or Targets with `forEach`.
-- Bind each generated provider alias to its exact Home reference without
-  duplicating Capability sources.
+  Workstreams or Targets with `forEach`, binding every generated provider alias
+  to its exact Home reference without duplicating Capability sources.
 - Keep command-only Capabilities out of the agent HUD while preserving them in
   the normalized JSON inventory.
+- Manage linked Git worktrees as explicit Target Bindings without deleting
+  branches, forcing removal or hiding unbound worktrees.
+- Position Hairness as the local-first logistics layer around existing Agent
+  Runtimes, methods and repositories, with Codex and Claude as the qualified
+  provider surfaces.
 
 ## 0.5.0-alpha.1
 

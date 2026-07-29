@@ -14,7 +14,7 @@ concurrency:
 
 env:
   NPM_VERSION: 11.5.1
-  RELEASE_ARTIFACT: hairness-0.5-release-candidate
+  RELEASE_ARTIFACT: hairness-0.6-release-candidate
 
 jobs:
   qualify:

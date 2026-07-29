@@ -2,197 +2,114 @@
 
 # hairness
 
-### A shared, owned way of working for humans and agents.
+## Own the place where your agents work.
 
-Hairness is a source-owned framework and CLI for Home-first agent work.
-It gives collaborators one portable environment, projects it into Codex and
-Claude, and connects independent repositories as Targets.
+**One Home. Your agents. Your methods. Your repositories.**
 
-[Website](https://hairness.dev) ·
-[Home-first proposal](https://thevzion.com/home-first/) ·
-[Technical reference](https://github.com/thevzion/hairness/blob/main/docs/reference.md)
+Hairness is the missing environment layer around the Agent Runtimes you already use—not another agent.
 
-[![npm latest](https://img.shields.io/npm/v/%40hairness%2Fcli/latest?label=npm%20latest)](https://www.npmjs.com/package/@hairness/cli)
-[![CI](https://github.com/thevzion/hairness/actions/workflows/ci.yml/badge.svg)](https://github.com/thevzion/hairness/actions/workflows/ci.yml)
-[![MIT](https://img.shields.io/badge/license-MIT-d8996a.svg)](https://github.com/thevzion/hairness/blob/main/LICENSE)
+Every agent already works in an environment. Without a Home, that environment forms accidentally across repositories, sessions and provider settings. Hairness makes it explicit, inspectable and yours.
+
+Hairness is the local-first logistics layer for durable human-agent work.
+
+[Website](https://hairness.dev) · [Home-first Proposal](https://thevzion.com/home-first/) · [Technical reference](docs/reference.md)
+
+[![npm latest](https://img.shields.io/npm/v/%40hairness%2Fcli/latest?label=npm%20latest)](https://www.npmjs.com/package/@hairness/cli) [![CI](https://github.com/thevzion/hairness/actions/workflows/ci.yml/badge.svg)](https://github.com/thevzion/hairness/actions/workflows/ci.yml) [![MIT](https://img.shields.io/badge/license-MIT-d8996a.svg)](LICENSE)
 
 <sub>Hairness 0.6 is an alpha. Keep each Home in a dedicated Git repository and inspect executable Asset runtimes before trusting them.</sub>
 
 </div>
 
-## Create a Home
+## Why a Home
+
+Agent instructions, personal context, reusable methods and useful results tend to scatter across repositories, chats and provider-specific files.
+
+```text
+Without a Home
+repositories + copied setup + provider files + continuity in chats
+
+With Hairness
+one owned Home → your existing agents, methods and repositories
+```
+
+**Home-first** is the organizing paradigm. The Home owns the durable environment, Agent Runtimes own sessions and execution, and Targets retain product truth. Hairness is one open-source implementation of that model.
+
+**[Read the Home-first Proposal →](https://thevzion.com/home-first/)**
+
+## Start with one Home
+
+Requires Node.js 22 or newer, Git, and the Codex or Claude CLI.
 
 ```bash
 npx --yes @hairness/cli@latest create my-home
 cd my-home
 codex
-
-# Or:
-claude
 ```
 
-In a TTY, `create` explains Home, Desk and Targets, previews the required
-foundation plus optional Assets, and asks before writing. Automation may use
-`--with research,planning,publishing`, `--with all`, `--with none`,
-`--no-interactive` and `--yes`.
-
-The command initializes Git, creates `workspaces/home`, installs Workspaces,
-Onboarding, HUD, Artifacts and Targets, creates the Codex and Claude
-projections, runs Doctor and commits the result. No optional Asset is selected
-by default. The Home pins its runtime in `hairness.json` and exposes every
-operation through its tracked console:
-
-```bash
-node ./hairness.mjs <namespace> <command> [...arguments]
-```
-
-Run `$hairness-onboarding` in Codex or `/hairness-onboarding` in Claude to
-configure your Desk.
-
-## Why a Home
-
-Agent sessions usually start inside a product repository. Instructions,
-personal continuity, reusable methods and generated work then accumulate
-beside the product source or inside provider-specific configuration.
-
-Hairness places that collaboration environment in its own repository:
-
-```text
-Codex or Claude
-       │
-       ▼
-Front Door → Home + active Desk
-                  │
-           explicit Bindings
-                  │
-                  ▼
-          independent Targets
-```
-
-The Home owns shared orientation and reusable Assets. Each collaborator owns a
-Desk. Product repositories remain independent Targets, and provider files
-remain reconstructible projections.
-
-[The Home-first proposal](https://thevzion.com/home-first/) explains the
-ownership model. Hairness implements that model as a working framework; it
-does not define the proposal or require other implementations to copy its
-folder names.
-
-## Hairness Today
-
-Hairness `0.6.0-alpha.0` ships these inspectable contracts:
-
-| Contract | Current implementation |
-| --- | --- |
-| **Home** | Constitution, shared Workspaces, Assets, projections and Git history |
-| **Desk** | Solo and team modes with collaborator-owned Workspaces and local Bindings |
-| **Assets** | Validation, installation, overrides, sync, promotion, local catalogue, runtime trust and resolved `forEach` accessors |
-| **Workspaces** | Globally unique `home/<id>` and `desk/<id>` domains with required orientation and Inbox |
-| **Artifacts** | Typed, Workspace-owned results with status, source files and lineage |
-| **Bindings and Targets** | Routable declarations, local checkouts and agent-authored Target Maps backed by deterministic inspection |
-| **Front Door** | Static Floor Plan, Routable Items, tracked Console and optional Wake-up |
-| **Provider projections** | Deterministic Codex and Claude Instructions, Skills, Commands and hooks |
-| **Pinned execution** | Exact npm runtime recorded in the Home |
-
-Canonical sources stay readable as ordinary files:
+Use `claude` instead of `codex` if you prefer. The guided setup creates an ordinary Git repository:
 
 ```text
 my-home/
-├── hairness.json
-├── HOME.md
-├── assets/
-├── workspaces/
-│   └── home/
-├── archive/
-├── .desk/
-│   ├── workspaces/
-│   ├── archive/
-│   ├── tmp/
-│   └── targets/
-└── hairness.mjs
+├── HOME.md             shared constitution
+├── workspaces/home/    decisions and improvements about this Home
+├── assets/             installed capabilities
+├── .desk/              personal continuity in Solo mode
+├── AGENTS.md           generated Codex view
+├── CLAUDE.md           generated Claude view
+└── hairness.mjs        inspectable Home Console
 ```
 
-`AGENTS.md`, `CLAUDE.md`, `.agents/`, `.claude/` and `.codex/` are generated
-views. Change the Home, Desk or Asset source, then rebuild the projections.
+Open the Home and describe your work in normal language. In a later session, reopen the same Home and name the subject again; its Floor Plan and Workspaces restore the context you chose to keep.
 
-Home, Workspace, Workstream and Target sources may declare an optional `emoji`.
-The Resolved Home preserves it in normalized HUD items. Asset accessors may use
-`"forEach": "workspace"`, `"workstream"` or `"target"` to generate one
-provider alias bound to each resolved identity; aliases remain rebuildable
-projections, never canonical context.
+You do not need to reorganize existing repositories or design a methodology first. Run `$hairness-onboarding` in Codex or `/hairness-onboarding` in Claude when you want guided mapping.
 
-## Work across repositories
+## What lives where
 
-Declare existing repositories as Targets:
+| Place | What belongs there |
+| --- | --- |
+| **Home** | Shared rules, shared Workspaces, reusable capabilities and generated provider views |
+| **Desk** | One collaborator's personal continuity and local repository links |
+| **Workspace** | One durable subject, such as a product, research area or publication practice |
+| **Target** | An independent repository that retains its source, history and delivery |
 
-```bash
-node ./hairness.mjs target add ../payments-api --id payments
-node ./hairness.mjs target add ../product-app --id app
-node ./hairness.mjs target worktree payments --binding billing-fix \
-  --new-branch billing-fix --from-binding main
-node ./hairness.mjs target list
+One Home means one coherent environment for a system of work, not one global Home for your entire life. The Home coordinates Targets without absorbing them into a monorepo.
+
+Documents preserve ordinary continuity. Artifacts are chosen results. Assets equip future work.
+
+## Where Hairness fits
+
+```text
+Human
+  ↓
+Agent Runtime
+  ↓
+Hairness Home
+  ↓
+Repositories and external systems
 ```
 
-The Home records Target identities. The active Desk records local Bindings.
-Managed checkouts live below `.desk/targets/<target>/<binding>`; an existing
-checkout is bound by symlink. `target worktree` uses only local Git state,
-keeps the Binding ID distinct from the branch and never copies uncommitted
-changes. Hairness does not install agent infrastructure in those repositories.
+Agent Runtimes host sessions, models and tools. Hairness does not run, schedule or replace the agent; it owns the durable environment around its work.
 
-Inspect recent evidence without creating an event log:
+Codex and Claude are qualified today. [OpenClaw](https://github.com/openclaw/openclaw) and [Hermes](https://github.com/NousResearch/hermes-agent) fit the Agent Runtime role in this topology, but they are not supported integrations. Supporting another runtime requires a dedicated, qualified Projection or Bridge.
 
-```bash
-node ./hairness.mjs hud activity --since 2d
-node ./hairness.mjs hud activity --scope target:payments --json
-```
+Hairness is not a software-development, research or publishing methodology. Existing methods keep their loops and native files; the Home gives the material you retain an explicit owner and destination.
 
-Create a personal Workspace at its first durable milestone, then keep a result
-there when it deserves a contract:
+## Solo and team
 
-```bash
-node ./hairness.mjs workspace create product-thinking --scope desk
-node ./hairness.mjs asset add @hairness/scratch -y
-node ./hairness.mjs artifact create hairness/scratch:scratch api-redesign \
-  --workspace desk/product-thinking
-node ./hairness.mjs artifact inspect api-redesign
-node ./hairness.mjs artifact validate api-redesign
-node ./hairness.mjs artifact promote api-redesign --to workspace:home/home
-```
+In **Solo** mode, personal continuity can share the Home Git history while local Bindings remain private. In **Team** mode, the Home is shared through Git and each collaborator can initialize or clone a private Desk. A Team Home remains usable before a Desk is configured.
 
-Promotion preserves ownership and lineage. `artifact publish` remains a
-deprecated prerelease alias. External publication is a separate
-`hairness/publishing` Capability that requires exact consent and a verified
-Handle.
+## Hairness 0.6 alpha
 
-## Trust and alpha limits
+The current alpha provides guided bootstrap, Workspaces, inspectable Artifacts, explicit Targets and local Bindings, installable Assets, deterministic Codex and Claude views, a static Floor Plan, an optional live HUD and Doctor.
 
-Static Assets execute no code. An Asset runtime executes with your user rights.
-Hairness binds runtime approval to an exact digest and blocks changed or
-unapproved runtimes:
+Generated provider files are rebuildable projections. Canonical sources remain ordinary files under your control.
 
-```bash
-node ./hairness.mjs asset status company/security --json
-$EDITOR assets/company/security/runtime.mjs
-node ./hairness.mjs asset trust company/security --digest sha256:…
-node ./hairness.mjs doctor
-```
+Digest trust detects changed runtime bytes; it is not a sandbox. Approved Asset runtimes and provider sessions execute with your user permissions.
 
-Hairness does not provide an operating-system sandbox. Provider sessions,
-models and external tools remain outside its authority.
+Hairness does not provide a model, scheduler, autonomous runtime, methodology, remote memory service, marketplace or live collaboration server. It does not claim measured improvements in reasoning quality, hallucinations, speed or cost.
 
-The alpha has no remote Registry, marketplace, dependency solver, daemon, automatic
-merge, public Adapter SDK, agent scheduler or live collaboration service.
-Codex and Claude are the qualified providers today. Other runtimes and
-specialized Homes remain product directions.
+## Go deeper
 
-## Reference
+[Technical reference](docs/reference.md) · [Architecture](docs/architecture.md) · [Lifecycles](docs/lifecycles.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
 
-- [Technical reference](docs/reference.md)
-- [Architecture](docs/architecture.md)
-- [Lifecycles](docs/lifecycles.md)
-- [Security policy](SECURITY.md)
-- [Contributing](CONTRIBUTING.md)
-
-## License
-
-MIT
+MIT licensed.

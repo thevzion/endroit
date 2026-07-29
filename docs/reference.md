@@ -34,13 +34,25 @@ once from the bundled template with `home.name` and `home.mode`.
 Unknown template variables are rejected. The resulting file is source-owned
 and is never re-rendered automatically.
 
-`create <directory>` uses a TTY wizard when available. It creates a Git
-repository, installs Workspaces, Onboarding, HUD, Artifacts and Targets,
-bootstraps `workspaces/home`, selects `hairness/hud:prompt`, builds shared
-projections, runs Doctor and commits atomically. Optional native Assets are
-selected with `--with research,planning,publishing`, `--with all` or
-`--with none`; no option is selected by default. `--no-interactive` and
-`--yes` support automation.
+`create <directory>` uses a Clack wizard when stdin and stdout are TTYs. It
+explains Home, Desk and Target, asks for `solo` or `team`, offers Research,
+Planning, Publishing and Scratch with no default selection, previews the
+result, asks for final confirmation, then reports the commands that open Codex
+or Claude in the new Home.
+
+The creation itself is atomic. It initializes Git, installs Workspaces,
+Onboarding, HUD, Artifacts and Targets, bootstraps `workspaces/home`, selects
+`hairness/hud:prompt`, builds shared projections, runs Doctor and commits.
+
+- `--mode solo|team` supplies the mode and skips that question.
+- `--with research,planning,publishing,scratch`, `--with all` or `--with none`
+  supplies the optional Assets and skips the multiselect.
+- `--yes` skips only the final confirmation.
+- `--no-interactive` disables the wizard.
+- `--json` disables the wizard and returns machine-readable output.
+
+Non-interactive and JSON output contain no ANSI sequences. `NO_COLOR` also
+disables color in the TTY wizard.
 
 ## Desk
 
@@ -298,7 +310,8 @@ worktree and never deletes a branch or runs `--force`, `prune`, `repair`,
 ## CLI
 
 ```text
-create <directory> [--with <ids|all|none>] [--no-interactive] [--yes]
+create <directory> [--mode solo|team] [--with <ids|all|none>]
+  [--no-interactive] [--yes] [--json]
 desk init|clone
 asset validate <source>
 asset add|status|sync|remove
@@ -321,10 +334,16 @@ These commands are available only from a Hairness source checkout:
 ```text
 npm run dev:home
 npm run dev:home:recreate
+npm run dev:bootstrap -- [directory] [create options]
 npm run dev:session -- --provider codex|claude
 npm run dev:verify
 npm run dev:verify -- --full
 ```
+
+`dev:bootstrap` packs the current checkout, runs the canonical `create`
+experience from that tarball and attaches it as the Home's development runtime.
+It defaults to the sibling `hairness-bootstrap-home` directory and leaves the
+created Home in place for manual testing.
 
 `--home <path>` selects a disposable or alternate Development Home.
 `--desk <id>` initializes its Desk and `--desk-repository <path-or-url>` clones

@@ -46,7 +46,7 @@ async function renderWizard(options) {
     return true
   }
 
-  prompts.intro(`${CREATE_WORDMARK}\n\nLocal-first coordination for durable human-agent work.`, common)
+  prompts.intro(`${CREATE_WORDMARK}\n\nOwn the place where your agents work.`, common)
   prompts.note([
     'A Home owns shared rules and Workspaces.',
     'Your Desk keeps personal continuity.',

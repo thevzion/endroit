@@ -145,7 +145,7 @@ async function assetRoute(root, action, rest, flags, io) {
 
 function help() {
   return {
-    summary: 'Hairness gives agents a provider-agnostic Home you own.',
+    summary: 'One Home for the agents, methods, and repositories you already use.',
     next: ['hairness create <home>', 'open an agent in <home>', 'invoke hairness-onboarding'],
     commands: [
       'create <home>', 'desk init|clone',
