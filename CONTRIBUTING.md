@@ -40,6 +40,44 @@ Run `npm run dev:verify -- --full` before a merge checkpoint. It adds the
 Node 22/24, conformance, security, pack and lab gates to the persistent Home
 checks.
 
+## Delivery
+
+`main` is protected and pull-request-only, including for maintainers. Start
+delivery work from the current remote `main` on a short-lived branch such as
+`codex/<topic>`. Do not attempt a status-gated direct push: the required
+`delivery policy` check exists only on pull requests.
+
+Open one focused pull request, wait for `test (22)`, `test (24)` and
+`delivery policy`, then squash-merge it. GitHub deletes the remote branch
+after merge. Wait for the post-merge `main` CI on the final commit before a
+release or another external delivery effect.
+
+## Runtime support
+
+Hairness qualifies runtimes through evidence, not a compatibility claim. Check
+the [runtime matrix and qualification gate](ROADMAP.md#runtime-matrix), then
+open a
+[Runtime support request](https://github.com/thevzion/hairness/issues/new?template=runtime-support.yml)
+before implementation.
+
+The request establishes:
+
+- the exact runtime and versions;
+- its role and native instruction, capability and continuity surfaces;
+- the real user workflow motivating support;
+- whether Hairness needs a Projection or a Bridge;
+- the contributor who can maintain the integration.
+
+After the scope is agreed, keep the implementation to the smallest existing
+Hairness contract that fits. Do not add a generic Adapter primitive, registry
+or marketplace for one runtime.
+
+A runtime pull request links its request, documents versions and limits, and
+provides dated evidence for the canonical first-Home activation journey. The
+runtime remains `candidate` or `prototyping` until every qualification gate is
+met. Qualification and maintainership are separate: community-maintained
+runtimes name their maintainer explicitly.
+
 ## Release
 
 The `npm release` workflow qualifies the exact public `main` commit, publishes
