@@ -2,17 +2,17 @@
 
 # hairness
 
-## Get more from the agents you already use.
+**You equipped the agent.**<br />
+**Now own the place where you work together.**
 
-**Own the place where your agents work.**
+Hairness is the open-source, local-first environment where you and the agents
+you already use work from the same maps, decisions, methods and retained
+results—across sessions and independent repositories.
 
-**One Home. Your agents. Your methods. Your repositories.**
+**Different interfaces. Different runtimes. Same place. Same material.**
 
-Hairness is the open-source framework and CLI that makes the missing environment around the Agent Runtimes you already use—not another agent.
-
-**The local-first environment for durable human-agent collaboration.**
-
-Hairness does not change the model. It gives the agents you already use an owned environment they can navigate and return to.
+**Resume without starting over.** · **Change runtimes, keep the work.** ·
+**Keep repositories independent.**
 
 [Website](https://hairness.dev) · [Home-first Proposal](https://thevzion.com/home-first/) · [Technical reference](docs/reference.md)
 
@@ -28,7 +28,14 @@ qualified next.
 
 ## Why a Home
 
-Agent instructions, personal context, reusable methods and useful results tend to scatter across repositories, chats and provider-specific files.
+Plans get trapped in chats. Decisions must be explained again. Instructions
+copied between repositories drift. Useful results lose their destination.
+
+`AGENTS.md` and `CLAUDE.md` are good front doors into a repository. They become
+insufficient when that repository is also expected to own the maps, decisions,
+methods and retained work shared across sessions and other Targets. The
+storage closet can be well organized and still be the wrong owner for the
+whole workplace.
 
 ```text
 Without a Home
@@ -40,7 +47,51 @@ one owned Home → your existing agents, methods and repositories
 
 **Home-first** is the organizing paradigm. The Home owns the durable environment, Agent Runtimes own sessions and execution, and Targets retain product truth. Hairness is one open-source implementation of that model.
 
+Plugins and MCP can give an agent access to systems. Memory can preserve
+information. Hairness addresses a different layer: it makes the environment's
+owners, routes, shared material and durable destinations explicit.
+
+**A runtime gives the agent a working directory. A Home gives the work an
+owned environment.**
+
 **[Read the Home-first Proposal →](https://thevzion.com/home-first/)**
+
+## Do you need a Home?
+
+Hairness is worth trying when several of these feel familiar:
+
+- you re-explain the same system map or accepted decisions in later sessions;
+- the repository where a session starts is often not where the work belongs;
+- provider instructions have been copied and now drift between repositories;
+- changing Agent Runtime changes the apparent environment;
+- plenty of context is reachable, but the agent still needs help choosing the
+  relevant source;
+- useful plans, maps or results have no obvious durable destination.
+
+Hairness is probably unnecessary for one short session in one repository with
+no continuity worth retaining. It may also cost more than it helps when a
+second Git repository creates more ambiguity than the work itself.
+
+If none of these signals sound familiar, keep your current setup. If several
+do, try one subject and one Target before expanding the structure.
+
+## Adopt without migrating your world
+
+**Start by mapping, not migrating.**
+
+```text
+one Home → one existing Target → one current subject
+         → one retained result → one resumed session
+```
+
+You do not migrate repositories into Hairness. Each Target keeps its source,
+history and delivery. The Home gives the durable work between Targets an owner
+and gives each retained result a destination.
+
+Adoption is additive before it is transformative: the first useful outcome can
+simply be a clearer map of the environment you already maintain. If the
+structure does not earn its place, Hairness can disappear. Your Home remains
+ordinary files and Git.
 
 ## Start with one Home
 
@@ -100,8 +151,9 @@ Skills and commands remain useful runtime interfaces. Hairness keeps the underly
 
 The required first-party Assets provide Workspaces, guided Onboarding, the HUD,
 inspectable Artifacts and explicit Targets. They let you organize durable
-subjects, connect existing repositories, keep chosen results and diagnose the
-environment without turning the Home into a monorepo or remote memory service.
+subjects, route work across existing repositories, keep chosen results and
+diagnose the environment without turning the Home into a monorepo or remote
+memory service.
 
 Optional Assets add bounded kinds of work:
 
@@ -118,15 +170,32 @@ same owners, destinations and durable results.
 
 ## Bring the agents you already use
 
-Codex and Claude are qualified today. [Kimi Code](https://www.kimi.com/code/),
-[Hermes Agent](https://github.com/NousResearch/hermes-agent) and
-[OpenClaw](https://github.com/openclaw/openclaw) are being evaluated as
-different Agent Runtime shapes, but they are not supported integrations.
+Runtime compatibility has two independent axes:
 
-Use another runtime? Open a
+- **integration:** `native` uses a qualified runtime Projection or Bridge;
+  `portable` uses the static Floor Plan, ordinary instruction files and the
+  Home Console;
+- **evidence:** `qualified` is maintained against the published gate;
+  `observed` means a real workflow succeeded without a maintained-support
+  guarantee; `candidate` has not produced that evidence yet.
+
+| Agent Runtime | Integration | Evidence | What is known |
+| --- | --- | --- | --- |
+| Codex | `native` | `qualified` | Projection, Skills, hook and provider checks |
+| Claude | `native` | `qualified` | Projection, Skills, hook and provider checks |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) 0.19.0 | `portable` | `observed` | A maintainer workflow used `AGENTS.md` and the Home Console on 2026-07-30 |
+| [Kimi Code](https://www.kimi.com/code/) | to classify | `candidate` | No Hairness evidence yet |
+| [OpenClaw](https://github.com/openclaw/openclaw) | to classify | `candidate` | No Hairness evidence yet |
+
+An `observed` row is not a support promise. The Hermes observation is
+anonymized and does not make it `qualified`.
+
+Use another runtime? Try the portable path first, report the friction, then
+open a
 [Runtime support request](https://github.com/thevzion/hairness/issues/new?template=runtime-support.yml).
-The [Roadmap](ROADMAP.md) defines the common qualification journey and shows
-which candidates have evidence. `Candidate` never means promised support.
+The [Roadmap](ROADMAP.md) defines the common qualification journey. Hairness
+adds the smallest native adaptation only when evidence shows the portable path
+is not enough.
 
 ## What lives where
 
@@ -160,8 +229,18 @@ Generated provider files are rebuildable projections. Canonical sources remain o
 Hairness does not provide a model, scheduler, autonomous runtime, methodology, remote memory service, marketplace or live collaboration server. It does not claim measured improvements in reasoning quality, hallucinations, speed or cost.
 
 The active [Roadmap](ROADMAP.md) is evidence-driven rather than date-driven.
-Runtime candidates remain unsupported until they pass the same activation and
-continuity gate as the qualified runtimes.
+Portable observations remain explicitly weaker than qualified, maintained
+runtime paths.
+
+## Engineer-first, not engineering-only
+
+Engineers are natural early adopters because they can inspect ordinary files,
+Git history, generated projections and executable runtimes. A Home can also
+coordinate a research area, publication practice, operations domain or another
+system of work.
+
+Engineers can materialize the environment. Domain experts should still own the
+rules, decisions and retained work of their domain.
 
 ## Go deeper
 
