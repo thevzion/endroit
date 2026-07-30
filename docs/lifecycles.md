@@ -138,7 +138,7 @@ and create one inspectable Artifact per Target.
 Unbinding a symlink removes only the link. Deleting a clean managed clone uses
 filesystem removal only when its common Git directory has no dependent
 worktrees. Deleting a clean, unlocked linked worktree uses
-`git worktree remove`; Hairness never deletes its branch or automatically
+`git worktree remove`; Endroit never deletes its branch or automatically
 forces, prunes, repairs or unlocks Git metadata.
 
 ## Front Door
@@ -155,28 +155,28 @@ build
 ```
 
 The Floor Plan is immediately usable from tracked projections. A Home without a
-Wake-up route has no Hairness SessionStart wrapper and remains valid.
+Wake-up route has no Endroit SessionStart wrapper and remains valid.
 
 When configured, the provider Bridge invokes the route through
-`node ./hairness.mjs`. The Console uses a regular non-symlink
-`.hairness/dev-cli` when present; otherwise it invokes the exact
-`hairness.json#runtime` through `npx`. A present but failing development
+`node ./endroit.mjs`. The Console uses a regular non-symlink
+`.endroit/dev-cli` when present; otherwise it invokes the exact
+`endroit.json#runtime` through `npx`. A present but failing development
 launcher never falls back to npm.
 
 The Bridge treats output as opaque. It discards stderr, caps stdout at 256 KiB
 and expires after 30 seconds. Failure yields a bounded
-`<hairness-front-door status="degraded" … />` marker while the Floor Plan
+`<endroit-front-door status="degraded" … />` marker while the Floor Plan
 continues to orient the session.
 
-The first-party default is `hairness/hud:prompt`. HUD reads local evidence and
+The first-party default is `endroit/hud:prompt`. HUD reads local evidence and
 the Resolved Home, includes `DESK.md` and Desk Asset Instructions, then emits
 XML for Ness. It executes no other Asset runtime. Its optional prompt budget is
-owned by `settings["hairness/hud"].promptBytes`.
+owned by `settings["endroit/hud"].promptBytes`.
 
 `hud activity` computes recent attributed observations on demand. It stores no
 event log and does not run during `build`, `doctor` or Home resolution.
 
-## Hairness development
+## Endroit development
 
 ```text
 dev:home → reconcile sibling team Home → bind repository → build → doctor

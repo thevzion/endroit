@@ -1,14 +1,14 @@
-# Hairness 0.6 technical reference
+# Endroit 0.7 technical reference
 
-Hairness 0.6 is an alpha. The schemas under `schemas/v5` are authoritative.
+Endroit 0.7 is an alpha. The schemas under `schemas/v6` are authoritative.
 
 ## Home
 
-`hairness.json` requires:
+`endroit.json` requires:
 
-- `$schema: https://hairness.dev/schema/home.json`;
+- `$schema: https://endroit.org/schema/home.json`;
 - a stable `name`;
-- the exact `@hairness/cli` runtime;
+- the exact `@endroit/cli` runtime;
 - `mode: solo | team`;
 - at least one supported provider.
 
@@ -18,7 +18,7 @@ model-facing descriptions, Asset-indexed `settings` and:
 ```json
 {
   "frontDoor": {
-    "wakeUp": "hairness/hud:prompt"
+    "wakeUp": "endroit/hud:prompt"
   }
 }
 ```
@@ -26,7 +26,7 @@ model-facing descriptions, Asset-indexed `settings` and:
 The Wake-up route is `<asset-id>:<command>`. Its effective Asset runtime and
 declared command must exist. A Home without it is valid and uses static
 orientation only. Target declarations are settings owned by
-`hairness/targets`; they are not a Kernel primitive.
+`endroit/targets`; they are not a Kernel primitive.
 
 Every Home contains a UTF-8, non-empty, regular, non-symlink `HOME.md`. It is
 the shared constitution and a named Resolved Home source. `create` renders it
@@ -42,7 +42,7 @@ or Claude in the new Home.
 
 The creation itself is atomic. It initializes Git, installs Workspaces,
 Onboarding, HUD, Artifacts and Targets, bootstraps `workspaces/home`, selects
-`hairness/hud:prompt`, builds shared projections, runs Doctor and commits.
+`endroit/hud:prompt`, builds shared projections, runs Doctor and commits.
 
 - `--mode solo|team` supplies the mode and skips that question.
 - `--with research,planning,publishing,scratch`, `--with all` or `--with none`
@@ -71,7 +71,7 @@ replacing `HOME.md`. It is rendered once with `desk.id` and `home.name`.
 valid without a Desk. A clone without both `desk.json` and `DESK.md` is rejected
 and removed atomically.
 
-`hairness/onboarding` owns the optional personal `name`, `addressAs` and
+`endroit/onboarding` owns the optional personal `name`, `addressAs` and
 `responseLanguage` settings it collects. A selected Wake-up runtime may expose
 accepted values to Ness; the Kernel gives them no business meaning.
 
@@ -101,7 +101,7 @@ magic paths.
 Supported sources:
 
 ```text
-@hairness/<bundled-name>
+@endroit/<bundled-name>
 owner/repository/path#tag
 owner/repository/path#40-character-commit
 owner/repository/path
@@ -145,8 +145,8 @@ lockfile is persisted. Floor Plan bytes are measured separately.
 
 Runtime namespaces and projected surfaces must be unique. Settings are validated
 against the schemas owned by each Asset. Optional budgets cover Instructions,
-and model-facing descriptions. `hairness/hud` owns its prompt budget at
-`settings["hairness/hud"].promptBytes`.
+and model-facing descriptions. `endroit/hud` owns its prompt budget at
+`settings["endroit/hud"].promptBytes`.
 
 ## Build and Bridges
 
@@ -160,16 +160,16 @@ Instructions with source attribution. A direct edit is a blocking divergence.
 Generated Skills and Commands are tracked in Git. Desk projections in a team
 Home are excluded locally by exact paths.
 
-`.hairness/build.json` records output owners and digests but is not required
+`.endroit/build.json` records output owners and digests but is not required
 after clone. `build --check` recomputes desired bytes without writing.
 
-Build also writes the tracked root `hairness.mjs` Home Console:
+Build also writes the tracked root `endroit.mjs` Home Console:
 
 ```text
-node ./hairness.mjs <namespace> <command> [...arguments]
+node ./endroit.mjs <namespace> <command> [...arguments]
 ```
 
-The Console uses `.hairness/dev-cli` only when it is a regular non-symlink file;
+The Console uses `.endroit/dev-cli` only when it is a regular non-symlink file;
 otherwise it invokes the exact Home runtime with `npx`. It centralizes
 `development|npm` provenance and propagates stdio, signals and exit status.
 A present but failing development launcher never falls back.
@@ -182,7 +182,7 @@ envelope; Claude receives raw stdout. Errors, empty or oversized output and a
 30-second timeout collapse to:
 
 ```xml
-<hairness-front-door version="1" status="degraded"
+<endroit-front-door version="1" status="degraded"
   reason="wake-up-unavailable" />
 ```
 
@@ -227,16 +227,16 @@ An Asset runtime receives one JSON document on stdin:
 
 ```json
 {
-  "protocol": "hairness.dev/runtime/v1alpha1",
+  "protocol": "endroit.org/runtime/v1alpha1",
   "argv": ["audit", "--json"],
   "homeRoot": "/absolute/home",
   "deskRoot": "/absolute/home/.desk",
   "assetRoot": "/absolute/home/assets/company/security",
   "resolvedHome": {},
   "kernel": {
-    "runtime": "@hairness/cli@0.6.0-alpha.0",
+    "runtime": "@endroit/cli@0.7.0-alpha.0",
     "source": "npm",
-    "invoke": "node ./hairness.mjs"
+    "invoke": "node ./endroit.mjs"
   },
   "runtimeTrust": [],
   "invocation": {
@@ -247,7 +247,7 @@ An Asset runtime receives one JSON document on stdin:
 
 For Front Door execution, `invocation.kind` is `wake-up` and `provider` is
 `codex` or `claude`. The runtime parses its arguments and owns stdout, stderr
-and exit code. Hairness does not wrap its output.
+and exit code. Endroit does not wrap its output.
 
 Each runtime entry carries one trust value:
 
@@ -263,7 +263,7 @@ HUD executes no other Asset runtime while composing its own output.
 
 ## Target runtime
 
-`hairness/targets` provides:
+`endroit/targets` provides:
 
 ```text
 target list|discover|doctor|add|bind|clone|worktree|unbind|remove|inspect
@@ -291,21 +291,21 @@ worktree and never deletes a branch or runs `--force`, `prune`, `repair`,
 
 ## First-party Assets
 
-- `hairness/workspaces`: required scoped Workspace lifecycle and runtime
+- `endroit/workspaces`: required scoped Workspace lifecycle and runtime
   `workspace create|list|inspect|doctor`;
-- `hairness/onboarding`: static, user-invoked, consent-first setup;
-- `hairness/hud`: optional Wake-up and on-demand orientation through
+- `endroit/onboarding`: static, user-invoked, consent-first setup;
+- `endroit/hud`: optional Wake-up and on-demand orientation through
   `show|prompt|json|activity`;
-- `hairness/artifacts`: generic Workspace-owned Artifact lifecycle;
-- `hairness/targets`: routable declarations, named Bindings, deterministic
+- `endroit/artifacts`: generic Workspace-owned Artifact lifecycle;
+- `endroit/targets`: routable declarations, named Bindings, deterministic
   inspection and agent-authored Target Maps;
-- `hairness/research`: optional instruction-only Studies under `researching`;
-- `hairness/planning`: optional instruction-only roadmaps and Initiatives under
+- `endroit/research`: optional instruction-only Studies under `researching`;
+- `endroit/planning`: optional instruction-only roadmaps and Initiatives under
   `planning`;
-- `hairness/publishing`: optional instruction-only Publications and external
+- `endroit/publishing`: optional instruction-only Publications and external
   Handles under `publishing`;
-- `hairness/scratch`: bundled, opt-in Scratch Artifact kind;
-- `hairness/project`: Hairness maintenance methodology consuming Planning.
+- `endroit/scratch`: bundled, opt-in Scratch Artifact kind;
+- `endroit/project`: Endroit maintenance methodology consuming Planning.
 
 ## CLI
 
@@ -322,14 +322,14 @@ doctor
 <runtime namespace> <arguments...>
 ```
 
-After creation, use the tracked `node ./hairness.mjs` Console. `--home <path>`
+After creation, use the tracked `node ./endroit.mjs` Console. `--home <path>`
 remains available to repository tooling and direct Kernel use. `--json` formats
 Kernel responses. The CLI strips its own `--home` flag before passing remaining
 runtime arguments through unchanged.
 
 ## Repository development commands
 
-These commands are available only from a Hairness source checkout:
+These commands are available only from an Endroit source checkout:
 
 ```text
 npm run dev:home
@@ -342,7 +342,7 @@ npm run dev:verify -- --full
 
 `dev:bootstrap` packs the current checkout, runs the canonical `create`
 experience from that tarball and attaches it as the Home's development runtime.
-It defaults to the sibling `hairness-bootstrap-home` directory and leaves the
+It defaults to the sibling `endroit-bootstrap-home` directory and leaves the
 created Home in place for manual testing.
 
 `--home <path>` selects a disposable or alternate Development Home.

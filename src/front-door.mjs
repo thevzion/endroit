@@ -5,15 +5,15 @@ export function renderFloorPlan(plan) {
   const wakeUp = plan.frontDoor
     ? `\`${plan.frontDoor.route}\` via \`${plan.frontDoor.namespace} ${plan.frontDoor.command}\``
     : 'not configured'
-  return `## Hairness Floor Plan
+  return `## Endroit Floor Plan
 
 <!-- generated from the Resolved Home; rebuild instead of editing -->
 
 - Home: \`${plan.home.name}\` (\`${plan.home.mode}\`)
 - Providers: ${plan.home.providers.map((provider) => `\`${provider}\``).join(', ')}
-- Home sources: \`hairness.json\`, \`HOME.md\`, \`assets/\`, \`workspaces/\`
+- Home sources: \`endroit.json\`, \`HOME.md\`, \`assets/\`, \`workspaces/\`
 - Desk sources: \`.desk/DESK.md\`, \`.desk/assets/\`, \`.desk/workspaces/\`, \`.desk/targets/\`
-- Local rebuildable state: \`.hairness/\`
+- Local rebuildable state: \`.endroit/\`
 
 The Home owns its constitution, shared Workspaces and projections. The Desk
 owns collaborator-local Workspaces. Targets own product sources. Artifacts live
@@ -22,7 +22,7 @@ provider files and external systems are never canonical.
 
 Use the tracked Home Console for every Kernel or Asset route:
 
-    node ./hairness.mjs <namespace> <command> [...arguments]
+    node ./endroit.mjs <namespace> <command> [...arguments]
 
 Kernel routes:
 
@@ -48,16 +48,16 @@ import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const homeRoot = dirname(fileURLToPath(import.meta.url))
-const home = JSON.parse(readFileSync(join(homeRoot, 'hairness.json'), 'utf8'))
-if (!/^@hairness\\/cli@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(home.runtime)) {
-  throw new Error('hairness.json contains an invalid runtime.')
+const home = JSON.parse(readFileSync(join(homeRoot, 'endroit.json'), 'utf8'))
+if (!/^@endroit\\/cli@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(home.runtime)) {
+  throw new Error('endroit.json contains an invalid runtime.')
 }
 
-const development = join(homeRoot, '.hairness', 'dev-cli')
+const development = join(homeRoot, '.endroit', 'dev-cli')
 let local = false
 try {
   const info = lstatSync(development)
-  if (info.isSymbolicLink() || !info.isFile()) throw new Error('.hairness/dev-cli must be a regular file.')
+  if (info.isSymbolicLink() || !info.isFile()) throw new Error('.endroit/dev-cli must be a regular file.')
   local = true
 } catch (error) {
   if (error.code !== 'ENOENT') throw error
@@ -71,8 +71,8 @@ const child = spawn(command, args, {
   cwd: homeRoot,
   env: {
     ...process.env,
-    HAIRNESS_HOME_PATH: homeRoot,
-    HAIRNESS_RUNTIME_SOURCE: local ? 'development' : 'npm',
+    ENDROIT_HOME_PATH: homeRoot,
+    ENDROIT_RUNTIME_SOURCE: local ? 'development' : 'npm',
   },
   stdio: 'inherit',
 })
@@ -81,7 +81,7 @@ for (const signal of ['SIGINT', 'SIGTERM', 'SIGHUP']) {
   process.on(signal, () => child.kill(signal))
 }
 child.on('error', (error) => {
-  process.stderr.write(\`hairness_console_failed: \${error.message}\\n\`)
+  process.stderr.write(\`endroit_console_failed: \${error.message}\\n\`)
   process.exitCode = 1
 })
 child.on('exit', (code, signal) => {
@@ -102,7 +102,7 @@ import { fileURLToPath } from 'node:url'
 const provider = ${JSON.stringify(provider)}
 const route = ${JSON.stringify([frontDoor.namespace, frontDoor.command])}
 const homeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
-const degraded = '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />'
+const degraded = '<endroit-front-door version="1" status="degraded" reason="wake-up-unavailable" />'
 
 try {
   const output = await execute()
@@ -129,12 +129,12 @@ function execute() {
   return new Promise((resolvePromise, reject) => {
     let output = Buffer.alloc(0)
     let settled = false
-    const child = spawn(process.execPath, [join(homeRoot, 'hairness.mjs'), ...route], {
+    const child = spawn(process.execPath, [join(homeRoot, 'endroit.mjs'), ...route], {
       cwd: homeRoot,
       env: {
         ...process.env,
-        HAIRNESS_INVOCATION_KIND: 'wake-up',
-        HAIRNESS_INVOCATION_PROVIDER: provider,
+        ENDROIT_INVOCATION_KIND: 'wake-up',
+        ENDROIT_INVOCATION_PROVIDER: provider,
       },
       stdio: ['ignore', 'pipe', 'ignore'],
     })

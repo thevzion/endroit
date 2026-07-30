@@ -1,18 +1,18 @@
-# Hairness Roadmap
+# Endroit Roadmap
 
-Hairness is actively maintained and dogfooded in the Home used to develop it.
+Endroit is actively maintained and dogfooded in the Home used to develop it.
 This roadmap tracks evidence, not release dates. A candidate is an
 investigation, not a promise of support.
 
 ## Today
 
-Hairness 0.6 provides the Home-first foundation, guided bootstrap, Workspaces,
+Endroit 0.7 provides the Home-first foundation, guided bootstrap, Workspaces,
 the Floor Plan and HUD, inspectable Artifacts, explicit Targets and Bindings,
 installable Assets and Doctor.
 
-Codex and Claude are qualified Agent Runtimes. The separate Hairness
+Codex and Claude are qualified Agent Runtimes. The separate Endroit
 Development Home exercises both provider projections against the same
-source-owned Home and independent Hairness Target.
+source-owned Home and independent Endroit Target.
 
 Community runtime work follows
 [Runtime request → qualified pull request](CONTRIBUTING.md#runtime-support).
@@ -49,14 +49,14 @@ Integration and evidence are separate:
 
 | Runtime | Integration | Evidence | Maintainer | Evidence note | Next proof |
 | --- | --- | --- | --- | --- | --- |
-| Codex | `native` | `qualified` | Hairness | Provider checks, Development Home and two-session maintainer journey | Public newcomer reproduction |
-| Claude | `native` | `qualified` | Hairness | Provider checks and Development Home dogfood | Public newcomer reproduction |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) 0.19.0 | `portable` | `observed` | Hairness | Anonymized maintainer workflow using `AGENTS.md` and Home Console, 2026-07-30 | Independent reproduction and friction report |
-| [Kimi Code](https://www.kimi.com/code/) | to classify | `candidate` | `unassigned` | No Hairness evidence yet | Try the portable path |
-| [OpenClaw](https://github.com/openclaw/openclaw) | to classify | `candidate` | `unassigned` | No Hairness evidence yet | Try the portable path |
+| Codex | `native` | `qualified` | Endroit | Provider checks, Development Home and two-session maintainer journey | Public newcomer reproduction |
+| Claude | `native` | `qualified` | Endroit | Provider checks and Development Home dogfood | Public newcomer reproduction |
+| [Hermes Agent](https://github.com/NousResearch/hermes-agent) 0.19.0 | `portable` | `observed` | Endroit | Anonymized maintainer workflow using `AGENTS.md` and Home Console, 2026-07-30 | Independent reproduction and friction report |
+| [Kimi Code](https://www.kimi.com/code/) | to classify | `candidate` | `unassigned` | No Endroit evidence yet | Try the portable path |
+| [OpenClaw](https://github.com/openclaw/openclaw) | to classify | `candidate` | `unassigned` | No Endroit evidence yet | Try the portable path |
 
 `Observed` is deliberately weaker than `qualified`. Maintenance is tracked
-separately as Hairness, `community:<handle>` or `unassigned`.
+separately as Endroit, `community:<handle>` or `unassigned`.
 
 ## Qualification gate
 
@@ -68,7 +68,7 @@ A runtime becomes `qualified` only when dated evidence shows that:
 - the HUD works or declares a bounded degradation;
 - one Capability completes end to end;
 - a second session recovers the chosen context and destination;
-- Doctor detects missing or stale Hairness-owned runtime surfaces when they
+- Doctor detects missing or stale Endroit-owned runtime surfaces when they
   exist;
 - supported versions, limits and maintainership are explicit.
 
@@ -84,8 +84,8 @@ Use a short mono-repository task as a negative control. Publish null or
 negative results as well as improvements; this is a test of orientation and
 continuity, not model intelligence.
 
-Use a runtime Hairness does not qualify yet? Open a
-[Runtime support request](https://github.com/thevzion/hairness/issues/new?template=runtime-support.yml).
+Use a runtime Endroit does not qualify yet? Open a
+[Runtime support request](https://github.com/thevzion/endroit/issues/new?template=runtime-support.yml).
 Start with the portable path and report concrete friction. After the role and
 scope are agreed, a contributor can implement the smallest justified
 Projection or Bridge and submit the evidence through a pull request.

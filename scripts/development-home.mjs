@@ -8,19 +8,19 @@ import { removeTree } from '../src/lib/io.mjs'
 
 const exec = promisify(execFile)
 const projectRoot = await realpath(new URL('../', import.meta.url).pathname)
-const localCli = join(projectRoot, 'bin', 'hairness.mjs')
-const defaultHome = resolve(projectRoot, '..', 'hairness-development-home')
-const projectAsset = '.desk/targets/hairness/main/assets/hairness/project/asset.json'
-const devCliTarget = '../.desk/targets/hairness/main/bin/hairness.mjs'
+const localCli = join(projectRoot, 'bin', 'endroit.mjs')
+const defaultHome = resolve(projectRoot, '..', 'endroit-development-home')
+const projectAsset = '.desk/targets/endroit/main/assets/endroit/project/asset.json'
+const devCliTarget = '../.desk/targets/endroit/main/bin/endroit.mjs'
 const projectPackage = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8'))
 const developmentRuntime = `${projectPackage.name}@${projectPackage.version}`
 
 export async function ensureDevelopmentHome(options = {}) {
   const home = resolve(options.home ?? defaultHome)
-  const document = join(home, 'hairness.json')
+  const document = join(home, 'endroit.json')
   if (!await exists(document)) {
-    if (await exists(home)) throw new Error(`${home} exists but is not a Hairness Home.`)
-    await hairness(['create', home, '--mode', 'team', '--providers', 'codex,claude', '--name', 'hairness-development-home', '--with', 'planning'])
+    if (await exists(home)) throw new Error(`${home} exists but is not an Endroit Home.`)
+    await endroit(['create', home, '--mode', 'team', '--providers', 'codex,claude', '--name', 'endroit-development-home', '--with', 'planning'])
   }
 
   const config = JSON.parse(await readFile(document, 'utf8'))
@@ -32,48 +32,48 @@ export async function ensureDevelopmentHome(options = {}) {
   }
 
   if (!await exists(join(home, '.desk', 'desk.json'))) {
-    if (options.deskRepository) await hairness(['desk', 'clone', options.deskRepository, '--home', home])
-    else await hairness(['desk', 'init', '--id', options.deskId ?? process.env.USER ?? 'local', '--home', home])
+    if (options.deskRepository) await endroit(['desk', 'clone', options.deskRepository, '--home', home])
+    else await endroit(['desk', 'init', '--id', options.deskId ?? process.env.USER ?? 'local', '--home', home])
   }
-  if (!await exists(join(home, 'assets', 'hairness', 'planning', 'asset.json'))) {
-    await hairness(['asset', 'add', '@hairness/planning', '-y', '--home', home])
+  if (!await exists(join(home, 'assets', 'endroit', 'planning', 'asset.json'))) {
+    await endroit(['asset', 'add', '@endroit/planning', '-y', '--home', home])
   }
-  const workspaces = await hairnessJson(['workspace', 'list', '--home', home, '--json'])
-  if (!workspaces.workspaces.some((entry) => entry.id === 'hairness')) {
-    await hairness(['workspace', 'create', 'hairness', '--scope', 'desk', '--home', home])
+  const workspaces = await endroitJson(['workspace', 'list', '--home', home, '--json'])
+  if (!workspaces.workspaces.some((entry) => entry.id === 'endroit')) {
+    await endroit(['workspace', 'create', 'endroit', '--scope', 'desk', '--home', home])
   }
 
-  await hairness(['asset', 'sync', '--all', '--home', home])
+  await endroit(['asset', 'sync', '--all', '--home', home])
   const target = await targetState(home)
   if (!target) {
-    await hairness([
+    await endroit([
       'target', 'add', projectRoot,
-      '--id', 'hairness',
+      '--id', 'endroit',
       '--binding', 'main',
-      '--summary', 'Hairness framework under development',
-      '--when', 'Developing or releasing Hairness.',
-      '--tag', 'hairness',
+      '--summary', 'Endroit framework under development',
+      '--when', 'Developing or releasing Endroit.',
+      '--tag', 'endroit',
       '--home', home,
     ])
   } else {
     const binding = target.bindings.find((entry) => entry.id === 'main')
-    if (!binding) await hairness(['target', 'bind', 'hairness', projectRoot, '--binding', 'main', '--home', home])
-    else if (await realpath(binding.path) !== projectRoot) throw new Error(`hairness/main points to ${binding.path}, expected ${projectRoot}.`)
+    if (!binding) await endroit(['target', 'bind', 'endroit', projectRoot, '--binding', 'main', '--home', home])
+    else if (await realpath(binding.path) !== projectRoot) throw new Error(`endroit/main points to ${binding.path}, expected ${projectRoot}.`)
   }
 
-  if (!await exists(join(home, 'assets', 'hairness', 'project', 'asset.json'))) {
-    await hairness(['asset', 'add', projectAsset, '-y', '--home', home])
+  if (!await exists(join(home, 'assets', 'endroit', 'project', 'asset.json'))) {
+    await endroit(['asset', 'add', projectAsset, '-y', '--home', home])
   } else {
-    await hairness(['asset', 'sync', 'hairness/project', '--to', projectAsset, '--home', home])
+    await endroit(['asset', 'sync', 'endroit/project', '--to', projectAsset, '--home', home])
   }
-  await hairness(['asset', 'sync', '--all', '--home', home])
-  if (config.frontDoor?.wakeUp !== 'hairness/hud:prompt') {
-    config.frontDoor = { wakeUp: 'hairness/hud:prompt' }
+  await endroit(['asset', 'sync', '--all', '--home', home])
+  if (config.frontDoor?.wakeUp !== 'endroit/hud:prompt') {
+    config.frontDoor = { wakeUp: 'endroit/hud:prompt' }
     await writeFile(document, `${JSON.stringify(config, null, 2)}\n`)
   }
   await ensureDevelopmentLauncher(home)
-  await hairness(['build', '--home', home])
-  const doctor = await hairnessJson(['doctor', '--home', home, '--json'])
+  await endroit(['build', '--home', home])
+  const doctor = await endroitJson(['doctor', '--home', home, '--json'])
   if (doctor.status !== 'ready') throw new Error(`Development Home is ${doctor.status}: ${doctor.limits.join(', ')}`)
   return { status: 'ready', home, desk: join(home, '.desk'), target: projectRoot, doctor }
 }
@@ -81,12 +81,12 @@ export async function ensureDevelopmentHome(options = {}) {
 export async function recreateDevelopmentHome(options = {}) {
   const home = resolve(options.home ?? defaultHome)
   const desk = join(home, '.desk')
-  if (!await exists(join(home, 'hairness.json'))) throw new Error(`Development Home does not exist: ${home}`)
+  if (!await exists(join(home, 'endroit.json'))) throw new Error(`Development Home does not exist: ${home}`)
   await assertCleanRepository(home, 'Development Home')
   await assertCleanRepository(desk, 'Development Desk')
 
   const parent = dirname(home)
-  const stageRoot = await mkdtemp(join(parent, '.hairness-development-stage-'))
+  const stageRoot = await mkdtemp(join(parent, '.endroit-development-stage-'))
   const stage = join(stageRoot, basename(home))
   const backup = `${home}.backup-${new Date().toISOString().replace(/[:.]/g, '-')}`
   let deskMoved = false
@@ -106,7 +106,7 @@ export async function recreateDevelopmentHome(options = {}) {
     backupCreated = true
     await rename(stage, home)
     swapped = true
-    await writeFile(join(home, '.hairness', 'recreate.json'), `${JSON.stringify({ version: 1, backup }, null, 2)}\n`)
+    await writeFile(join(home, '.endroit', 'recreate.json'), `${JSON.stringify({ version: 1, backup }, null, 2)}\n`)
     await verifyHome(home)
     await removeTree(stageRoot, { force: true })
     return { status: 'recreated', home, backup, next: 'npm run dev:verify' }
@@ -141,7 +141,7 @@ export async function verifyDevelopmentHome(options = {}) {
     for (const downstream of options.downstream ?? []) await verifyDownstream(resolve(downstream))
   }
 
-  const statePath = join(home, '.hairness', 'recreate.json')
+  const statePath = join(home, '.endroit', 'recreate.json')
   if (await exists(statePath)) {
     const state = JSON.parse(await readFile(statePath, 'utf8'))
     const backup = resolve(state.backup)
@@ -169,33 +169,33 @@ export async function openDevelopmentSession(options = {}) {
 }
 
 async function verifyHome(home) {
-  await hairness(['build', '--check', '--home', home])
-  const doctor = await hairnessJson(['doctor', '--home', home, '--json'])
+  await endroit(['build', '--check', '--home', home])
+  const doctor = await endroitJson(['doctor', '--home', home, '--json'])
   if (doctor.status !== 'ready') throw new Error(`Development Home is ${doctor.status}: ${doctor.limits.join(', ')}`)
-  const codex = JSON.parse((await run(process.execPath, [join(home, '.codex/hooks/hairness-session-start.mjs')], { cwd: home })).stdout)
+  const codex = JSON.parse((await run(process.execPath, [join(home, '.codex/hooks/endroit-session-start.mjs')], { cwd: home })).stdout)
   const codexHud = codex.hookSpecificOutput?.additionalContext
-  if (!codexHud?.startsWith('<hairness-hud ') || /status="degraded"/.test(codexHud)) throw new Error('Codex Front Door Wake-up is unavailable.')
-  const claudeHud = (await run(process.execPath, [join(home, '.claude/hooks/hairness-session-start.mjs')], { cwd: home })).stdout.trim()
-  if (!claudeHud.startsWith('<hairness-hud ') || /status="degraded"/.test(claudeHud)) throw new Error('Claude Front Door Wake-up is unavailable.')
+  if (!codexHud?.startsWith('<endroit-hud ') || /status="degraded"/.test(codexHud)) throw new Error('Codex Front Door Wake-up is unavailable.')
+  const claudeHud = (await run(process.execPath, [join(home, '.claude/hooks/endroit-session-start.mjs')], { cwd: home })).stdout.trim()
+  if (!claudeHud.startsWith('<endroit-hud ') || /status="degraded"/.test(claudeHud)) throw new Error('Claude Front Door Wake-up is unavailable.')
   if (!/<kernel [^>]*source="development"/.test(codexHud) || !/<kernel [^>]*source="development"/.test(claudeHud)) {
-    throw new Error('Development Home did not use the local Hairness Target runtime.')
+    throw new Error('Development Home did not use the local Endroit Target runtime.')
   }
   return { doctor, codex: codexHud, claude: claudeHud }
 }
 
 async function verifyDownstream(home) {
-  await hairness(['build', '--check', '--home', home])
-  const doctor = await hairnessJson(['doctor', '--home', home, '--json'])
+  await endroit(['build', '--check', '--home', home])
+  const doctor = await endroitJson(['doctor', '--home', home, '--json'])
   if (doctor.status !== 'ready') throw new Error(`${home} is ${doctor.status}: ${doctor.limits.join(', ')}`)
 }
 
 async function targetState(home) {
-  const value = await hairnessJson(['target', 'list', '--home', home, '--json'])
-  return value.targets.find((entry) => entry.id === 'hairness')
+  const value = await endroitJson(['target', 'list', '--home', home, '--json'])
+  return value.targets.find((entry) => entry.id === 'endroit')
 }
 
 async function ensureDevelopmentLauncher(home) {
-  const directory = join(home, '.hairness')
+  const directory = join(home, '.endroit')
   const path = join(directory, 'dev-cli')
   await mkdir(directory, { recursive: true })
 const content = `#!/usr/bin/env node
@@ -221,12 +221,12 @@ async function assertCleanRepository(root, label) {
   if (stdout.trim()) throw new Error(`${label} must be clean before recreation.`)
 }
 
-async function hairness(args) {
+async function endroit(args) {
   return (await run(process.execPath, [localCli, ...args], { cwd: projectRoot })).stdout.trim()
 }
 
-async function hairnessJson(args) {
-  return JSON.parse(await hairness(args))
+async function endroitJson(args) {
+  return JSON.parse(await endroit(args))
 }
 
 async function run(command, args, options = {}) {

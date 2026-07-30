@@ -2,30 +2,30 @@ import { readFile } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { API, validateDocument } from './contracts.mjs'
-import { HairnessError } from './lib/errors.mjs'
+import { EndroitError } from './lib/errors.mjs'
 import { assertId, digest, readJson } from './lib/io.mjs'
 
 const packageDocument = JSON.parse(await readFile(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'))
-export const RUNTIME = `@hairness/cli@${packageDocument.version}`
+export const RUNTIME = `@endroit/cli@${packageDocument.version}`
 
-export async function findHome(start = process.env.HAIRNESS_HOME_PATH ?? process.cwd()) {
+export async function findHome(start = process.env.ENDROIT_HOME_PATH ?? process.cwd()) {
   let current = resolve(start)
   while (true) {
     try {
-      await readFile(join(current, 'hairness.json'))
+      await readFile(join(current, 'endroit.json'))
       return current
     } catch (error) {
       if (error.code !== 'ENOENT') throw error
     }
     const parent = dirname(current)
-    if (parent === current) throw new HairnessError('home_not_found', 'No hairness.json found from the current directory.')
+    if (parent === current) throw new EndroitError('home_not_found', 'No endroit.json found from the current directory.')
     current = parent
   }
 }
 
 export async function loadHome(root) {
   root ??= await findHome()
-  const home = await validateDocument(await readJson(join(root, 'hairness.json')), 'home')
+  const home = await validateDocument(await readJson(join(root, 'endroit.json')), 'home')
   home.settings ??= {}
   return home
 }
@@ -33,7 +33,7 @@ export async function loadHome(root) {
 export async function assertRuntime(root) {
   const home = await loadHome(root)
   if (home.runtime !== RUNTIME) {
-    throw new HairnessError('runtime_mismatch', `This Home requires ${home.runtime}; run node ./hairness.mjs instead.`, { exitCode: 3 })
+    throw new EndroitError('runtime_mismatch', `This Home requires ${home.runtime}; run node ./endroit.mjs instead.`, { exitCode: 3 })
   }
   return home
 }

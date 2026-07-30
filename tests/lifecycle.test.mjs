@@ -24,10 +24,10 @@ import { dispatchRuntime, runtimeTrust, runtimeTrustState } from '../src/runtime
 import { asset, captureIo, writeAsset } from './helpers.mjs'
 
 const exec = promisify(execFile)
-const cliPath = new URL('../bin/hairness.mjs', import.meta.url).pathname
+const cliPath = new URL('../bin/endroit.mjs', import.meta.url).pathname
 
 test('Asset add, sync and remove preserve source ownership and unknown files', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-lifecycle-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-lifecycle-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
@@ -72,7 +72,7 @@ test('Asset add, sync and remove preserve source ownership and unknown files', a
 })
 
 test('Desk overrides publish only while their Home base is unchanged', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-override-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-override-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
@@ -94,12 +94,12 @@ test('Desk overrides publish only while their Home base is unchanged', async () 
 })
 
 test('external runtimes stay pending until their exact digest is approved', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-runtime-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-runtime-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
     const runtime = await writeAsset(join(temporary, 'runtime'), asset({
-      name: 'hairness/echo',
+      name: 'endroit/echo',
       files: ['runtime.mjs'],
       capabilities: undefined,
       skills: undefined,
@@ -114,46 +114,46 @@ test('external runtimes stay pending until their exact digest is approved', asyn
     })
     await addAssets(home, [runtime])
     await assert.rejects(readFile(join(home, 'runtime-ran')), (error) => error.code === 'ENOENT')
-    const documentPath = join(home, 'hairness.json')
+    const documentPath = join(home, 'endroit.json')
     const document = JSON.parse(await readFile(documentPath, 'utf8'))
-    document.frontDoor = { wakeUp: 'hairness/echo:show' }
+    document.frontDoor = { wakeUp: 'endroit/echo:show' }
     await writeFile(documentPath, `${JSON.stringify(document, null, 2)}\n`)
     await buildHome(home)
     await assert.rejects(readFile(join(home, 'runtime-ran')), (error) => error.code === 'ENOENT')
-    const launcher = join(home, '.hairness/dev-cli')
+    const launcher = join(home, '.endroit/dev-cli')
     await writeFile(launcher, `#!/usr/bin/env node\nawait import(${JSON.stringify(new URL(`file://${cliPath}`).href)})\n`)
     await chmod(launcher, 0o755)
-    const wakeUp = (await exec(process.execPath, [join(home, '.claude/hooks/hairness-session-start.mjs')], { cwd: home })).stdout
-    assert.equal(wakeUp, '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
+    const wakeUp = (await exec(process.execPath, [join(home, '.claude/hooks/endroit-session-start.mjs')], { cwd: home })).stdout
+    assert.equal(wakeUp, '<endroit-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
     await assert.rejects(readFile(join(home, 'runtime-ran')), (error) => error.code === 'ENOENT')
-    const installed = (await statusAssets(home, 'hairness/echo'))[0]
+    const installed = (await statusAssets(home, 'endroit/echo'))[0]
     assert.equal(installed.state, 'clean')
     assert.match(installed.effectiveDigest, /^sha256:/)
-    const trust = await runtimeTrustState(home, 'hairness/echo')
+    const trust = await runtimeTrustState(home, 'endroit/echo')
     assert.equal(trust.trust, 'pending')
     await assert.rejects(() => dispatchRuntime(home, 'echo', ['show']), (error) => error.code === 'runtime_trust_required')
     await assert.rejects(() => runtimeTrust(home, 'echo', { digest: 'sha256:' + '0'.repeat(64) }), (error) => error.code === 'runtime_digest_mismatch')
     assert.equal((await runtimeTrust(home, 'echo', { digest: trust.digest })).trust, 'approved')
-    assert.equal((await runtimeTrustState(home, 'hairness/echo')).trust, 'approved')
+    assert.equal((await runtimeTrustState(home, 'endroit/echo')).trust, 'approved')
     const capture = captureIo()
     assert.equal(await dispatchRuntime(home, 'echo', ['show', '--value', 'one'], capture.io), 0)
     assert.deepEqual(JSON.parse(capture.stdout()), {
       argv: ['show', '--value', 'one'],
       home: 'home',
-      invoke: 'node ./hairness.mjs',
+      invoke: 'node ./endroit.mjs',
       invocation: { kind: 'command' },
     })
     assert.equal(await readFile(join(home, 'runtime-ran'), 'utf8'), 'yes\n')
 
-    await writeFile(join(home, 'assets/hairness/echo/runtime.mjs'), "process.stdout.write('changed')\n")
-    assert.equal((await runtimeTrustState(home, 'hairness/echo')).trust, 'pending')
+    await writeFile(join(home, 'assets/endroit/echo/runtime.mjs'), "process.stdout.write('changed')\n")
+    assert.equal((await runtimeTrustState(home, 'endroit/echo')).trust, 'pending')
   } finally {
     await removeTree(temporary, { force: true })
   }
 })
 
 test('HTTPS and Git sources retain pinned or mobile provenance', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-sources-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-sources-'))
   const previousFetch = globalThis.fetch
   const previousGit = Object.fromEntries(['GIT_CONFIG_COUNT', 'GIT_CONFIG_KEY_0', 'GIT_CONFIG_VALUE_0', 'GIT_CONFIG_KEY_1', 'GIT_CONFIG_VALUE_1'].map((key) => [key, process.env[key]]))
   try {
@@ -199,7 +199,7 @@ test('HTTPS and Git sources retain pinned or mobile provenance', async () => {
 })
 
 test('symlinks and runtime namespace collisions are rejected before installation', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-safety-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-safety-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
@@ -234,15 +234,15 @@ test('symlinks and runtime namespace collisions are rejected before installation
 })
 
 test('Front Door routes remain valid across Asset mutations', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-front-door-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-front-door-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
-    await assert.rejects(() => removeAsset(home, 'hairness/hud'), (error) => error.code === 'front_door_runtime_missing')
-    assert.equal((await statusAssets(home, 'hairness/hud'))[0].state, 'clean')
+    await assert.rejects(() => removeAsset(home, 'endroit/hud'), (error) => error.code === 'front_door_runtime_missing')
+    assert.equal((await statusAssets(home, 'endroit/hud'))[0].state, 'clean')
 
     const incompatible = await writeAsset(join(temporary, 'incompatible'), asset({
-      name: 'hairness/hud',
+      name: 'endroit/hud',
       files: ['runtime.mjs'],
       capabilities: undefined,
       skills: undefined,
@@ -254,11 +254,11 @@ test('Front Door routes remain valid across Asset mutations', async () => {
       },
     }), { 'runtime.mjs': 'process.stdout.write("no prompt")\n' })
     await assert.rejects(
-      () => syncAssets(home, 'hairness/hud', { to: incompatible, check: true }),
+      () => syncAssets(home, 'endroit/hud', { to: incompatible, check: true }),
       (error) => error.code === 'front_door_command_missing',
     )
 
-    const documentPath = join(home, 'hairness.json')
+    const documentPath = join(home, 'endroit.json')
     const document = JSON.parse(await readFile(documentPath, 'utf8'))
     document.frontDoor.wakeUp = 'missing/runtime:prompt'
     await writeFile(documentPath, `${JSON.stringify(document, null, 2)}\n`)
@@ -272,7 +272,7 @@ test('Front Door routes remain valid across Asset mutations', async () => {
 })
 
 test('standalone Asset validation checks referenced schemas outside a Home', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-asset-validation-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-asset-validation-'))
   try {
     const source = await writeAsset(join(temporary, 'source'), asset({
       files: ['capabilities/review.md', 'schemas/result.schema.json', 'templates/result.md'],

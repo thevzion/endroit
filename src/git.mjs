@@ -2,7 +2,7 @@ import { execFile } from 'node:child_process'
 import { lstat } from 'node:fs/promises'
 import { isAbsolute, join } from 'node:path'
 import { promisify } from 'node:util'
-import { HairnessError } from './lib/errors.mjs'
+import { EndroitError } from './lib/errors.mjs'
 
 const exec = promisify(execFile)
 
@@ -15,7 +15,7 @@ export async function git(args, options = {}) {
     })
     return options.trim === false ? result.stdout : result.stdout.trim()
   } catch (error) {
-    throw new HairnessError('git_failed', `git ${args.join(' ')} failed: ${error.stderr?.trim() || error.message}`, {
+    throw new EndroitError('git_failed', `git ${args.join(' ')} failed: ${error.stderr?.trim() || error.message}`, {
       exitCode: 4,
       details: { args, cwd: options.cwd, stderr: error.stderr?.trim() },
       cause: error,

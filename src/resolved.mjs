@@ -6,7 +6,7 @@ import { loadDesk } from './desk.mjs'
 import { renderFloorPlan } from './front-door.mjs'
 import { loadHome } from './home.mjs'
 import { DESK_INSTRUCTION, HOME_INSTRUCTION, readInstructionFile } from './instructions.mjs'
-import { HairnessError } from './lib/errors.mjs'
+import { EndroitError } from './lib/errors.mjs'
 import { resolvePackageFile } from './lib/io.mjs'
 
 export async function resolveHome(root) {
@@ -19,7 +19,7 @@ export async function resolveHome(root) {
   await readInstructionFile(join(root, HOME_INSTRUCTION), 'home_instruction')
   if (desk) await readInstructionFile(join(root, '.desk', DESK_INSTRUCTION), 'desk_instruction')
   const invalid = installed.find((entry) => entry.invalid)
-  if (invalid) throw new HairnessError('asset_invalid', `${invalid.id} is invalid: ${invalid.invalid.message}`)
+  if (invalid) throw new EndroitError('asset_invalid', `${invalid.id} is invalid: ${invalid.invalid.message}`)
 
   const homeAssets = installed.filter((entry) => entry.scope === 'home')
   const deskAssets = installed.filter((entry) => entry.scope === 'desk')
@@ -27,7 +27,7 @@ export async function resolveHome(root) {
   for (const entry of deskAssets) {
     const base = effective.get(entry.id)
     if (base && entry.manifest.origin.kind !== 'override') {
-      throw new HairnessError('asset_collision', `${entry.id} exists in both Home and Desk without an override origin.`)
+      throw new EndroitError('asset_collision', `${entry.id} exists in both Home and Desk without an override origin.`)
     }
     effective.set(entry.id, entry)
   }
@@ -41,14 +41,14 @@ export async function resolveHome(root) {
     desk,
     homeInstruction: {
       id: 'home',
-      owner: 'hairness/home',
+      owner: 'endroit/home',
       scope: 'home',
       root,
       path: HOME_INSTRUCTION,
     },
     deskInstruction: desk ? {
       id: 'desk',
-      owner: 'hairness/desk',
+      owner: 'endroit/desk',
       scope: 'desk',
       root: join(root, '.desk'),
       path: DESK_INSTRUCTION,
@@ -226,7 +226,7 @@ async function accessorBindings(root, home, desk) {
       }
     }
   }
-  for (const target of home.settings?.['hairness/targets']?.targets ?? []) {
+  for (const target of home.settings?.['endroit/targets']?.targets ?? []) {
     values.target.push({
       kind: 'target',
       id: target.id,
@@ -242,7 +242,7 @@ function assertWorkspaceIdentities(workspaces) {
   for (const workspace of workspaces) {
     const current = scopes.get(workspace.id)
     if (current) {
-      throw new HairnessError('workspace_collision', `Workspace ${workspace.id} exists in both ${current} and ${workspace.scope} scope.`)
+      throw new EndroitError('workspace_collision', `Workspace ${workspace.id} exists in both ${current} and ${workspace.scope} scope.`)
     }
     scopes.set(workspace.id, workspace.scope)
   }
@@ -268,9 +268,9 @@ function slug(value) {
 async function validateSettings(entry, homeSettings, deskSettings) {
   const paths = entry.manifest.settings ?? {}
   if (paths.home) await validateSetting(entry, paths.home, homeSettings ?? {}, 'Home')
-  else if (homeSettings !== undefined) throw new HairnessError('settings_schema_missing', `${entry.id} does not accept Home settings.`)
+  else if (homeSettings !== undefined) throw new EndroitError('settings_schema_missing', `${entry.id} does not accept Home settings.`)
   if (paths.desk) await validateSetting(entry, paths.desk, deskSettings ?? {}, 'Desk')
-  else if (deskSettings !== undefined) throw new HairnessError('settings_schema_missing', `${entry.id} does not accept Desk settings.`)
+  else if (deskSettings !== undefined) throw new EndroitError('settings_schema_missing', `${entry.id} does not accept Desk settings.`)
 }
 
 async function validateSetting(entry, path, value, scope) {
@@ -279,7 +279,7 @@ async function validateSetting(entry, path, value, scope) {
   const validate = new Ajv2020({ allErrors: true, strict: false }).compile(schema)
   if (!validate(value)) {
     const message = validate.errors.map((error) => `${error.instancePath || '/'} ${error.message}`).join('; ')
-    throw new HairnessError('settings_invalid', `${scope} settings for ${entry.id} are invalid: ${message}.`)
+    throw new EndroitError('settings_invalid', `${scope} settings for ${entry.id} are invalid: ${message}.`)
   }
 }
 
@@ -297,9 +297,9 @@ function resolveFrontDoor(frontDoor, plan) {
   const owner = frontDoor.wakeUp.slice(0, separator)
   const command = frontDoor.wakeUp.slice(separator + 1)
   const runtime = plan.runtimes.find((entry) => entry.owner === owner)
-  if (!runtime) throw new HairnessError('front_door_runtime_missing', `${frontDoor.wakeUp} references an Asset without an effective runtime.`)
+  if (!runtime) throw new EndroitError('front_door_runtime_missing', `${frontDoor.wakeUp} references an Asset without an effective runtime.`)
   if (!runtime.commands.some((entry) => entry.name === command)) {
-    throw new HairnessError('front_door_command_missing', `${frontDoor.wakeUp} references an undeclared runtime command.`)
+    throw new EndroitError('front_door_command_missing', `${frontDoor.wakeUp} references an undeclared runtime command.`)
   }
   return {
     route: frontDoor.wakeUp,
@@ -322,7 +322,7 @@ function enforceBudgets(budgets, context) {
   ]
   for (const [key, actual] of values) {
     if (budgets[key] !== undefined && actual > budgets[key]) {
-      throw new HairnessError('context_budget_exceeded', `${key} is ${actual} bytes, over the ${budgets[key]} byte budget.`)
+      throw new EndroitError('context_budget_exceeded', `${key} is ${actual} bytes, over the ${budgets[key]} byte budget.`)
     }
   }
 }
@@ -331,7 +331,7 @@ function assertUnique(entries, key, label) {
   const owners = new Map()
   for (const entry of entries) {
     const id = key(entry)
-    if (owners.has(id)) throw new HairnessError('surface_collision', `${label} ${id} is owned by both ${owners.get(id)} and ${entry.owner}.`)
+    if (owners.has(id)) throw new EndroitError('surface_collision', `${label} ${id} is owned by both ${owners.get(id)} and ${entry.owner}.`)
     owners.set(id, entry.owner)
   }
 }
@@ -341,7 +341,7 @@ function assertAccessors(skills, commands) {
   for (const entry of [...skills, ...commands]) {
     const key = `${entry.invocation}:${entry.projectedId}`
     const current = claims.get(key)
-    if (current) throw new HairnessError('surface_collision', `${entry.invocation} surface ${entry.projectedId} is owned by both ${current} and ${entry.owner}.`)
+    if (current) throw new EndroitError('surface_collision', `${entry.invocation} surface ${entry.projectedId} is owned by both ${current} and ${entry.owner}.`)
     claims.set(key, entry.owner)
   }
 }

@@ -6,24 +6,24 @@ import { fileURLToPath } from 'node:url'
 import { validateDocument } from './contracts.mjs'
 import { git } from './git.mjs'
 import { loadHome } from './home.mjs'
-import { HairnessError } from './lib/errors.mjs'
+import { EndroitError } from './lib/errors.mjs'
 import { assertInside, digest, exists, removeTree, resolvePackageFile } from './lib/io.mjs'
 
-const builtinRoot = fileURLToPath(new URL('../assets/hairness', import.meta.url))
+const builtinRoot = fileURLToPath(new URL('../assets/endroit', import.meta.url))
 const MAX_FILE_BYTES = 5 * 1024 * 1024
 const githubAddress = /^([a-zA-Z0-9_.-]+)\/([a-zA-Z0-9_.-]+)\/(.+?)(?:#([^#]+))?$/
 
 export async function resolveAsset(root, address) {
   const source = String(address)
-  const official = source.match(/^@hairness\/([a-z0-9][a-z0-9._-]*)$/)
+  const official = source.match(/^@endroit\/([a-z0-9][a-z0-9._-]*)$/)
   if (official) return loadManifest(join(builtinRoot, official[1], 'asset.json'), { root, source, mobile: false, firstParty: true })
-  if (source.startsWith('@')) throw new HairnessError('source_invalid', `Unsupported Asset namespace ${source}; use a GitHub, HTTPS or local manifest address.`)
+  if (source.startsWith('@')) throw new EndroitError('source_invalid', `Unsupported Asset namespace ${source}; use a GitHub, HTTPS or local manifest address.`)
   if (/^https:\/\//.test(source)) return loadManifest(assertSafeUrl(source), { root, source, mobile: true })
-  if (/^http:\/\//.test(source)) throw new HairnessError('source_insecure', 'Asset URLs must use HTTPS.')
+  if (/^http:\/\//.test(source)) throw new EndroitError('source_insecure', 'Asset URLs must use HTTPS.')
   if (source.startsWith('.') || source.startsWith('/')) return loadManifest(source, { root, source, mobile: true })
   const github = source.match(githubAddress)
   if (github) return loadGithub(source, github)
-  throw new HairnessError('source_invalid', `Unsupported Asset address ${source}.`)
+  throw new EndroitError('source_invalid', `Unsupported Asset address ${source}.`)
 }
 
 export async function addAssets(root, addresses, options = {}) {
@@ -31,7 +31,7 @@ export async function addAssets(root, addresses, options = {}) {
   const destinationRoot = await assetScopeRoot(root, scope)
   const resolved = await Promise.all(addresses.map((address) => resolveAsset(root, address)))
   const ids = resolved.map((entry) => entry.manifest.name)
-  if (new Set(ids).size !== ids.length) throw new HairnessError('asset_collision', 'Each Asset may be selected only once per add transaction.')
+  if (new Set(ids).size !== ids.length) throw new EndroitError('asset_collision', 'Each Asset may be selected only once per add transaction.')
   const installed = (await installedAssets(root, { scope })).filter((entry) => !entry.invalid)
   assertCapabilityCollisions([
     ...installed.filter((entry) => !options.overwrite || !ids.includes(entry.manifest.name)).map((entry) => entry.manifest),
@@ -41,15 +41,15 @@ export async function addAssets(root, addresses, options = {}) {
   const writes = []
   for (const asset of resolved) {
     const id = asset.manifest.name
-    if (current.has(id) && !options.overwrite) throw new HairnessError('asset_exists', `${id} is already installed.`)
+    if (current.has(id) && !options.overwrite) throw new EndroitError('asset_exists', `${id} is already installed.`)
     const assetRoot = join(destinationRoot, id)
     for (const file of asset.files) {
       const path = assertInside(assetRoot, join(assetRoot, file.path), 'Asset destination')
-      if (await exists(path) && !options.overwrite) throw new HairnessError('file_collision', `${relative(root, path)} already exists.`)
+      if (await exists(path) && !options.overwrite) throw new EndroitError('file_collision', `${relative(root, path)} already exists.`)
       writes.push({ path, content: file.content })
     }
     const manifestPath = join(assetRoot, 'asset.json')
-    if (await exists(manifestPath) && !options.overwrite) throw new HairnessError('file_collision', `${relative(root, manifestPath)} already exists.`)
+    if (await exists(manifestPath) && !options.overwrite) throw new EndroitError('file_collision', `${relative(root, manifestPath)} already exists.`)
     writes.push({ path: manifestPath, content: manifestBytes(installedManifest(asset, 'source')) })
   }
   await assertFrontDoorAfter(root, resolved.map((entry) => ({
@@ -76,7 +76,7 @@ export async function installedAssets(root, options = {}) {
     }
   }
   const ids = values.filter((entry) => !entry.invalid).map((entry) => entry.manifest.name)
-  if (new Set(ids).size !== ids.length) throw new HairnessError('asset_invalid', 'Installed Asset names must be unique.')
+  if (new Set(ids).size !== ids.length) throw new EndroitError('asset_invalid', 'Installed Asset names must be unique.')
   return values.sort((left, right) => left.id.localeCompare(right.id))
 }
 
@@ -99,7 +99,7 @@ export async function catalogAssets(root) {
     if (!entry.isDirectory() || entry.isSymbolicLink()) continue
     const manifestPath = join(builtinRoot, entry.name, 'asset.json')
     if (!await exists(manifestPath)) continue
-    const asset = await resolveAsset(root, `@hairness/${entry.name}`)
+    const asset = await resolveAsset(root, `@endroit/${entry.name}`)
     const manifest = asset.manifest
     values.push({
       id: manifest.name,
@@ -131,11 +131,11 @@ export async function validateAssetSource(root, source) {
     try {
       new Ajv2020({ allErrors: true, strict: false }).compile(JSON.parse(files.get(path).toString('utf8')))
     } catch (error) {
-      throw new HairnessError('asset_schema_invalid', `${asset.manifest.name} contains an invalid schema at ${path}: ${error.message}`)
+      throw new EndroitError('asset_schema_invalid', `${asset.manifest.name} contains an invalid schema at ${path}: ${error.message}`)
     }
   }
   for (const kind of asset.manifest.artifactKinds ?? []) {
-    if (!files.get(kind.template)?.length) throw new HairnessError('asset_template_invalid', `${asset.manifest.name} has an empty template at ${kind.template}.`)
+    if (!files.get(kind.template)?.length) throw new EndroitError('asset_template_invalid', `${asset.manifest.name} has an empty template at ${kind.template}.`)
   }
   return {
     status: 'valid',
@@ -151,7 +151,7 @@ export async function overrideAsset(root, selector) {
   const home = await requireValid(await findInstalled(root, selector, { scope: 'home' }))
   const deskRoot = await assetScopeRoot(root, 'desk')
   const destination = join(deskRoot, home.id)
-  if (await exists(join(destination, 'asset.json'))) throw new HairnessError('asset_exists', `${home.id} already has a Desk override.`)
+  if (await exists(join(destination, 'asset.json'))) throw new EndroitError('asset_exists', `${home.id} already has a Desk override.`)
   const manifest = sourceManifest(home.manifest)
   const files = await Promise.all(manifest.files.map(async (path) => ({ path, content: await readFile(join(home.root, path)) })))
   const source = {
@@ -171,13 +171,13 @@ export async function overrideAsset(root, selector) {
 
 export async function promoteAsset(root, selector) {
   const desk = await requireValid(await findInstalled(root, selector, { scope: 'desk' }))
-  if (desk.manifest.origin.kind !== 'override') throw new HairnessError('asset_not_override', `${desk.id} is not a Desk override.`)
+  if (desk.manifest.origin.kind !== 'override') throw new EndroitError('asset_not_override', `${desk.id} is not a Desk override.`)
   const home = await requireValid(await findInstalled(root, desk.id, { scope: 'home' }))
   const base = desk.manifest.origin
-  if (manifestDigest(home.manifest) !== base.baseManifestDigest) throw new HairnessError('asset_base_drifted', `${desk.id} Home manifest changed after the override was created.`)
+  if (manifestDigest(home.manifest) !== base.baseManifestDigest) throw new EndroitError('asset_base_drifted', `${desk.id} Home manifest changed after the override was created.`)
   for (const [path, expected] of Object.entries(base.baseDigests)) {
     if (!await exists(join(home.root, path)) || digest(await readFile(join(home.root, path))) !== expected) {
-      throw new HairnessError('asset_base_drifted', `${desk.id} Home source changed after the override was created.`)
+      throw new EndroitError('asset_base_drifted', `${desk.id} Home source changed after the override was created.`)
     }
   }
   const manifest = sourceManifest(desk.manifest)
@@ -240,7 +240,7 @@ export async function removeAsset(root, selector, options = {}) {
   const installed = await requireValid(await findInstalled(root, selector, options))
   const current = await assetStatus(installed)
   if (current.state !== 'clean' && !options.overwrite) {
-    throw new HairnessError('asset_customized', `${installed.id} has customized, missing or invalid source-owned files.`, { details: current })
+    throw new EndroitError('asset_customized', `${installed.id} has customized, missing or invalid source-owned files.`, { details: current })
   }
   const deletes = [...Object.keys(installed.manifest.origin.baseDigests).map((path) => join(installed.root, path)), installed.path]
   await assertFrontDoorAfter(root, [{ id: installed.id, scope: installed.scope, manifest: null }])
@@ -296,7 +296,7 @@ async function syncOne(root, installed, options) {
   const result = await upstreamDiff(installed, upstream)
   if (status.state !== 'clean' && !options.overwrite) {
     if (options.check) return { status: 'blocked', reason: 'customized', ...result }
-    throw new HairnessError('sync_customized', `${installed.id} has local changes; run asset sync --check or pass --overwrite.`, { details: result })
+    throw new EndroitError('sync_customized', `${installed.id} has local changes; run asset sync --check or pass --overwrite.`, { details: result })
   }
   const writes = upstream.files.map((file) => ({ path: join(installed.root, file.path), content: file.content }))
   writes.push({ path: installed.path, content: manifestBytes(installedManifest(upstream, 'source')) })
@@ -311,8 +311,8 @@ async function syncOne(root, installed, options) {
 
 async function loadGithub(source, match) {
   const [, owner, repository, assetPath, requestedRef] = match
-  if (!assetPath || assetPath.startsWith('/') || assetPath.includes('..') || assetPath.includes('\\')) throw new HairnessError('source_invalid', `Invalid GitHub Asset path ${assetPath}.`)
-  const stage = await mkdtemp(join(tmpdir(), 'hairness-asset-'))
+  if (!assetPath || assetPath.startsWith('/') || assetPath.includes('..') || assetPath.includes('\\')) throw new EndroitError('source_invalid', `Invalid GitHub Asset path ${assetPath}.`)
+  const stage = await mkdtemp(join(tmpdir(), 'endroit-asset-'))
   try {
     await git(['init', '--quiet'], { cwd: stage })
     await git(['remote', 'add', 'origin', `https://github.com/${owner}/${repository}.git`], { cwd: stage })
@@ -338,7 +338,7 @@ async function loadManifest(location, context) {
   } else {
     const candidate = resolve(context.root ?? process.cwd(), location)
     const stat = await lstat(candidate)
-    if (stat.isSymbolicLink()) throw new HairnessError('symlink_forbidden', `Asset manifest ${location} must not be a symbolic link.`)
+    if (stat.isSymbolicLink()) throw new EndroitError('symlink_forbidden', `Asset manifest ${location} must not be a symbolic link.`)
     const path = await realpath(candidate)
     document = JSON.parse(await readFile(path, 'utf8'))
     base = path
@@ -350,7 +350,7 @@ async function loadManifest(location, context) {
     const content = /^https:\/\//.test(base)
       ? await fetchBytes(new URL(path, base).href)
       : await readFile(await resolvePackageFile(dirname(base), path, 'Asset file'))
-    if (content.length > MAX_FILE_BYTES) throw new HairnessError('source_too_large', `${path} exceeds 5 MiB.`)
+    if (content.length > MAX_FILE_BYTES) throw new EndroitError('source_too_large', `${path} exceeds 5 MiB.`)
     files.push({ path, content })
   }
   return {
@@ -367,10 +367,10 @@ async function loadManifest(location, context) {
 async function loadInstalled(root, path, id, scope) {
   try {
     const info = await lstat(path)
-    if (info.isSymbolicLink()) throw new HairnessError('symlink_forbidden', `Asset manifest ${relative(root, path)} must not be a symbolic link.`)
+    if (info.isSymbolicLink()) throw new EndroitError('symlink_forbidden', `Asset manifest ${relative(root, path)} must not be a symbolic link.`)
     const manifest = await validateDocument(JSON.parse(await readFile(path, 'utf8')), 'asset')
-    if (!manifest.origin) throw new HairnessError('asset_invalid', `${relative(root, path)} has no origin provenance.`)
-    if (manifest.name !== id) throw new HairnessError('asset_invalid', `${relative(root, path)} declares ${manifest.name}, expected ${id}.`)
+    if (!manifest.origin) throw new EndroitError('asset_invalid', `${relative(root, path)} has no origin provenance.`)
+    if (manifest.name !== id) throw new EndroitError('asset_invalid', `${relative(root, path)} declares ${manifest.name}, expected ${id}.`)
     validateManifest(sourceManifest(manifest))
     return { id, root: dirname(path), path, manifest, scope }
   } catch (error) {
@@ -380,8 +380,8 @@ async function loadInstalled(root, path, id, scope) {
 
 async function findInstalled(root, selector, options = {}) {
   const matches = (await installedAssets(root, options)).filter((entry) => entry.id === selector || entry.id.split('/').at(-1) === selector)
-  if (!matches.length) throw new HairnessError('asset_not_installed', `${selector} is not installed.`)
-  if (matches.length > 1) throw new HairnessError('asset_ambiguous', `${selector} matches multiple Assets; use the full name.`)
+  if (!matches.length) throw new EndroitError('asset_not_installed', `${selector} is not installed.`)
+  if (matches.length > 1) throw new EndroitError('asset_ambiguous', `${selector} matches multiple Assets; use the full name.`)
   return matches[0]
 }
 
@@ -433,8 +433,8 @@ export async function installedAssetDigest(entry) {
 
 function validateManifest(manifest) {
   const paths = new Set(manifest.files)
-  if (paths.has('asset.json')) throw new HairnessError('asset_invalid', 'asset.json is reserved for the Asset manifest.')
-  if (paths.size !== manifest.files.length) throw new HairnessError('asset_invalid', `${manifest.name} declares a file more than once.`)
+  if (paths.has('asset.json')) throw new EndroitError('asset_invalid', 'asset.json is reserved for the Asset manifest.')
+  if (paths.size !== manifest.files.length) throw new EndroitError('asset_invalid', `${manifest.name} declares a file more than once.`)
   const capabilities = ids(manifest.capabilities, 'Capability', manifest.name)
   ids(manifest.instructions, 'Instruction', manifest.name)
   ids(manifest.references, 'Reference', manifest.name)
@@ -443,9 +443,9 @@ function validateManifest(manifest) {
   ids(manifest.artifactKinds, 'Artifact kind', manifest.name)
   for (const entry of [...(manifest.instructions ?? []), ...(manifest.capabilities ?? []), ...(manifest.references ?? [])]) requireFile(paths, entry.path, manifest.name)
   for (const entry of [...(manifest.skills ?? []), ...(manifest.commands ?? [])]) {
-    if (!capabilities.has(entry.capability)) throw new HairnessError('asset_invalid', `${manifest.name} ${entry.id} references missing Capability ${entry.capability}.`)
+    if (!capabilities.has(entry.capability)) throw new EndroitError('asset_invalid', `${manifest.name} ${entry.id} references missing Capability ${entry.capability}.`)
   }
-  for (const id of manifest.setup ?? []) if (!capabilities.has(id)) throw new HairnessError('asset_invalid', `${manifest.name} setup references missing Capability ${id}.`)
+  for (const id of manifest.setup ?? []) if (!capabilities.has(id)) throw new EndroitError('asset_invalid', `${manifest.name} setup references missing Capability ${id}.`)
   for (const kind of manifest.artifactKinds ?? []) {
     requireFile(paths, kind.schema, manifest.name)
     requireFile(paths, kind.template, manifest.name)
@@ -456,10 +456,10 @@ function validateManifest(manifest) {
   if (manifest.runtime) {
     requireFile(paths, manifest.runtime.entry, manifest.name)
     const runtimeCommands = ids(manifest.runtime.commands, 'Runtime command', manifest.name, 'name')
-    if (!runtimeCommands.size) throw new HairnessError('asset_invalid', `${manifest.name} runtime must declare at least one command.`)
+    if (!runtimeCommands.size) throw new EndroitError('asset_invalid', `${manifest.name} runtime must declare at least one command.`)
   }
   if (!skills.size && !commands.size && !manifest.runtime && !manifest.instructions?.length && !manifest.artifactKinds?.length) {
-    throw new HairnessError('asset_invalid', `${manifest.name} exposes no material or surface.`)
+    throw new EndroitError('asset_invalid', `${manifest.name} exposes no material or surface.`)
   }
 }
 
@@ -471,41 +471,41 @@ function assertCapabilityCollisions(manifests) {
   }
   function claim(id, owner) {
     const current = claims.get(id)
-    if (current && current !== owner) throw new HairnessError('capability_collision', `${id} is claimed by both ${current} and ${owner}.`)
+    if (current && current !== owner) throw new EndroitError('capability_collision', `${id} is claimed by both ${current} and ${owner}.`)
     claims.set(id, owner)
   }
 }
 
 function ids(entries = [], label, owner, key = 'id') {
   const values = entries.map((entry) => entry[key])
-  if (new Set(values).size !== values.length) throw new HairnessError('asset_invalid', `${owner} ${label} ids must be unique.`)
+  if (new Set(values).size !== values.length) throw new EndroitError('asset_invalid', `${owner} ${label} ids must be unique.`)
   return new Set(values)
 }
 
 function requireFile(files, path, owner) {
-  if (!files.has(path)) throw new HairnessError('asset_invalid', `${owner} references undeclared file ${path}.`)
+  if (!files.has(path)) throw new EndroitError('asset_invalid', `${owner} references undeclared file ${path}.`)
 }
 
 async function fetchDocument(url) {
   const response = await fetch(assertSafeUrl(url), { redirect: 'follow' })
   assertSafeResponse(response)
-  if (!response.ok) throw new HairnessError('source_fetch_failed', `Asset request failed with HTTP ${response.status}.`, { exitCode: 4 })
+  if (!response.ok) throw new EndroitError('source_fetch_failed', `Asset request failed with HTTP ${response.status}.`, { exitCode: 4 })
   const bytes = Buffer.from(await response.arrayBuffer())
-  if (bytes.length > MAX_FILE_BYTES) throw new HairnessError('source_too_large', 'Asset manifest exceeds 5 MiB.')
+  if (bytes.length > MAX_FILE_BYTES) throw new EndroitError('source_too_large', 'Asset manifest exceeds 5 MiB.')
   try { return { document: JSON.parse(bytes.toString('utf8')), url: response.url || url } }
-  catch (error) { throw new HairnessError('invalid_json', 'Asset returned invalid JSON.', { cause: error }) }
+  catch (error) { throw new EndroitError('invalid_json', 'Asset returned invalid JSON.', { cause: error }) }
 }
 
 async function fetchBytes(url) {
   const response = await fetch(assertSafeUrl(url), { redirect: 'follow' })
   assertSafeResponse(response)
-  if (!response.ok) throw new HairnessError('source_fetch_failed', `Asset file request failed with HTTP ${response.status}.`, { exitCode: 4 })
+  if (!response.ok) throw new EndroitError('source_fetch_failed', `Asset file request failed with HTTP ${response.status}.`, { exitCode: 4 })
   return Buffer.from(await response.arrayBuffer())
 }
 
 function assertSafeUrl(value) {
   const url = new URL(value)
-  if (url.protocol !== 'https:' || url.username || url.password || url.search) throw new HairnessError('source_insecure', 'Asset URLs must use HTTPS without credentials or query secrets.')
+  if (url.protocol !== 'https:' || url.username || url.password || url.search) throw new EndroitError('source_insecure', 'Asset URLs must use HTTPS without credentials or query secrets.')
   return url.href
 }
 
@@ -516,19 +516,19 @@ function assertSafeResponse(response) {
 async function directories(root, home) {
   const values = []
   for (const entry of await readdir(root, { withFileTypes: true })) {
-    if (entry.isSymbolicLink()) throw new HairnessError('symlink_forbidden', `Installed Asset contains symbolic link ${relative(home, join(root, entry.name))}.`)
+    if (entry.isSymbolicLink()) throw new EndroitError('symlink_forbidden', `Installed Asset contains symbolic link ${relative(home, join(root, entry.name))}.`)
     if (entry.isDirectory()) values.push(entry.name)
   }
   return values.sort()
 }
 
 async function requireValid(entry) {
-  if (entry.invalid) throw new HairnessError('asset_invalid', `${entry.id} is invalid: ${entry.invalid.message}`)
+  if (entry.invalid) throw new EndroitError('asset_invalid', `${entry.id} is invalid: ${entry.invalid.message}`)
   return entry
 }
 
 function assertSameAsset(installed, upstream) {
-  if (installed.id !== upstream.manifest.name) throw new HairnessError('asset_identity_changed', `${upstream.manifest.name} cannot replace ${installed.id}.`)
+  if (installed.id !== upstream.manifest.name) throw new EndroitError('asset_identity_changed', `${upstream.manifest.name} cannot replace ${installed.id}.`)
 }
 
 async function anyWriteChanged(writes) {
@@ -540,7 +540,7 @@ async function anyWriteChanged(writes) {
 }
 
 export async function applyTransaction(root, writes, deletes) {
-  const transaction = await mkdtemp(join(root, '.hairness-transaction-'))
+  const transaction = await mkdtemp(join(root, '.endroit-transaction-'))
   const staged = join(transaction, 'staged')
   const backup = join(transaction, 'backup')
   const touched = [...new Set([...writes.map((entry) => entry.path), ...deletes])]
@@ -581,7 +581,7 @@ export async function applyTransaction(root, writes, deletes) {
 async function assertNoSymlink(root, path) {
   let current = resolve(path)
   while (current !== resolve(root)) {
-    try { if ((await lstat(current)).isSymbolicLink()) throw new HairnessError('symlink_forbidden', `${relative(root, current)} is a symbolic link.`) }
+    try { if ((await lstat(current)).isSymbolicLink()) throw new EndroitError('symlink_forbidden', `${relative(root, current)} is a symbolic link.`) }
     catch (error) { if (error.code !== 'ENOENT') throw error }
     current = dirname(current)
   }
@@ -606,10 +606,10 @@ async function assertFrontDoorAfter(root, changes) {
   const command = home.frontDoor.wakeUp.slice(separator + 1)
   const manifest = deskManifests.get(owner) ?? homeManifests.get(owner)
   if (!manifest?.runtime) {
-    throw new HairnessError('front_door_runtime_missing', `${home.frontDoor.wakeUp} would no longer reference an effective Asset runtime.`)
+    throw new EndroitError('front_door_runtime_missing', `${home.frontDoor.wakeUp} would no longer reference an effective Asset runtime.`)
   }
   if (!manifest.runtime.commands.some((entry) => entry.name === command)) {
-    throw new HairnessError('front_door_command_missing', `${home.frontDoor.wakeUp} would no longer reference a declared runtime command.`)
+    throw new EndroitError('front_door_command_missing', `${home.frontDoor.wakeUp} would no longer reference a declared runtime command.`)
   }
 }
 
@@ -623,7 +623,7 @@ async function removeEmptyParents(path, stop) {
 
 async function assetScopeRoot(root, scope) {
   if (scope === 'home') return join(root, 'assets')
-  if (!await exists(join(root, '.desk', 'desk.json'))) throw new HairnessError('desk_missing', 'Configure a Desk before installing Desk Assets.')
+  if (!await exists(join(root, '.desk', 'desk.json'))) throw new EndroitError('desk_missing', 'Configure a Desk before installing Desk Assets.')
   return join(root, '.desk', 'assets')
 }
 

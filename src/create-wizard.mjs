@@ -51,7 +51,7 @@ async function renderWizard(options) {
     'A Home owns shared rules and Workspaces.',
     'Your Desk keeps personal continuity.',
     'Targets keep their repositories and history.',
-  ].join('\n'), 'What Hairness owns', common)
+  ].join('\n'), 'What Endroit owns', common)
 
   let mode = options.mode
   if (!mode) {

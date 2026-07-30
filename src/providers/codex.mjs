@@ -4,7 +4,7 @@ export const codex = {
   id: 'codex',
   instructionPath: 'AGENTS.md',
   hookPath: '.codex/hooks.json',
-  sessionPath: '.codex/hooks/hairness-session-start.mjs',
+  sessionPath: '.codex/hooks/endroit-session-start.mjs',
   skillRoot: '.agents/skills',
   invocation: '$',
   output(surface, capability) {

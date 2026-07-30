@@ -1,0 +1,72 @@
+{
+  "$schema": "https://endroit.org/schema/asset.json",
+  "name": "endroit/project",
+  "version": "0.7.0-alpha.0",
+  "description": "Maintain Endroit as an independent Target while consuming generic Planning contracts.",
+  "prefix": "endroit",
+  "files": [
+    "instructions/maintaining-endroit.md",
+    "capabilities/develop.md",
+    "capabilities/review.md",
+    "capabilities/release.md",
+    "schemas/plan.schema.json",
+    "templates/plan.md"
+  ],
+  "instructions": [
+    {
+      "id": "maintenance",
+      "path": "instructions/maintaining-endroit.md"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "develop",
+      "path": "capabilities/develop.md",
+      "description": "Develop Endroit through its self-hosted Development Home."
+    },
+    {
+      "id": "review",
+      "path": "capabilities/review.md",
+      "description": "Review Endroit against its public contracts and qualification gates."
+    },
+    {
+      "id": "release",
+      "path": "capabilities/release.md",
+      "description": "Prepare a resumable Endroit prerelease without crossing approval checkpoints."
+    }
+  ],
+  "skills": [
+    {
+      "id": "project-develop",
+      "capability": "develop",
+      "description": "Use when developing or locally qualifying Endroit through its Development Home."
+    },
+    {
+      "id": "project-review",
+      "capability": "review",
+      "description": "Use when an Endroit change must be reviewed against public contracts and qualification gates."
+    },
+    {
+      "id": "project-release",
+      "capability": "release",
+      "description": "Use when preparing a resumable Endroit prerelease without crossing approval checkpoints."
+    }
+  ],
+  "commands": [
+    {
+      "id": "project-develop",
+      "capability": "develop",
+      "description": "Develop Endroit through its reference Development Home."
+    }
+  ],
+  "artifactKinds": [
+    {
+      "id": "plan",
+      "schema": "schemas/plan.schema.json",
+      "template": "templates/plan.md",
+      "owners": ["desk", "home"],
+      "states": ["draft", "accepted", "qualified"]
+    }
+  ],
+  "setup": ["develop"]
+}

@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { removeTree } from '../src/lib/io.mjs'
-import { installPackedRuntime, packHairness } from './lib/pack.mjs'
+import { installPackedRuntime, packEndroit } from './lib/pack.mjs'
 
 const exec = promisify(execFile)
 const projectRoot = new URL('../', import.meta.url).pathname
@@ -13,15 +13,15 @@ const argumentsList = process.argv.slice(2)
 const destinationArgument = argumentsList[0] && !argumentsList[0].startsWith('-')
   ? argumentsList.shift()
   : undefined
-const home = resolve(destinationArgument ?? join(projectRoot, '..', 'hairness-bootstrap-home'))
-const temporary = await mkdtemp(join(tmpdir(), 'hairness-bootstrap-'))
+const home = resolve(destinationArgument ?? join(projectRoot, '..', 'endroit-bootstrap-home'))
+const temporary = await mkdtemp(join(tmpdir(), 'endroit-bootstrap-'))
 
 try {
-  const { cli } = await packHairness(projectRoot, join(temporary, 'packages'))
-  await run('npx', ['--yes', '--package', cli, 'hairness', 'create', home, ...argumentsList])
+  const { cli } = await packEndroit(projectRoot, join(temporary, 'packages'))
+  await run('npx', ['--yes', '--package', cli, 'endroit', 'create', home, ...argumentsList])
   await installPackedRuntime(home, cli)
 
-  const { stdout } = await exec(process.execPath, [join(home, 'hairness.mjs'), 'doctor', '--json'], {
+  const { stdout } = await exec(process.execPath, [join(home, 'endroit.mjs'), 'doctor', '--json'], {
     cwd: home,
     maxBuffer: 20 * 1024 * 1024,
   })

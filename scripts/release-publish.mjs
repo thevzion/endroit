@@ -11,7 +11,7 @@ const manifestArgument = process.argv.find((argument) => argument.endsWith('mani
 const manifestPath = resolve(manifestArgument ?? join(projectRoot, 'release/manifest.json'))
 const releaseRoot = dirname(manifestPath)
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-const expectedOrder = ['@hairness/cli']
+const expectedOrder = ['@endroit/cli']
 
 if (JSON.stringify(manifest.packages.map((entry) => entry.name)) !== JSON.stringify(expectedOrder)) {
   throw new Error(`Release order must be ${expectedOrder.join(' → ')}.`)
@@ -33,7 +33,7 @@ for (const entry of manifest.packages) {
   }
 
   const args = ['publish', tarball, '--access', 'public', '--tag', manifest.tag, '--ignore-scripts']
-  if (dryRun) args.push('--dry-run')
+  args.push(dryRun ? '--dry-run' : '--provenance')
   await exec('npm', args, { cwd: projectRoot, maxBuffer: 20 * 1024 * 1024 })
   process.stdout.write(`${dryRun ? 'qualified' : 'published'} ${entry.name}@${entry.version}\n`)
   if (!dryRun) await verifyRegistry(entry, manifest.tag)

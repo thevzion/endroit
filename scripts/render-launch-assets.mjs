@@ -5,7 +5,7 @@ import { promisify } from 'node:util'
 const exec = promisify(execFile)
 const assets = new URL('../docs/assets/', import.meta.url).pathname
 const journey = join(assets, 'ness-journey.png')
-const social = join(assets, 'hairness-social-card.png')
+const social = join(assets, 'endroit-social-card.png')
 const proof = join(assets, 'terminal-proof.png')
 
 await exec('magick', [
@@ -22,11 +22,11 @@ await exec('magick', [
   '-fill', '#d8996a',
   '-pointsize', '22',
   '-kerning', '4',
-  '-annotate', '+72+84', '0.6 ALPHA',
+  '-annotate', '+72+84', '0.7 ALPHA',
   '-fill', '#f1eee8',
   '-pointsize', '86',
   '-kerning', '-2',
-  '-annotate', '+68+148', 'hairness',
+  '-annotate', '+68+148', 'endroit',
   '-font', 'Arial-Bold',
   '-pointsize', '34',
   '-kerning', '0',
@@ -68,7 +68,7 @@ await exec('magick', [
   '-font', 'Courier-New-Bold',
   '-fill', '#aeb5ba',
   '-pointsize', '19',
-  '-annotate', '+170+56', 'hairness / checkpoint 1',
+  '-annotate', '+170+56', 'endroit / checkpoint 1',
   '-font', 'Courier-New',
   '-pointsize', '22',
   '-fill', '#d8996a',
@@ -88,7 +88,7 @@ await exec('magick', [
   '-fill', '#8fc49a',
   '-annotate', '+76+436', '  one CLI · Workspace-first core bundled',
   '-fill', '#d8996a',
-  '-annotate', '+76+486', '$ hairness status',
+  '-annotate', '+76+486', '$ endroit status',
   '-fill', '#8fc49a',
   '-annotate', '+76+526', '  source ownership intact',
   '-fill', '#768089',
