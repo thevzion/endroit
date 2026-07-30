@@ -50,7 +50,7 @@ async function remoteIntegrity(entry) {
 }
 
 async function verifyRegistry(entry, tag) {
-  for (let attempt = 0; attempt < 12; attempt += 1) {
+  for (let attempt = 0; attempt < 36; attempt += 1) {
     const integrity = await remoteIntegrity(entry)
     const tagged = await exec('npm', ['view', entry.name, `dist-tags.${tag}`, '--json'], { cwd: projectRoot })
       .then(({ stdout }) => JSON.parse(stdout), () => null)

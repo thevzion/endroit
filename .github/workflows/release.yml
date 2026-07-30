@@ -104,6 +104,4 @@ jobs:
           name: ${{ env.RELEASE_ARTIFACT }}
           path: ${{ runner.temp }}/npm-release
       - name: Revalidate the qualified artifact and registry
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_BOOTSTRAP_TOKEN }}
         run: node scripts/release-publish.mjs "$RUNNER_TEMP/npm-release/manifest.json"
