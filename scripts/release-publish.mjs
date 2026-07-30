@@ -33,7 +33,7 @@ for (const entry of manifest.packages) {
   }
 
   const args = ['publish', tarball, '--access', 'public', '--tag', manifest.tag, '--ignore-scripts']
-  if (dryRun) args.push('--dry-run')
+  args.push(dryRun ? '--dry-run' : '--provenance')
   await exec('npm', args, { cwd: projectRoot, maxBuffer: 20 * 1024 * 1024 })
   process.stdout.write(`${dryRun ? 'qualified' : 'published'} ${entry.name}@${entry.version}\n`)
   if (!dryRun) await verifyRegistry(entry, manifest.tag)
