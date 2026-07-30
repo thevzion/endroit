@@ -46,7 +46,7 @@ try {
   assert.deepEqual(workspaces.workspaces.map(({ ref }) => ref), ['workspace:home/home'])
   const targets = JSON.parse((await exec(process.execPath, [...consoleArgs, 'target', 'list', '--json'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
   assert.equal(targets.targets[0].bindings[0].id, 'main')
-  assert.equal(JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')).runtime, '@endroit/cli@0.7.0-alpha.0')
+  assert.equal(JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')).runtime, '@endroit/cli@0.7.0-alpha.1')
   console.log(`packed lab passed (${home})`)
 } finally {
   await removeTree(temporary, { force: true })

@@ -26,6 +26,25 @@
     "audience": { "type": "string" },
     "language": { "type": "string" },
     "channel": { "type": "string" },
+    "responsibility": { "type": "string" },
+    "stability": {
+      "enum": ["living", "release-aligned", "dated", "historical"]
+    },
+    "canonical_dependencies": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "related_publications": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "update_triggers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "superseded_by": {
+      "type": ["string", "null"]
+    },
     "derived_from": { "type": "array", "items": { "type": "string" } }
   }
 }

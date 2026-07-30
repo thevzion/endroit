@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0-alpha.1
+
+- Define the five Home-first environment responsibilities and map them to the
+  existing Endroit grammar without changing Home, Desk or Target topology.
+- Make the interaction contract explicit: structurally inspectable,
+  conversational by default.
+- Add optional Publication responsibility, stability and dependency metadata
+  while keeping provenance and remote Handles separate.
+- Remove the remaining live Ness copy from the HUD payload and reference
+  documentation.
+
 ## 0.7.0-alpha.0
 
 - Rename Hairness to Endroit: the owned, local-first environment implementing

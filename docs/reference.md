@@ -73,7 +73,7 @@ and removed atomically.
 
 `endroit/onboarding` owns the optional personal `name`, `addressAs` and
 `responseLanguage` settings it collects. A selected Wake-up runtime may expose
-accepted values to Ness; the Kernel gives them no business meaning.
+accepted values to the agent; the Kernel gives them no business meaning.
 
 ## Asset
 
@@ -189,7 +189,7 @@ envelope; Claude receives raw stdout. Errors, empty or oversized output and a
 Runtime stderr is never injected. Static Floor Plan orientation is unaffected.
 
 `hud show` renders dense text for humans, `hud prompt` deterministic XML for
-Ness, `hud json` a stable tool contract and `hud show --full` the full
+the active agent, `hud json` a stable tool contract and `hud show --full` the full
 inventory. HUD v2 exposes Workspaces, Workstreams, Targets and Capabilities
 through a normalized Routable Item envelope: `kind`, `id`, optional `emoji`,
 `state`, `summary`, `when`, `tags`, `ref`, `access` and `routable`. Home,
@@ -234,7 +234,7 @@ An Asset runtime receives one JSON document on stdin:
   "assetRoot": "/absolute/home/assets/company/security",
   "resolvedHome": {},
   "kernel": {
-    "runtime": "@endroit/cli@0.7.0-alpha.0",
+    "runtime": "@endroit/cli@0.7.0-alpha.1",
     "source": "npm",
     "invoke": "node ./endroit.mjs"
   },

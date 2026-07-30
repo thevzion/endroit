@@ -1,7 +1,7 @@
 {
   "$schema": "https://endroit.org/schema/asset.json",
   "name": "endroit/publishing",
-  "version": "0.7.0-alpha.0",
+  "version": "0.7.0-alpha.1",
   "description": "Source-owned publications and verified external Handles.",
   "prefix": "publishing",
   "workspaceNamespace": "publishing",

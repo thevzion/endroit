@@ -33,11 +33,17 @@ qualified next.
 Plans get trapped in chats. Decisions must be explained again. Instructions
 copied between repositories drift. Useful results lose their destination.
 
+The workplace already exists. It forms accidentally from a working directory,
+provider instructions, chat history, method-specific folders and whatever the
+current repository has accumulated. Each addition can be reasonable while the
+whole environment still has no explicit owner.
+
 `AGENTS.md` and `CLAUDE.md` are good front doors into a repository. They become
 insufficient when that repository is also expected to own the maps, decisions,
-methods and retained work shared across sessions and other Targets. The
-storage closet can be well organized and still be the wrong owner for the
-whole workplace.
+methods and retained work shared across sessions and other Targets. Adding
+methodologies can help one workflow while giving each method another place for
+plans, state and truth. The storage closet can be well organized and still be
+the wrong owner for the whole workplace.
 
 ```text
 Without a Home
@@ -57,6 +63,28 @@ owners, routes, shared material and durable destinations explicit.
 owned environment.**
 
 **[Read the Home-first Proposal →](https://thevzion.com/home-first/)**
+
+## What the environment owns
+
+Home-first defines five responsibilities. Endroit gives them concrete,
+inspectable owners without requiring another implementation to use its names.
+
+| Home-first responsibility | Endroit implementation |
+| --- | --- |
+| **Places** | Home, Desk, Workspaces and Workstreams |
+| **Orientation** | Front Door, Floor Plan, HUD and Maps |
+| **Capabilities** | Assets, Capabilities and runtime Projections |
+| **Material** | Documents, decisions and Artifacts |
+| **Relationships** | Targets, Bindings, Handles and external systems |
+
+**Material** is durable content that humans and agents can inspect and evolve
+together. It is not every chat transcript and it never replaces live Target
+truth. **Relationships** keep routes and authority explicit; a Target may own
+source, history, actions and delivery rather than serving as only a
+destination.
+
+> Home-first defines what the environment must own. Endroit defines what those
+> responsibilities are called and how they are implemented.
 
 ## Where Endroit fits
 
@@ -103,9 +131,9 @@ endorsement.
                                       ▼
 ╔═══════════════════════════════ 8. ENDROIT ═════════════════════════════════════╗
 ║ owned human-agent work environment                                            ║
-║ Front Door · Floor Plan · HUD · Home/Desk · Workspaces · Maps                 ║
-║ decisions · methods/assets · Documents · Artifacts · Bindings · lineage       ║
-║ orientation · continuity · ownership · shared material · destinations         ║
+║ Places · Orientation · Capabilities · Material · Relationships                ║
+║ Home/Desk · Floor Plan/HUD/Maps · Assets · Documents/Artifacts · Bindings     ║
+║ orientation · continuity · ownership · shared material · explicit authority   ║
 ╚══════════════════════════════════════╤════════════════════════════════════════╝
                                        │ routes to · maps · revalidates
                                        ▼
@@ -192,12 +220,23 @@ You do not need to reorganize existing repositories or design a methodology firs
 **Every session begins with a map, not a scavenger hunt.**
 
 ```text
-human intent → Floor Plan → HUD → relevant route → linked Documents
+human intent → Front Door → Floor Plan → HUD → relevant route → linked Material
 ```
 
-The Floor Plan remains available without live services. The optional HUD adds a current local snapshot; it is not omniscient, and external truth is revalidated before mutation.
+The Front Door situates the agent in an owned environment; it does more than
+attach instructions to a repository. The Floor Plan remains available without
+live services. The optional HUD adds a current local snapshot; it is not
+omniscient, and external truth is revalidated before mutation.
 
 Humans and agents work from the same owned sources and contracts even when they use different interfaces. Models and runtimes may change without making the environment implicit again.
+
+Endroit is **structurally explicit and conversational by default**. Open the
+Home and describe the work normally. The agent can use the orientation it has,
+discover the relevant Capability and propose durable continuity at a meaningful
+milestone. Skills and commands remain precision surfaces when explicit control
+is useful.
+
+> A good abstraction hides mechanics—not ownership.
 
 ## Built for both sides of the work
 
@@ -205,11 +244,11 @@ Humans and agents work from the same owned sources and contracts even when they 
 
 | Shared capability | For humans | For agents |
 | --- | --- | --- |
-| **Home and Workspaces** | Understand the environment and choose its owners | Return to a stable starting point and route intent |
-| **Floor Plan and HUD** | Inspect structure, local state and attention | Begin with a map and a bounded snapshot |
-| **Assets and Capabilities** | Choose, install and approve what the Home can do | Discover the actions available in this environment |
-| **Documents and Artifacts** | Review, version and promote durable results | Resume work and persist it at the right destination |
-| **Targets and Bindings** | Keep repositories independent and locally controlled | Identify the relevant sources and destinations |
+| **Places** | Choose the owners and scopes of durable work | Return to a stable subject and route intent |
+| **Orientation** | Inspect structure, local state and attention | Begin with a map and a bounded snapshot |
+| **Capabilities** | Choose, install and approve what the Home can do | Discover actions without depending on one runtime surface |
+| **Material** | Review and version durable shared work | Resume work and retain chosen results |
+| **Relationships** | Keep independent systems and authority visible | Identify sources, actions and destinations |
 | **Trust, Doctor and Projections** | Inspect executable code and diagnose drift | Know the limits and use a runtime-native interface |
 
 Skills and commands remain useful runtime interfaces. Endroit keeps the underlying capability contract source-owned and projects the appropriate view for each qualified runtime.
@@ -237,6 +276,18 @@ same owners, destinations and durable results.
 
 **Endroit is opinionated about where work belongs, not about how every piece
 of work must be done.**
+
+The responsibility chain remains inspectable even when the interaction is
+simple:
+
+```text
+Asset → Capability → Projection → Surface
+      → conversation or command activation → Asset runtime → Artifact
+```
+
+The Asset owns reusable source. A Projection adapts it to a runtime. A Skill,
+Command or instruction is a Surface, not the whole capability. The Artifact
+retains a chosen result when the work has earned continuity.
 
 ## Bring the agents you already use
 

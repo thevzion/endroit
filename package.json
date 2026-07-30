@@ -1,6 +1,6 @@
 {
   "name": "@endroit/cli",
-  "version": "0.7.0-alpha.0",
+  "version": "0.7.0-alpha.1",
   "description": "The open-source, local-first environment for durable human-agent work.",
   "keywords": [
     "ai-agents",

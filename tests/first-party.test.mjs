@@ -94,7 +94,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     await dispatchRuntime(home, 'hud', ['prompt'], prompt.io)
     assert.match(prompt.stdout(), /^<endroit-hud version="2" status="ready" generated-at="[^"]+" event="command">/)
     assert.match(prompt.stdout(), new RegExp(`<home name="home" emoji="🏠" mode="solo" root="${escapeRegex(model.home.root)}" providers="codex,claude"/>`))
-    assert.match(prompt.stdout(), /<kernel runtime="@endroit\/cli@0\.7\.0-alpha\.0" source="npm" invoke="node \.\/endroit\.mjs"\/>/)
+    assert.match(prompt.stdout(), /<kernel runtime="@endroit\/cli@0\.7\.0-alpha\.1" source="npm" invoke="node \.\/endroit\.mjs"\/>/)
     assert.match(prompt.stdout(), /<item id="demo" emoji="🎛️" state="active" access="model,user" summary="Demo Workspace\." tags="demo" when="Working on the demo\." ref="workspace:desk\/demo"/)
     assert.match(prompt.stdout(), /<runtime namespace="target" commands="list,discover,doctor,add,bind,clone,worktree,unbind,remove,inspect"\/>/)
     assert.match(prompt.stdout(), /<instruction owner="endroit\/desk" id="desk" source="DESK\.md">/)
@@ -118,7 +118,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
 
     const human = captureIo()
     await dispatchRuntime(home, 'hud', ['show'], human.io)
-    assert.equal(human.stdout().split('\n')[0], 'ENDROIT    home · solo · codex+claude · @endroit/cli@0.7.0-alpha.0 · npm · ready')
+    assert.equal(human.stdout().split('\n')[0], 'ENDROIT    home · solo · codex+claude · @endroit/cli@0.7.0-alpha.1 · npm · ready')
   } finally {
     await removeTree(temporary, { force: true })
   }

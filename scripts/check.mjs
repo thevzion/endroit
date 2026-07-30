@@ -41,7 +41,7 @@ for (const path of all) {
   if (!/\.(?:md|mjs|json|yml|yaml)$/.test(name)) continue
   const body = await readFile(path, 'utf8')
   assert.ok(!/AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC )?PRIVATE KEY/.test(body), `${name} contains secret-like material`)
-  if (!['CHANGELOG.md', 'docs/releases/0.7.0-alpha.0.md'].includes(name)) {
+  if (!['CHANGELOG.md', 'docs/releases/0.7.0-alpha.0.md', 'docs/releases/0.7.0-alpha.1.md'].includes(name)) {
     assert.doesNotMatch(body, legacyBrand, `${name} contains a legacy brand contract`)
   }
 }

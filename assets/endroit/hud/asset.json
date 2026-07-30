@@ -1,8 +1,8 @@
 {
   "$schema": "https://endroit.org/schema/asset.json",
   "name": "endroit/hud",
-  "version": "0.7.0-alpha.0",
-  "description": "Dense local orientation for Ness at session start and on demand.",
+  "version": "0.7.0-alpha.1",
+  "description": "Dense local orientation for the active agent at session start and on demand.",
   "prefix": "endroit",
   "files": [
     "instructions/orientation.md",

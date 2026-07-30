@@ -94,6 +94,7 @@ publish` and `asset publish` are deprecated prerelease aliases for promotion.
 ```text
 outline → draft → ready → exact consent → observed remote success → published
                                                         └── Handle
+published → draft revision ─────────────────────────────┘
 ```
 
 A Publication Artifact requires `content.md`, the exact projectable source.
@@ -103,6 +104,19 @@ result and only then writes a Handle. Without a connector it returns a manual
 handoff and records neither a Handle nor `published`. Revalidation updates
 dated observations and drift status without importing remote content
 implicitly.
+
+Publication source state and remote Handle state are independent. Reopening a
+published Publication sets its current source revision to `draft` without
+changing, deleting or fabricating the existing Handle. The Publication record
+keeps the prior URL, publication time and digest. A later approved projection
+updates or supersedes the remote object; an observed withdrawal marks its
+Handle `removed`.
+
+`derived_from` records provenance. Optional `canonical_dependencies` identify
+definitions whose changes require a targeted re-read.
+`related_publications` supports navigation without making another article a
+prerequisite. `stability` and `update_triggers` declare why a Publication may
+change.
 
 ## Target
 
@@ -170,8 +184,8 @@ continues to orient the session.
 
 The first-party default is `endroit/hud:prompt`. HUD reads local evidence and
 the Resolved Home, includes `DESK.md` and Desk Asset Instructions, then emits
-XML for Ness. It executes no other Asset runtime. Its optional prompt budget is
-owned by `settings["endroit/hud"].promptBytes`.
+XML for the active agent. It executes no other Asset runtime. Its optional
+prompt budget is owned by `settings["endroit/hud"].promptBytes`.
 
 `hud activity` computes recent attributed observations on demand. It stores no
 event log and does not run during `build`, `doctor` or Home resolution.

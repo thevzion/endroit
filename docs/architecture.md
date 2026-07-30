@@ -23,6 +23,23 @@ flowchart LR
 `@endroit/cli` is the only package. There is no public Core package, Registry,
 Adapter layer or package dependency graph.
 
+## Environment responsibilities
+
+Home-first defines the responsibilities of a durable human-agent environment;
+Endroit gives them concrete owners:
+
+```text
+Places          → Home · Desk · Workspaces · Workstreams
+Orientation     → Front Door · Floor Plan · HUD · Maps
+Capabilities    → Assets · Capabilities · Projections
+Material        → Documents · decisions · Artifacts
+Relationships   → Targets · Bindings · Handles · external systems
+```
+
+Material is durable shared content, not an automatic transcript or a copy of
+live Target truth. Relationships retain routes and authority without absorbing
+the connected repository or external system.
+
 ## Kernel
 
 The Kernel contains:
@@ -68,6 +85,11 @@ Bridges do not parse HUD, XML or another Asset protocol. At SessionStart they
 invoke the selected route through `endroit.mjs`, cap it at 30 seconds and
 256 KiB, discard stderr and transport stdout in the provider-native envelope.
 
+The Front Door situates the agent in the owned environment. It is not only an
+instruction injector. Endroit remains structurally explicit so normal
+conversation can be the common interface; Skills and Commands expose precision
+surfaces when a person or runtime needs them.
+
 ## First-party Assets
 
 First-party sources live under `assets/endroit/*`, exactly where third-party
@@ -98,6 +120,18 @@ Endroit metadata is `authoritative`; Git and filesystem evidence is
 
 This arrangement keeps the Home legible while leaving methodologies, external
 systems and project repositories sovereign.
+
+> A good abstraction hides mechanics—not ownership.
+
+Capabilities remain source-owned even when their activation is runtime-native:
+
+```text
+Asset → Capability → Projection → Surface
+      → conversation or command activation → Asset runtime → Artifact
+```
+
+This is a responsibility chain, not an assertion that every Capability has an
+executable runtime or produces an Artifact.
 
 `HOME.md` is the shared constitution. `DESK.md` specializes it for one
 collaborator without replacing it. Home Asset Instructions follow `HOME.md` in
