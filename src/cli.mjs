@@ -16,7 +16,7 @@ import { runCreateWizard } from './create-wizard.mjs'
 import { cloneDesk, initDesk } from './desk.mjs'
 import { doctorHome } from './doctor.mjs'
 import { assertRuntime, findHome } from './home.mjs'
-import { asHairnessError, HairnessError } from './lib/errors.mjs'
+import { asEndroitError, EndroitError } from './lib/errors.mjs'
 import { publicPlan, resolveHome } from './resolved.mjs'
 import { dispatchRuntime, runtimeTrust } from './runtime.mjs'
 
@@ -29,7 +29,7 @@ export async function runCli(argv = process.argv.slice(2), io = process, depende
     if (value?.passthrough) return value.exitCode
     return write(io.stdout, flags.json ? JSON.stringify(value, null, 2) : renderHuman(value))
   } catch (caught) {
-    const error = asHairnessError(caught)
+    const error = asEndroitError(caught)
     write(io.stderr, flags.json
       ? JSON.stringify({ error: { code: error.code, message: error.message, details: error.details } }, null, 2)
       : `${error.code}: ${error.message}`)
@@ -69,7 +69,7 @@ async function createRoute(destination, flags, io, prompts) {
     mode,
     deskId: flags.desk,
     prefix: flags.prefix,
-    assets: chosen.map((id) => `@hairness/${id}`),
+    assets: chosen.map((id) => `@endroit/${id}`),
   })
   if (!interactive) return create()
   return runCreateWizard({
@@ -99,13 +99,13 @@ function createAssetSelection(value) {
 }
 
 function bootstrapAssetNames() {
-  return bootstrapAssets.map((id) => id.replace('@hairness/', ''))
+  return bootstrapAssets.map((id) => id.replace('@endroit/', ''))
 }
 
 async function deskRoute(root, action, rest, flags) {
   if (action === 'init') return initDesk(root, { id: flags.id ?? rest[0], git: !booleanFlag(flags['no-git']) })
   if (action === 'clone') return cloneDesk(root, required(rest[0], 'Desk repository'))
-  throw usage('hairness desk init|clone')
+  throw usage('endroit desk init|clone')
 }
 
 async function assetRoute(root, action, rest, flags, io) {
@@ -115,7 +115,7 @@ async function assetRoute(root, action, rest, flags, io) {
     const overwrite = booleanFlag(flags.overwrite)
     const preview = await addAssets(root, rest, { dryRun: true, overwrite, scope })
     if (booleanFlag(flags['dry-run']) || booleanFlag(flags.diff)) return preview
-    if (!booleanFlag(flags.yes) && !await confirm(io, preview)) throw new HairnessError('confirmation_required', 'Installation cancelled. Pass -y for non-interactive use.')
+    if (!booleanFlag(flags.yes) && !await confirm(io, preview)) throw new EndroitError('confirmation_required', 'Installation cancelled. Pass -y for non-interactive use.')
     return addAssets(root, rest, { overwrite, scope })
   }
   if (action === 'status') return statusAssets(root, rest[0], { scope })
@@ -133,20 +133,20 @@ async function assetRoute(root, action, rest, flags, io) {
   if (action === 'override') return overrideAsset(root, required(rest[0], 'Asset'))
   if (action === 'catalog') return { status: 'catalogued', assets: await catalogAssets(root) }
   if (action === 'promote' || action === 'publish') {
-    if (flags.to !== 'home') throw usage(`hairness asset ${action} <id> --to home`)
+    if (flags.to !== 'home') throw usage(`endroit asset ${action} <id> --to home`)
     const result = await promoteAsset(root, required(rest[0], 'Asset'))
     return action === 'publish'
       ? { ...result, deprecated: 'asset publish is deprecated; use asset promote.' }
       : result
   }
   if (action === 'trust') return runtimeTrust(root, required(rest[0], 'Asset'), { digest: flags.digest, revoke: booleanFlag(flags.revoke) })
-  throw usage('hairness asset validate|add|status|sync|remove|override|promote|catalog|trust')
+  throw usage('endroit asset validate|add|status|sync|remove|override|promote|catalog|trust')
 }
 
 function help() {
   return {
     summary: 'One Home for the agents, methods, and repositories you already use.',
-    next: ['hairness create <home>', 'open an agent in <home>', 'invoke hairness-onboarding'],
+    next: ['endroit create <home>', 'open an agent in <home>', 'invoke endroit-onboarding'],
     commands: [
       'create <home>', 'desk init|clone',
       'asset validate|add|status|sync|remove|override|promote|catalog|trust',
@@ -172,10 +172,10 @@ function parseArguments(argv) {
 }
 
 function renderHuman(value) {
-  if (value?.summary && value?.commands) return [value.summary, '', 'Next:', ...value.next.map((item) => `  ${item}`), '', 'Commands:', ...value.commands.map((item) => `  hairness ${item}`)].join('\n')
-  if (value?.status === 'created') return ['Hairness Home created', value.home, `Mode: ${value.mode}`, `Assets: ${value.assets.join(', ')}`, '', ...value.launch.flatMap((entry) => [`${entry.provider}: ${entry.command}`, `Then invoke ${entry.onboarding}.`])].join('\n')
+  if (value?.summary && value?.commands) return [value.summary, '', 'Next:', ...value.next.map((item) => `  ${item}`), '', 'Commands:', ...value.commands.map((item) => `  endroit ${item}`)].join('\n')
+  if (value?.status === 'created') return ['Endroit Home created', value.home, `Mode: ${value.mode}`, `Assets: ${value.assets.join(', ')}`, '', ...value.launch.flatMap((entry) => [`${entry.provider}: ${entry.command}`, `Then invoke ${entry.onboarding}.`])].join('\n')
   if (value?.status === 'catalogued') return value.assets.map((entry) => `- ${entry.id}${entry.installed.length ? ` [${entry.installed.join(',')}]` : ''}: ${entry.description}`).join('\n')
-  if (value?.home?.name && value?.limits) return [`Hairness doctor — ${value.status}`, `Home: ${value.home.name}`, `Desk: ${value.desk.configured ? value.desk.id : 'not configured'}`, `Assets: ${value.assets.length}`, `Build: ${value.build}`, ...(value.limits.length ? ['', 'Limits:', ...value.limits.map((item) => `  - ${item}`)] : []), ...(value.warnings?.length ? ['', 'Warnings:', ...value.warnings.map((item) => `  - ${item}`)] : [])].join('\n')
+  if (value?.home?.name && value?.limits) return [`Endroit doctor — ${value.status}`, `Home: ${value.home.name}`, `Desk: ${value.desk.configured ? value.desk.id : 'not configured'}`, `Assets: ${value.assets.length}`, `Build: ${value.build}`, ...(value.limits.length ? ['', 'Limits:', ...value.limits.map((item) => `  - ${item}`)] : []), ...(value.warnings?.length ? ['', 'Warnings:', ...value.warnings.map((item) => `  - ${item}`)] : [])].join('\n')
   if (Array.isArray(value)) return value.length ? value.map((entry) => `- ${entry.name ?? entry.id ?? JSON.stringify(entry)}${entry.state ? `: ${entry.state}` : ''}`).join('\n') : 'No entries.'
   return Object.entries(value ?? {}).map(([key, entry]) => `${key}: ${typeof entry === 'object' ? JSON.stringify(entry) : entry}`).join('\n')
 }
@@ -201,7 +201,7 @@ function withoutHomeFlag(argv) {
 }
 function booleanFlag(value) { return value === true || value === 'true' || value === 'yes' || value === '1' }
 function required(value, label) { if (!value) throw usage(`${label} is required.`); return value }
-function usage(message) { return new HairnessError('usage', message, { exitCode: 2 }) }
+function usage(message) { return new EndroitError('usage', message, { exitCode: 2 }) }
 function write(stream, value) { stream.write(`${value}\n`); return 0 }
 
 if (process.argv[1] && pathToFileURL(process.argv[1]).href === import.meta.url) process.exitCode = await runCli()

@@ -6,14 +6,14 @@ import { addAssets, statusAssets, syncAssets, validateAssetSource } from '../src
 import { createHome } from '../src/create.mjs'
 import { removeTree } from '../src/lib/io.mjs'
 
-const temporary = await mkdtemp(join(tmpdir(), 'hairness-conformance-'))
+const temporary = await mkdtemp(join(tmpdir(), 'endroit-conformance-'))
 try {
   const home = join(temporary, 'home')
   const source = join(temporary, 'asset')
   await createHome(home)
   await mkdir(source)
   const manifest = {
-    $schema: 'https://hairness.dev/schema/asset.json',
+    $schema: 'https://endroit.org/schema/asset.json',
     name: 'conformance/proof', version: '1.0.0', description: 'Conformance proof.',
     files: ['proof.md'],
     instructions: [{ id: 'proof', path: 'proof.md' }],

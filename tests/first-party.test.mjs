@@ -16,12 +16,12 @@ import { captureIo } from './helpers.mjs'
 const exec = promisify(execFile)
 
 test('HUD exposes deterministic human, JSON and agent-prompt views without following Desk symlinks', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-hud-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-hud-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home, { emoji: '🏠' })
     const desk = JSON.parse(await readFile(join(home, '.desk/desk.json'), 'utf8'))
-    desk.settings = { 'hairness/onboarding': { addressAs: 'Alexis', responseLanguage: 'fr' } }
+    desk.settings = { 'endroit/onboarding': { addressAs: 'Alexis', responseLanguage: 'fr' } }
     await writeFile(join(home, '.desk/desk.json'), `${JSON.stringify(desk, null, 2)}\n`)
     for (let index = 0; index < 7; index += 1) {
       const path = join(home, '.desk', `note-${index}.md`)
@@ -60,18 +60,18 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.equal(model.home.emoji, '🏠')
     assert.equal(model.home.root, await exec('git', ['rev-parse', '--show-toplevel'], { cwd: home }).then((value) => value.stdout.trim()))
     assert.equal(model.kernel.source, 'npm')
-    assert.equal(model.kernel.invoke, 'node ./hairness.mjs')
+    assert.equal(model.kernel.invoke, 'node ./endroit.mjs')
     assert.deepEqual(model.desk.preferences, { addressAs: 'Alexis', responseLanguage: 'fr' })
     assert.equal(model.projections.every((entry) => entry.status === 'fresh'), true)
-    assert.deepEqual(model.surfaces.assets.map((entry) => entry.id), ['hairness/artifacts', 'hairness/hud', 'hairness/onboarding', 'hairness/targets', 'hairness/workspaces'])
+    assert.deepEqual(model.surfaces.assets.map((entry) => entry.id), ['endroit/artifacts', 'endroit/hud', 'endroit/onboarding', 'endroit/targets', 'endroit/workspaces'])
     assert.deepEqual(model.surfaces.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'target', 'workspace'])
     assert.deepEqual(
       model.trust.runtimes.map((entry) => [entry.owner, entry.trust]),
       [
-        ['hairness/artifacts', 'bundled'],
-        ['hairness/hud', 'bundled'],
-        ['hairness/targets', 'bundled'],
-        ['hairness/workspaces', 'bundled'],
+        ['endroit/artifacts', 'bundled'],
+        ['endroit/hud', 'bundled'],
+        ['endroit/targets', 'bundled'],
+        ['endroit/workspaces', 'bundled'],
       ],
     )
     assert.deepEqual({ bundled: model.trust.bundled, approved: model.trust.approved, pending: model.trust.pending }, {
@@ -87,17 +87,17 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
       [['home', true], ['demo', true]],
     )
     assert.equal(model.items.workspaces[1].emoji, '🎛️')
-    assert.ok(model.items.capabilities.some(({ id }) => id === 'hairness-home'))
+    assert.ok(model.items.capabilities.some(({ id }) => id === 'endroit-home'))
     assert.deepEqual(Object.keys(model.attention), ['blocking', 'warning', 'advisory'])
 
     const prompt = captureIo()
     await dispatchRuntime(home, 'hud', ['prompt'], prompt.io)
-    assert.match(prompt.stdout(), /^<hairness-hud version="2" status="ready" generated-at="[^"]+" event="command">/)
+    assert.match(prompt.stdout(), /^<endroit-hud version="2" status="ready" generated-at="[^"]+" event="command">/)
     assert.match(prompt.stdout(), new RegExp(`<home name="home" emoji="🏠" mode="solo" root="${escapeRegex(model.home.root)}" providers="codex,claude"/>`))
-    assert.match(prompt.stdout(), /<kernel runtime="@hairness\/cli@0\.6\.0-alpha\.0" source="npm" invoke="node \.\/hairness\.mjs"\/>/)
+    assert.match(prompt.stdout(), /<kernel runtime="@endroit\/cli@0\.7\.0-alpha\.0" source="npm" invoke="node \.\/endroit\.mjs"\/>/)
     assert.match(prompt.stdout(), /<item id="demo" emoji="🎛️" state="active" access="model,user" summary="Demo Workspace\." tags="demo" when="Working on the demo\." ref="workspace:desk\/demo"/)
     assert.match(prompt.stdout(), /<runtime namespace="target" commands="list,discover,doctor,add,bind,clone,worktree,unbind,remove,inspect"\/>/)
-    assert.match(prompt.stdout(), /<instruction owner="hairness\/desk" id="desk" source="DESK\.md">/)
+    assert.match(prompt.stdout(), /<instruction owner="endroit\/desk" id="desk" source="DESK\.md">/)
     assert.match(prompt.stdout(), /<advisory>\s+<item subject="home" code="home-dirty">/)
     assert.doesNotMatch(prompt.stdout(), /<assets>|<skills>|<commands>|<recent-desk>/)
     assert.doesNotMatch(prompt.stdout(), /outside-link/)
@@ -105,7 +105,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     const activity = captureIo()
     assert.equal(await dispatchRuntime(home, 'hud', ['activity', '--since', '1d', '--scope', 'workspace:desk/demo', '--json'], activity.io), 0)
     const activityModel = JSON.parse(activity.stdout())
-    assert.equal(activityModel.apiVersion, 'hairness.dev/hud/activity/v1alpha1')
+    assert.equal(activityModel.apiVersion, 'endroit.org/hud/activity/v1alpha1')
     assert.equal(activityModel.scope, 'workspace:desk/demo')
     assert.ok(activityModel.events.some(({ source }) => source.ref.endsWith('workspace.md')))
     assert.equal(activityModel.events.some(({ source }) => source.ref.includes('outside-link')), false)
@@ -118,20 +118,20 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
 
     const human = captureIo()
     await dispatchRuntime(home, 'hud', ['show'], human.io)
-    assert.equal(human.stdout().split('\n')[0], 'HAIRNESS    home · solo · codex+claude · @hairness/cli@0.6.0-alpha.0 · npm · ready')
+    assert.equal(human.stdout().split('\n')[0], 'ENDROIT    home · solo · codex+claude · @endroit/cli@0.7.0-alpha.0 · npm · ready')
   } finally {
     await removeTree(temporary, { force: true })
   }
 })
 
 test('the HUD owns its prompt budget through namespaced Home settings', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-hud-budget-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-hud-budget-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
-    const path = join(home, 'hairness.json')
+    const path = join(home, 'endroit.json')
     const document = JSON.parse(await readFile(path, 'utf8'))
-    document.settings = { 'hairness/hud': { promptBytes: 1 } }
+    document.settings = { 'endroit/hud': { promptBytes: 1 } }
     await writeFile(path, `${JSON.stringify(document, null, 2)}\n`)
     const output = captureIo()
     assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], output.io), 5)
@@ -142,7 +142,7 @@ test('the HUD owns its prompt budget through namespaced Home settings', async ()
 })
 
 test('Workspace runtime enforces scoped identity and Doctor remains read-only', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-workspaces-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-workspaces-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
@@ -167,26 +167,26 @@ test('Workspace runtime enforces scoped identity and Doctor remains read-only', 
 })
 
 test('Artifacts import directories atomically and publish while preserving the Desk source', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-artifacts-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-artifacts-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
-    await addAssets(home, ['@hairness/scratch'])
+    await addAssets(home, ['@endroit/scratch'])
     await buildHome(home)
     assert.equal(await dispatchRuntime(home, 'workspace', ['create', 'demo', '--scope', 'desk'], captureIo().io), 0)
     const source = join(temporary, 'notes')
     await mkdir(source)
     await writeFile(join(source, 'decision.md'), 'Choose boring primitives.\n')
     const missingWorkspace = captureIo()
-    assert.equal(await dispatchRuntime(home, 'artifact', ['create', 'hairness/scratch:scratch', 'missing'], missingWorkspace.io), 2)
+    assert.equal(await dispatchRuntime(home, 'artifact', ['create', 'endroit/scratch:scratch', 'missing'], missingWorkspace.io), 2)
     assert.match(missingWorkspace.stderr(), /Workspace is required/)
     const create = captureIo()
-    assert.equal(await dispatchRuntime(home, 'artifact', ['create', 'hairness/scratch:scratch', 'demo', '--workspace', 'desk/demo', '--from', source, '--json'], create.io), 0)
+    assert.equal(await dispatchRuntime(home, 'artifact', ['create', 'endroit/scratch:scratch', 'demo', '--workspace', 'desk/demo', '--from', source, '--json'], create.io), 0)
     const created = JSON.parse(create.stdout())
     assert.equal(created.path, '.desk/workspaces/demo/exploring/scratch/demo')
-    assert.equal(created.path.includes('hairness-scratch-scratch'), false)
+    assert.equal(created.path.includes('endroit-scratch-scratch'), false)
     const path = join(home, created.path, 'artifact.md')
-    assert.match(await readFile(path, 'utf8'), /kind: "hairness\/scratch:scratch"/)
+    assert.match(await readFile(path, 'utf8'), /kind: "endroit\/scratch:scratch"/)
     assert.equal(await readFile(join(home, created.path, 'decision.md'), 'utf8'), 'Choose boring primitives.\n')
     assert.equal(await dispatchRuntime(home, 'artifact', ['validate', path], captureIo().io), 0)
     const publish = captureIo()
@@ -200,16 +200,16 @@ test('Artifacts import directories atomically and publish while preserving the D
     assert.equal(await dispatchRuntime(home, 'artifact', ['promote', published.path, '--to', 'workspace:desk/demo'], reverse.io), 2)
     assert.match(reverse.stderr(), /workspace:home/)
 
-    const legacy = join(home, '.desk/artifacts/hairness/scratch/scratch/legacy')
+    const legacy = join(home, '.desk/artifacts/endroit/scratch/scratch/legacy')
     await mkdir(legacy, { recursive: true })
     await writeFile(join(legacy, 'artifact.md'), [
       '---',
-      '$schema: "https://hairness.dev/schema/artifact.json"',
+      '$schema: "https://endroit.org/schema/artifact.json"',
       'id: "legacy"',
-      'kind: "hairness/scratch:scratch"',
+      'kind: "endroit/scratch:scratch"',
       'owner: "desk"',
       'state: "active"',
-      'createdBy: "hairness/scratch"',
+      'createdBy: "endroit/scratch"',
       'createdAt: "2026-01-01T00:00:00.000Z"',
       'derivedFrom: ""',
       '---',
@@ -226,15 +226,15 @@ test('Artifacts import directories atomically and publish while preserving the D
 })
 
 test('Publishing keeps exact local content and observable Handles instruction-only', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-publishing-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-publishing-'))
   try {
     const home = join(temporary, 'home')
-    await createHome(home, { assets: ['@hairness/publishing'] })
+    await createHome(home, { assets: ['@endroit/publishing'] })
     await dispatchRuntime(home, 'workspace', ['create', 'editorial', '--scope', 'desk'], captureIo().io)
     const created = captureIo()
     assert.equal(await dispatchRuntime(home, 'artifact', [
       'create',
-      'hairness/publishing:publication',
+      'endroit/publishing:publication',
       'launch',
       '--workspace',
       'desk/editorial',
@@ -255,7 +255,7 @@ test('Publishing keeps exact local content and observable Handles instruction-on
     const publication = JSON.parse(created.stdout())
     assert.equal(await readFile(join(home, publication.path, 'content.md'), 'utf8'), '# Draft\n')
     assert.equal((await resolveHome(home)).runtimes.some((entry) => entry.namespace === 'publishing'), false)
-    const contract = await readFile(join(home, 'assets/hairness/publishing/capabilities/publish.md'), 'utf8')
+    const contract = await readFile(join(home, 'assets/endroit/publishing/capabilities/publish.md'), 'utf8')
     assert.match(contract, /exact content, assets,\s+links, account, destination/)
     assert.match(contract, /Do not create the Handle/)
     await rm(join(home, publication.path, 'content.md'))
@@ -268,7 +268,7 @@ test('Publishing keeps exact local content and observable Handles instruction-on
 })
 
 test('Targets separate deterministic inspection from agent-authored Map Artifacts', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-targets-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-targets-'))
   try {
     const home = join(temporary, 'home')
     const target = join(temporary, 'target')
@@ -283,7 +283,7 @@ test('Targets separate deterministic inspection from agent-authored Map Artifact
     const added = captureIo()
     assert.equal(await dispatchRuntime(home, 'target', ['add', target, '--id', 'demo', '--emoji', '🧪'], added.io), 0, added.stderr())
     assert.equal(
-      JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8')).settings['hairness/targets'].targets[0].emoji,
+      JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')).settings['endroit/targets'].targets[0].emoji,
       '🧪',
     )
     const second = join(temporary, 'target-worktree')
@@ -306,7 +306,7 @@ test('Targets separate deterministic inspection from agent-authored Map Artifact
     const mappedOutput = captureIo()
     assert.equal(await dispatchRuntime(home, 'artifact', [
       'create',
-      'hairness/targets:target-map',
+      'endroit/targets:target-map',
       'demo-main',
       '--workspace',
       'desk/maps',

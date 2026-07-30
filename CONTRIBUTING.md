@@ -7,7 +7,7 @@ Change canonical source under `src/`, `schemas/` or `assets/`. Keep the
 README, reference, schemas, CLI and tests aligned. Add a durable test for a
 recurring correction.
 
-Hairness owns the recipe for its separate Development Home:
+Endroit owns the recipe for its separate Development Home:
 
 ```bash
 npm run dev:home
@@ -15,8 +15,8 @@ npm run dev:session -- --provider codex
 npm run dev:verify
 ```
 
-The default Home is `../hairness-development-home`. It is a team Home whose
-`hairness/main` Binding points back to this repository. Use
+The default Home is `../endroit-development-home`. It is a team Home whose
+`endroit/main` Binding points back to this repository. Use
 `npm run dev:home:recreate` for a clean rebuild; it refuses dirty Home or Desk
 repositories and rolls back a failed replacement. The scripts never create a
 remote, commit or push.
@@ -54,10 +54,10 @@ release or another external delivery effect.
 
 ## Runtime support
 
-Hairness qualifies runtimes through evidence, not a compatibility claim. Check
+Endroit qualifies runtimes through evidence, not a compatibility claim. Check
 the [runtime matrix and qualification gate](ROADMAP.md#runtime-matrix), then
 open a
-[Runtime support request](https://github.com/thevzion/hairness/issues/new?template=runtime-support.yml)
+[Runtime support request](https://github.com/thevzion/endroit/issues/new?template=runtime-support.yml)
 before implementation.
 
 The request establishes:
@@ -65,11 +65,11 @@ The request establishes:
 - the exact runtime and versions;
 - its role and native instruction, capability and continuity surfaces;
 - the real user workflow motivating support;
-- whether Hairness needs a Projection or a Bridge;
+- whether Endroit needs a Projection or a Bridge;
 - the contributor who can maintain the integration.
 
 After the scope is agreed, keep the implementation to the smallest existing
-Hairness contract that fits. Do not add a generic Adapter primitive, registry
+Endroit contract that fits. Do not add a generic Adapter primitive, registry
 or marketplace for one runtime.
 
 A runtime pull request links its request, documents versions and limits, and
@@ -86,8 +86,8 @@ After registry verification, a maintainer with an authenticated npm session may
 also move the prerelease channel:
 
 ```bash
-npm dist-tag add @hairness/cli@<version> next
-npm view @hairness/cli dist-tags --json
+npm dist-tag add @endroit/cli@<version> next
+npm view @endroit/cli dist-tags --json
 ```
 
 Trusted publishing does not authorize a later `npm dist-tag` mutation. Keep

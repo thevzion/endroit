@@ -4,7 +4,7 @@ import { API, validateDocument } from './contracts.mjs'
 import { git } from './git.mjs'
 import { loadHome } from './home.mjs'
 import { DESK_INSTRUCTION, readInstructionFile, renderInstructionTemplate } from './instructions.mjs'
-import { HairnessError } from './lib/errors.mjs'
+import { EndroitError } from './lib/errors.mjs'
 import { assertId, exists, readJson, removeTree, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
 
 export async function loadDesk(root) {
@@ -18,7 +18,7 @@ export async function loadDesk(root) {
 export async function initDesk(root, options = {}) {
   const home = await loadHome(root)
   const directory = join(root, '.desk')
-  if (await exists(directory)) throw new HairnessError('desk_exists', 'This Home already has a Desk directory.')
+  if (await exists(directory)) throw new EndroitError('desk_exists', 'This Home already has a Desk directory.')
   await mkdir(directory, { recursive: true })
   try {
     if (home.mode === 'team' && options.git !== false) await git(['init', '--quiet', '--initial-branch=main'], { cwd: directory })
@@ -38,13 +38,13 @@ export async function initDesk(root, options = {}) {
 
 export async function cloneDesk(root, repository) {
   const home = await loadHome(root)
-  if (home.mode !== 'team') throw new HairnessError('desk_mode_invalid', 'A separate Desk repository is supported only by team Homes.')
+  if (home.mode !== 'team') throw new EndroitError('desk_mode_invalid', 'A separate Desk repository is supported only by team Homes.')
   const directory = join(root, '.desk')
-  if (await exists(directory)) throw new HairnessError('desk_exists', 'Remove or move the existing .desk before cloning.')
+  if (await exists(directory)) throw new EndroitError('desk_exists', 'Remove or move the existing .desk before cloning.')
   await git(['clone', '--quiet', '--', repository, directory], { cwd: root })
   try {
     const desk = await loadDesk(root)
-    if (!desk) throw new HairnessError('desk_invalid', 'The cloned repository does not contain desk.json.')
+    if (!desk) throw new EndroitError('desk_invalid', 'The cloned repository does not contain desk.json.')
     await readInstructionFile(join(directory, DESK_INSTRUCTION), 'desk_instruction')
     return { status: 'cloned', id: desk.id, repository }
   } catch (error) {

@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a reproducible Hairness problem.
+description: Report a reproducible Endroit problem.
 title: "[bug] "
 labels: [bug]
 body:
@@ -9,8 +9,8 @@ body:
   - type: input
     id: version
     attributes:
-      label: Hairness version
-      placeholder: 0.5.0-alpha.1
+      label: Endroit version
+      placeholder: 0.7.0-alpha.0
     validations:
       required: true
   - type: textarea

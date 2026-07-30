@@ -1,7 +1,7 @@
 {
-  "name": "@hairness/cli",
-  "version": "0.6.0-alpha.0",
-  "description": "The local-first logistics layer for durable human-agent work.",
+  "name": "@endroit/cli",
+  "version": "0.7.0-alpha.0",
+  "description": "The open-source, local-first environment for durable human-agent work.",
   "keywords": [
     "ai-agents",
     "agentic-assets",
@@ -15,11 +15,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/thevzion/hairness.git"
+    "url": "git+https://github.com/thevzion/endroit.git"
   },
-  "homepage": "https://hairness.dev",
+  "homepage": "https://endroit.org",
   "bugs": {
-    "url": "https://github.com/thevzion/hairness/issues"
+    "url": "https://github.com/thevzion/endroit/issues"
   },
   "publishConfig": {
     "access": "public",
@@ -27,7 +27,7 @@
   },
   "type": "module",
   "bin": {
-    "hairness": "bin/hairness.mjs"
+    "endroit": "bin/endroit.mjs"
   },
   "engines": {
     "node": ">=22"
@@ -35,17 +35,17 @@
   "files": [
     "bin/",
     "docs/reference.md",
-    "assets/hairness/onboarding/",
-    "assets/hairness/planning/",
-    "assets/hairness/publishing/",
-    "assets/hairness/research/",
-    "assets/hairness/hud/",
-    "assets/hairness/artifacts/",
-    "assets/hairness/targets/",
-    "assets/hairness/workspaces/",
-    "assets/hairness/scratch/",
+    "assets/endroit/onboarding/",
+    "assets/endroit/planning/",
+    "assets/endroit/publishing/",
+    "assets/endroit/research/",
+    "assets/endroit/hud/",
+    "assets/endroit/artifacts/",
+    "assets/endroit/targets/",
+    "assets/endroit/workspaces/",
+    "assets/endroit/scratch/",
     "templates/",
-    "schemas/v5/",
+    "schemas/v6/",
     "src/",
     "LICENSE",
     "README.md"

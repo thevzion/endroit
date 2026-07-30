@@ -11,7 +11,7 @@ const manifestArgument = process.argv.find((argument) => argument.endsWith('mani
 const manifestPath = resolve(manifestArgument ?? join(projectRoot, 'release/manifest.json'))
 const releaseRoot = dirname(manifestPath)
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
-const expectedOrder = ['@hairness/cli']
+const expectedOrder = ['@endroit/cli']
 
 if (JSON.stringify(manifest.packages.map((entry) => entry.name)) !== JSON.stringify(expectedOrder)) {
   throw new Error(`Release order must be ${expectedOrder.join(' → ')}.`)

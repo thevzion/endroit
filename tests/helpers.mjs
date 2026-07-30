@@ -15,7 +15,7 @@ export async function writeAsset(root, manifest = asset(), files = {}) {
 
 export function asset(overrides = {}) {
   return {
-    $schema: 'https://hairness.dev/schema/asset.json',
+    $schema: 'https://endroit.org/schema/asset.json',
     name: 'fixture/review',
     version: '1.0.0',
     description: 'Review agentic material.',

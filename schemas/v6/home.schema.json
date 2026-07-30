@@ -1,0 +1,59 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/home.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "name", "runtime", "mode", "providers"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/home.json" },
+    "name": { "$ref": "#/$defs/id" },
+    "emoji": { "$ref": "#/$defs/emoji" },
+    "runtime": {
+      "type": "string",
+      "pattern": "^@endroit/cli@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$"
+    },
+    "mode": { "enum": ["solo", "team"] },
+    "providers": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["codex", "claude"] }
+    },
+    "prefix": { "$ref": "#/$defs/id" },
+    "frontDoor": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["wakeUp"],
+      "properties": {
+        "wakeUp": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*:[a-z0-9][a-z0-9._-]*$"
+        }
+      }
+    },
+    "budgets": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "instructionsBytes": { "type": "integer", "minimum": 0 },
+        "modelDescriptionsBytes": { "type": "integer", "minimum": 0 }
+      }
+    },
+    "settings": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$" },
+      "additionalProperties": { "type": "object" }
+    }
+  },
+  "$defs": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "emoji": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 16
+    }
+  }
+}

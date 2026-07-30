@@ -1,11 +1,13 @@
 <div align="center">
 
-# hairness
+# endroit
+
+Endroit means “place” in French.
 
 **You equipped the agent.**<br />
 **Now own the place where you work together.**
 
-Hairness is the open-source, local-first environment where you and the agents
+Endroit is the open-source, local-first environment where you and the agents
 you already use work from the same maps, decisions, methods and retained
 results—across sessions and independent repositories.
 
@@ -14,15 +16,15 @@ results—across sessions and independent repositories.
 **Resume without starting over.** · **Change runtimes, keep the work.** ·
 **Keep repositories independent.**
 
-[Website](https://hairness.dev) · [Home-first Proposal](https://thevzion.com/home-first/) · [Technical reference](docs/reference.md)
+[Website](https://endroit.org) · [Home-first Proposal](https://thevzion.com/home-first/) · [Technical reference](docs/reference.md)
 
-[![npm latest](https://img.shields.io/npm/v/%40hairness%2Fcli/latest?label=npm%20latest)](https://www.npmjs.com/package/@hairness/cli) [![CI](https://github.com/thevzion/hairness/actions/workflows/ci.yml/badge.svg)](https://github.com/thevzion/hairness/actions/workflows/ci.yml) [![MIT](https://img.shields.io/badge/license-MIT-d8996a.svg)](LICENSE)
+[![npm latest](https://img.shields.io/npm/v/%40endroit%2Fcli/latest?label=npm%20latest)](https://www.npmjs.com/package/@endroit/cli) [![CI](https://github.com/thevzion/endroit/actions/workflows/ci.yml/badge.svg)](https://github.com/thevzion/endroit/actions/workflows/ci.yml) [![MIT](https://img.shields.io/badge/license-MIT-d8996a.svg)](LICENSE)
 
-<sub>Hairness 0.6 is an alpha. Keep each Home in a dedicated Git repository and inspect executable Asset runtimes before trusting them.</sub>
+<sub>Endroit 0.7 is an alpha. Keep each Home in a dedicated Git repository and inspect executable Asset runtimes before trusting them.</sub>
 
 </div>
 
-**Actively maintained and dogfooded.** Hairness is used to develop Hairness
+**Actively maintained and dogfooded.** Endroit is used to develop Endroit
 itself. The [Roadmap](ROADMAP.md) separates what works today from what is being
 qualified next.
 
@@ -41,14 +43,14 @@ whole workplace.
 Without a Home
 repositories + copied setup + provider files + continuity in chats
 
-With Hairness
+With Endroit
 one owned Home → your existing agents, methods and repositories
 ```
 
-**Home-first** is the organizing paradigm. The Home owns the durable environment, Agent Runtimes own sessions and execution, and Targets retain product truth. Hairness is one open-source implementation of that model.
+**Home-first** is the organizing paradigm. The Home owns the durable environment, Agent Runtimes own sessions and execution, and Targets retain product truth. Endroit is one open-source implementation of that model.
 
 Plugins and MCP can give an agent access to systems. Memory can preserve
-information. Hairness addresses a different layer: it makes the environment's
+information. Endroit addresses a different layer: it makes the environment's
 owners, routes, shared material and durable destinations explicit.
 
 **A runtime gives the agent a working directory. A Home gives the work an
@@ -56,9 +58,74 @@ owned environment.**
 
 **[Read the Home-first Proposal →](https://thevzion.com/home-first/)**
 
+## Where Endroit fits
+
+Products can span several layers. This is a responsibility map, not a call
+stack. The examples clarify boundaries; they do not imply Endroit support or
+endorsement.
+
+```text
+                                      HUMAN / TEAM
+                         intent · judgment · approval · direction
+                                            │
+                                            ▼
+┌──────────────────────────── 1. INTERACTION SURFACES ───────────────────────────┐
+│ Desktop    Codex app · Claude Desktop · Hermes Desktop                        │
+│ Editor     VS Code · Cursor · Windsurf · JetBrains                            │
+│ Terminal   Codex CLI · Claude Code · Hermes TUI · Gemini CLI · Aider          │
+│ Messaging  Web · Slack · Discord · Telegram · Linear                          │
+└────────────────────────────────────────────┬──────────────────────────────────┘
+                                             ▼
+┌──────────────────────────── 2. AGENT RUNTIME / HOST ──────────────────────────┐
+│ Codex · Claude Code · Hermes Agent · OpenCode · OpenClaw · Cline · Roo Code   │
+│ session · permissions · sandbox · execution · tool dispatch · resume          │
+└──────────────┬──────────────────────┬──────────────────────┬──────────────────┘
+               │                      │                      │
+               ▼                      ▼                      ▼
+┌─ 3. MODEL / INFERENCE ─┐ ┌── 4. HARNESS / LOOP ──┐ ┌── 5. CONTEXT / MEMORY ─┐
+│ GPT · Claude · Gemini  │ │ Codex/Claude/Hermes   │ │ chat history            │
+│ Kimi · Llama · DeepSeek│ │ internal loops        │ │ compaction summaries    │
+│ OpenAI · Anthropic     │ │ OpenAI Agents SDK     │ │ runtime memory          │
+│ Google · OpenRouter    │ │ LangGraph · AutoGen   │ │ memory files · RAG      │
+│ Ollama · vLLM          │ │ CrewAI · custom loops │ │ vector DB · context repo│
+└────────────────────────┘ └───────────┬────────────┘ └─────────────────────────┘
+                           ┌────────────┴─────────────┐
+                           ▼                          ▼
+              6. CAPABILITIES / ACCESS        7. METHODS / WORKFLOWS
+              Agent Skills                    GSD
+              plugins                         Spec Kit
+              shell · Git · browser           Superpowers
+              MCP · APIs · connectors         BMAD
+              GitHub · Slack · Notion         HACP · team playbooks
+                           \                          /
+                            \ runtime applies these /
+                             \ while working from  /
+                                      ▼
+╔═══════════════════════════════ 8. ENDROIT ═════════════════════════════════════╗
+║ owned human-agent work environment                                            ║
+║ Front Door · Floor Plan · HUD · Home/Desk · Workspaces · Maps                 ║
+║ decisions · methods/assets · Documents · Artifacts · Bindings · lineage       ║
+║ orientation · continuity · ownership · shared material · destinations         ║
+╚══════════════════════════════════════╤════════════════════════════════════════╝
+                                       │ routes to · maps · revalidates
+                                       ▼
+┌────────────────────── 9. TARGETS & EXTERNAL SYSTEMS ──────────────────────────┐
+│ repositories · worktrees · GitHub/GitLab · databases · APIs · cloud          │
+│ Jira · Notion · Slack · production systems · deployment platforms            │
+│ live truth · authorization · product history · delivery                       │
+└───────────────────────────────────────────────────────────────────────────────┘
+```
+
+> Humans direct. Interfaces mediate. Models reason. Runtimes execute.
+> Harnesses loop. Skills equip. MCP connects. Memory recalls. Methods
+> structure. Endroit orients and retains. Targets own the truth.
+
+Distribution, automation and observability are lateral planes: they can cross
+several layers without becoming Endroit's responsibility.
+
 ## Do you need a Home?
 
-Hairness is worth trying when several of these feel familiar:
+Endroit is worth trying when several of these feel familiar:
 
 - you re-explain the same system map or accepted decisions in later sessions;
 - the repository where a session starts is often not where the work belongs;
@@ -68,7 +135,7 @@ Hairness is worth trying when several of these feel familiar:
   relevant source;
 - useful plans, maps or results have no obvious durable destination.
 
-Hairness is probably unnecessary for one short session in one repository with
+Endroit is probably unnecessary for one short session in one repository with
 no continuity worth retaining. It may also cost more than it helps when a
 second Git repository creates more ambiguity than the work itself.
 
@@ -84,13 +151,13 @@ one Home → one existing Target → one current subject
          → one retained result → one resumed session
 ```
 
-You do not migrate repositories into Hairness. Each Target keeps its source,
+You do not migrate repositories into Endroit. Each Target keeps its source,
 history and delivery. The Home gives the durable work between Targets an owner
 and gives each retained result a destination.
 
 Adoption is additive before it is transformative: the first useful outcome can
 simply be a clearer map of the environment you already maintain. If the
-structure does not earn its place, Hairness can disappear. Your Home remains
+structure does not earn its place, Endroit can disappear. Your Home remains
 ordinary files and Git.
 
 ## Start with one Home
@@ -98,7 +165,7 @@ ordinary files and Git.
 Requires Node.js 22 or newer, Git, and the Codex or Claude CLI.
 
 ```bash
-npx --yes @hairness/cli@latest create my-home
+npx --yes @endroit/cli@latest create my-home
 cd my-home
 codex
 ```
@@ -113,12 +180,12 @@ my-home/
 ├── .desk/              personal continuity in Solo mode
 ├── AGENTS.md           generated Codex view
 ├── CLAUDE.md           generated Claude view
-└── hairness.mjs        inspectable Home Console
+└── endroit.mjs         inspectable Home Console
 ```
 
 Open the Home and describe your work in normal language. In a later session, reopen the same Home and name the subject again; its Floor Plan and Workspaces restore the context you chose to keep.
 
-You do not need to reorganize existing repositories or design a methodology first. Run `$hairness-onboarding` in Codex or `/hairness-onboarding` in Claude when you want guided mapping.
+You do not need to reorganize existing repositories or design a methodology first. Run `$endroit-onboarding` in Codex or `/endroit-onboarding` in Claude when you want guided mapping.
 
 ## A map before the work
 
@@ -145,7 +212,7 @@ Humans and agents work from the same owned sources and contracts even when they 
 | **Targets and Bindings** | Keep repositories independent and locally controlled | Identify the relevant sources and destinations |
 | **Trust, Doctor and Projections** | Inspect executable code and diagnose drift | Know the limits and use a runtime-native interface |
 
-Skills and commands remain useful runtime interfaces. Hairness keeps the underlying capability contract source-owned and projects the appropriate view for each qualified runtime.
+Skills and commands remain useful runtime interfaces. Endroit keeps the underlying capability contract source-owned and projects the appropriate view for each qualified runtime.
 
 ## What you can do
 
@@ -168,6 +235,9 @@ Assets equip the Home; they do not dictate an expertise methodology. BMAD,
 Superpowers or another method can keep its own loops and files while using the
 same owners, destinations and durable results.
 
+**Endroit is opinionated about where work belongs, not about how every piece
+of work must be done.**
+
 ## Bring the agents you already use
 
 Runtime compatibility has two independent axes:
@@ -184,16 +254,16 @@ Runtime compatibility has two independent axes:
 | Codex | `native` | `qualified` | Projection, Skills, hook and provider checks |
 | Claude | `native` | `qualified` | Projection, Skills, hook and provider checks |
 | [Hermes Agent](https://github.com/NousResearch/hermes-agent) 0.19.0 | `portable` | `observed` | A maintainer workflow used `AGENTS.md` and the Home Console on 2026-07-30 |
-| [Kimi Code](https://www.kimi.com/code/) | to classify | `candidate` | No Hairness evidence yet |
-| [OpenClaw](https://github.com/openclaw/openclaw) | to classify | `candidate` | No Hairness evidence yet |
+| [Kimi Code](https://www.kimi.com/code/) | to classify | `candidate` | No Endroit evidence yet |
+| [OpenClaw](https://github.com/openclaw/openclaw) | to classify | `candidate` | No Endroit evidence yet |
 
 An `observed` row is not a support promise. The Hermes observation is
 anonymized and does not make it `qualified`.
 
 Use another runtime? Try the portable path first, report the friction, then
 open a
-[Runtime support request](https://github.com/thevzion/hairness/issues/new?template=runtime-support.yml).
-The [Roadmap](ROADMAP.md) defines the common qualification journey. Hairness
+[Runtime support request](https://github.com/thevzion/endroit/issues/new?template=runtime-support.yml).
+The [Roadmap](ROADMAP.md) defines the common qualification journey. Endroit
 adds the smallest native adaptation only when evidence shows the portable path
 is not enough.
 
@@ -212,21 +282,21 @@ Documents preserve ordinary continuity. Artifacts are chosen results. Assets equ
 
 **The Home keeps durable work and relationships locally addressable. Live truth, authorization and actions may remain in external systems.**
 
-MCP servers and integrations provide live access and action. Hairness gives durable relationships an owned context and explicit authority; broader external references remain a direction beyond the contracts shipped today.
+MCP servers and integrations provide live access and action. Endroit gives durable relationships an owned context and explicit authority; broader external references remain a direction beyond the contracts shipped today.
 
-Agent Runtimes host sessions, models and tools. Hairness does not run, schedule or replace the agent; it owns the durable environment around its work.
+Agent Runtimes host sessions, models and tools. Endroit does not run, schedule or replace the agent; it owns the durable environment around its work.
 
-Hairness is not a software-development, research or publishing methodology. Existing methods keep their loops and native files; the Home gives the material you retain an explicit owner and destination.
+Endroit is not a software-development, research or publishing methodology. Existing methods keep their loops and native files; the Home gives the material you retain an explicit owner and destination.
 
 In **Solo** mode, personal continuity can share the Home Git history while local Bindings remain private. In **Team** mode, the Home is shared through Git and each collaborator can initialize or clone a private Desk.
 
-## Hairness 0.6 today
+## Endroit 0.7 today
 
 The current alpha provides guided bootstrap, Workspaces, inspectable Artifacts, explicit Targets and Bindings, installable Assets, Publishing Handles, deterministic Codex and Claude views, a static Floor Plan, an optional live HUD and Doctor.
 
 Generated provider files are rebuildable projections. Canonical sources remain ordinary files under your control. Digest trust detects changed runtime bytes; it is not a sandbox.
 
-Hairness does not provide a model, scheduler, autonomous runtime, methodology, remote memory service, marketplace or live collaboration server. It does not claim measured improvements in reasoning quality, hallucinations, speed or cost.
+Endroit does not provide a model, scheduler, autonomous runtime, methodology, remote memory service, marketplace or live collaboration server. It does not claim measured improvements in reasoning quality, hallucinations, speed or cost.
 
 The active [Roadmap](ROADMAP.md) is evidence-driven rather than date-driven.
 Portable observations remain explicitly weaker than qualified, maintained

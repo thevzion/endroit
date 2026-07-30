@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.7.0-alpha.0
+
+- Rename Hairness to Endroit: the owned, local-first environment implementing
+  the Home-first proposal.
+- Replace every public package, binary, config, state, Asset, provider,
+  diagnostic and schema contract without runtime compatibility aliases.
+- Move the public schema authority to `https://endroit.org/schema/*` and
+  provide explicit errors for unsupported schema versions.
+- Clarify where Endroit fits alongside interfaces, models, runtimes, harnesses,
+  memory, capabilities, methods and independent Targets.
+
 ## 0.6.0-alpha.0
 
 - Make Home and Desk Workspaces the canonical owners of durable work, with

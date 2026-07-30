@@ -1,11 +1,11 @@
 name: Runtime support request
-description: Propose and help qualify an Agent Runtime for Hairness.
+description: Propose and help qualify an Agent Runtime for Endroit.
 title: "[runtime] "
 body:
   - type: markdown
     attributes:
       value: |
-        Hairness qualifies runtimes through a real first-Home journey. A request is not a support commitment. Do not include secrets, private Home content or provider credentials.
+        Endroit qualifies runtimes through a real first-Home journey. A request is not a support commitment. Do not include secrets, private Home content or provider credentials.
   - type: input
     id: runtime
     attributes:

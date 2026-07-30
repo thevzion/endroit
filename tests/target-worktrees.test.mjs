@@ -165,7 +165,7 @@ test('Target unbind preserves dirty, locked, prunable, dependent and submodule w
 })
 
 async function targetFixture() {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-target-worktrees-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-target-worktrees-'))
   const home = join(temporary, 'home')
   const repository = join(temporary, 'repository')
   const remote = join(temporary, 'remote.git')

@@ -1,7 +1,7 @@
 # Security policy
 
-Hairness `0.6.0-alpha.0` is prerelease software. Report vulnerabilities through
-[GitHub Security Advisories](https://github.com/thevzion/hairness/security/advisories/new).
+Endroit `0.7.0-alpha.0` is prerelease software. Report vulnerabilities through
+[GitHub Security Advisories](https://github.com/thevzion/endroit/security/advisories/new).
 Do not disclose credentials, private Home content or unpublished Assets in a
 public issue.
 
@@ -17,9 +17,9 @@ flowchart LR
   approval --> execute["Runtime with user rights"]
 ```
 
-Static Asset material is untrusted input. Hairness validates it before copying
+Static Asset material is untrusted input. Endroit validates it before copying
 or projecting it. Asset runtimes are executable programs with the user’s rights.
-Hairness does not claim to sandbox them.
+Endroit does not claim to sandbox them.
 
 ## Enforced controls
 
@@ -66,9 +66,9 @@ user can perform. Review its source and dependencies before approval. Use an
 operating-system sandbox or disposable environment when the author is not
 trusted.
 
-Provider sessions and their tools are also outside Hairness authority. A
+Provider sessions and their tools are also outside Endroit authority. A
 composed Home does not authorize Ness to modify a Target or access a service.
-Provider hook approval is also outside Hairness authority; Doctor verifies the
+Provider hook approval is also outside Endroit authority; Doctor verifies the
 projected files, not the provider's global consent state.
 
 ## User responsibilities

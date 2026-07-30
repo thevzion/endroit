@@ -22,7 +22,7 @@ import { asset, captureIo, writeAsset } from './helpers.mjs'
 const exec = promisify(execFile)
 
 test('create supports a TTY preview and explicit optional native Assets', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-create-wizard-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-create-wizard-'))
   try {
     const home = join(temporary, 'home')
     const io = captureTtyIo()
@@ -38,23 +38,23 @@ test('create supports a TTY preview and explicit optional native Assets', async 
       'confirm',
     ])
     assert.ok(CREATE_WORDMARK.split('\n').every((line) => line.length < 64))
-    assert.equal(JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8')).mode, 'team')
+    assert.equal(JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')).mode, 'team')
     assert.equal(await readFile(join(home, 'workspaces/home/workspace.md'), 'utf8').then((value) => value.includes('workspace:home/home')), true)
-    assert.equal(await readFile(join(home, 'assets/hairness/research/asset.json'), 'utf8').then(Boolean), true)
-    assert.equal(await readFile(join(home, 'assets/hairness/publishing/asset.json'), 'utf8').then(Boolean), true)
-    await assert.rejects(readFile(join(home, 'assets/hairness/planning/asset.json')), (error) => error.code === 'ENOENT')
+    assert.equal(await readFile(join(home, 'assets/endroit/research/asset.json'), 'utf8').then(Boolean), true)
+    assert.equal(await readFile(join(home, 'assets/endroit/publishing/asset.json'), 'utf8').then(Boolean), true)
+    await assert.rejects(readFile(join(home, 'assets/endroit/planning/asset.json')), (error) => error.code === 'ENOENT')
     const catalog = captureIo()
     assert.equal(await runCli(['asset', 'catalog', '--home', home, '--json'], catalog.io), 0, catalog.stderr())
     const native = JSON.parse(catalog.stdout()).assets
-    assert.equal(native.find((entry) => entry.id === 'hairness/research').installed.includes('home'), true)
-    assert.equal(native.find((entry) => entry.id === 'hairness/planning').installed.length, 0)
+    assert.equal(native.find((entry) => entry.id === 'endroit/research').installed.includes('home'), true)
+    assert.equal(native.find((entry) => entry.id === 'endroit/planning').installed.length, 0)
 
     const automatic = join(temporary, 'automatic')
     const captured = captureIo()
     assert.equal(await runCli(['create', automatic, '--with', 'all', '--no-interactive', '--yes'], captured.io), 0, captured.stderr())
     assert.doesNotMatch(captured.stdout(), /\u001b\[/)
     for (const id of ['research', 'planning', 'publishing', 'scratch']) {
-      assert.equal(await readFile(join(automatic, `assets/hairness/${id}/asset.json`), 'utf8').then(Boolean), true)
+      assert.equal(await readFile(join(automatic, `assets/endroit/${id}/asset.json`), 'utf8').then(Boolean), true)
     }
 
     const flagged = join(temporary, 'flagged')
@@ -86,8 +86,8 @@ test('create supports a TTY preview and explicit optional native Assets', async 
       noColor: false,
       forceColor: '0',
     })
-    assert.equal(JSON.parse(await readFile(join(flagged, 'hairness.json'), 'utf8')).mode, 'team')
-    assert.equal(await readFile(join(flagged, 'assets/hairness/scratch/asset.json'), 'utf8').then(Boolean), true)
+    assert.equal(JSON.parse(await readFile(join(flagged, 'endroit.json'), 'utf8')).mode, 'team')
+    assert.equal(await readFile(join(flagged, 'assets/endroit/scratch/asset.json'), 'utf8').then(Boolean), true)
 
     const structured = join(temporary, 'structured')
     const structuredIo = captureTtyIo()
@@ -102,7 +102,7 @@ test('create supports a TTY preview and explicit optional native Assets', async 
 })
 
 test('create cancellation is friendly and leaves no destination', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-create-cancel-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-create-cancel-'))
   try {
     for (const scenario of [
       { name: 'declined', accepted: false },
@@ -123,63 +123,67 @@ test('create cancellation is friendly and leaves no destination', async () => {
 
 test('create builds a source-owned Home and tracks shared provider projections', async () => {
   assert.deepEqual(await compileSchemas(), ['home', 'desk', 'asset', 'runtime'])
+  await assert.rejects(
+    () => validateDocument({ $schema: 'https://example.invalid/schema/home.json' }, 'home'),
+    (error) => error.code === 'schema_version_mismatch' && /Endroit 0\.7 requires https:\/\/endroit\.org\/schema\/home\.json/.test(error.message),
+  )
   const help = captureIo()
   assert.equal(await runCli([], help.io), 0)
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-kernel-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-kernel-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home, { providers: ['codex', 'claude'], prefix: 'acme', emoji: '🏠' })
-    const document = JSON.parse(await readFile(join(home, 'hairness.json'), 'utf8'))
+    const document = JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8'))
     await validateDocument(document, 'home')
     assert.deepEqual(document, {
-      $schema: 'https://hairness.dev/schema/home.json',
+      $schema: 'https://endroit.org/schema/home.json',
       name: 'home',
       emoji: '🏠',
-      runtime: '@hairness/cli@0.6.0-alpha.0',
+      runtime: '@endroit/cli@0.7.0-alpha.0',
       mode: 'solo',
       providers: ['codex', 'claude'],
       prefix: 'acme',
-      frontDoor: { wakeUp: 'hairness/hud:prompt' },
+      frontDoor: { wakeUp: 'endroit/hud:prompt' },
     })
     for (const name of ['artifacts', 'hud', 'onboarding', 'targets']) {
-      const manifest = JSON.parse(await readFile(join(home, `assets/hairness/${name}/asset.json`), 'utf8'))
-      assert.equal(manifest.origin.source, `@hairness/${name}`)
+      const manifest = JSON.parse(await readFile(join(home, `assets/endroit/${name}/asset.json`), 'utf8'))
+      assert.equal(manifest.origin.source, `@endroit/${name}`)
       assert.match(manifest.origin.baseManifestDigest, /^sha256:[a-f0-9]{64}$/)
     }
-    await assert.rejects(readFile(join(home, 'assets/hairness/scratch/asset.json')), (error) => error.code === 'ENOENT')
+    await assert.rejects(readFile(join(home, 'assets/endroit/scratch/asset.json')), (error) => error.code === 'ENOENT')
     const tracked = (await exec('git', ['ls-files'], { cwd: home })).stdout
     for (const path of [
       'HOME.md',
       '.desk/DESK.md',
       'AGENTS.md',
       'CLAUDE.md',
-      '.agents/skills/acme-hairness-onboarding/SKILL.md',
-      '.agents/skills/acme-hairness-artifacts/SKILL.md',
-      '.agents/skills/acme-hairness-target-manage/SKILL.md',
+      '.agents/skills/acme-endroit-onboarding/SKILL.md',
+      '.agents/skills/acme-endroit-artifacts/SKILL.md',
+      '.agents/skills/acme-endroit-target-manage/SKILL.md',
       '.claude/settings.json',
-      '.claude/hooks/hairness-session-start.mjs',
+      '.claude/hooks/endroit-session-start.mjs',
       '.codex/hooks.json',
-      '.codex/hooks/hairness-session-start.mjs',
-      'hairness.mjs',
-      'assets/hairness/hud/runtime.mjs',
+      '.codex/hooks/endroit-session-start.mjs',
+      'endroit.mjs',
+      'assets/endroit/hud/runtime.mjs',
     ]) assert.match(tracked, new RegExp(`^${escape(path)}$`, 'm'))
     assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /^# home$/m)
     assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /^# local's Desk$/m)
     const agents = await readFile(join(home, 'AGENTS.md'), 'utf8')
     assert.match(agents, /<!-- source: HOME\.md -->/)
-    assert.match(agents, /## Hairness Floor Plan/)
-    assert.match(agents, /node \.\/hairness\.mjs <namespace> <command>/)
-    assert.match(agents, /## hairness\/hud:orientation/)
-    assert.doesNotMatch(agents, /If no Hairness HUD was injected/)
-    assert.doesNotMatch(agents, /## hairness\/onboarding:home/)
-    assert.doesNotMatch(tracked, /^\.hairness\//m)
+    assert.match(agents, /## Endroit Floor Plan/)
+    assert.match(agents, /node \.\/endroit\.mjs <namespace> <command>/)
+    assert.match(agents, /## endroit\/hud:orientation/)
+    assert.doesNotMatch(agents, /If no Endroit HUD was injected/)
+    assert.doesNotMatch(agents, /## endroit\/onboarding:home/)
+    assert.doesNotMatch(tracked, /^\.endroit\//m)
     assert.equal((await doctorHome(home)).status, 'ready')
     await buildHome(home, { check: true })
     const plan = await resolveHome(home)
     assert.deepEqual(plan.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'target', 'workspace'])
     assert.deepEqual(plan.frontDoor, {
-      route: 'hairness/hud:prompt',
-      owner: 'hairness/hud',
+      route: 'endroit/hud:prompt',
+      owner: 'endroit/hud',
       namespace: 'hud',
       command: 'prompt',
     })
@@ -189,16 +193,16 @@ test('create builds a source-owned Home and tracks shared provider projections',
     assert.doesNotMatch(floorPlan, new RegExp(escape(home)))
     assert.doesNotMatch(floorPlan, /\b(?:branch|commit|sha256|generated-at)\b/i)
 
-    document.runtime = '@hairness/cli@9.0.0'
-    await writeFile(join(home, 'hairness.json'), `${JSON.stringify(document, null, 2)}\n`)
-    await assert.rejects(() => assertRuntime(home), (error) => error.code === 'runtime_mismatch' && /node \.\/hairness\.mjs/.test(error.message))
+    document.runtime = '@endroit/cli@9.0.0'
+    await writeFile(join(home, 'endroit.json'), `${JSON.stringify(document, null, 2)}\n`)
+    await assert.rejects(() => assertRuntime(home), (error) => error.code === 'runtime_mismatch' && /node \.\/endroit\.mjs/.test(error.message))
   } finally {
     await removeTree(temporary, { force: true })
   }
 })
 
 test('forEach accessors bind generated aliases to resolved Home items', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-accessors-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-accessors-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
@@ -226,10 +230,10 @@ test('forEach accessors bind generated aliases to resolved Home items', async ()
       '`active`',
       '',
     ].join('\n'))
-    const homePath = join(home, 'hairness.json')
+    const homePath = join(home, 'endroit.json')
     const document = JSON.parse(await readFile(homePath, 'utf8'))
     document.settings = {
-      'hairness/targets': {
+      'endroit/targets': {
         targets: [{
           id: 'product',
           emoji: '📦',
@@ -282,18 +286,18 @@ test('forEach accessors bind generated aliases to resolved Home items', async ()
 })
 
 test('provider session wrappers inject exact transport and fail closed without leaking stderr', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-session-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-session-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
-    const local = join(home, '.hairness/dev-cli')
-    await mkdir(join(home, '.hairness'), { recursive: true })
+    const local = join(home, '.endroit/dev-cli')
+    await mkdir(join(home, '.endroit'), { recursive: true })
     await executable(local, `#!/usr/bin/env node
-process.stdout.write('<wake-up source="' + process.env.HAIRNESS_RUNTIME_SOURCE + '" kind="' + process.env.HAIRNESS_INVOCATION_KIND + '"/>\\n')
+process.stdout.write('<wake-up source="' + process.env.ENDROIT_RUNTIME_SOURCE + '" kind="' + process.env.ENDROIT_INVOCATION_KIND + '"/>\\n')
 `)
 
-    const codexPath = join(home, '.codex/hooks/hairness-session-start.mjs')
-    const claudePath = join(home, '.claude/hooks/hairness-session-start.mjs')
+    const codexPath = join(home, '.codex/hooks/endroit-session-start.mjs')
+    const claudePath = join(home, '.claude/hooks/endroit-session-start.mjs')
     const codex = JSON.parse((await exec('node', [codexPath], { cwd: home })).stdout)
     assert.deepEqual(codex, {
       hookSpecificOutput: {
@@ -308,29 +312,29 @@ process.stderr.write('private-downstream-secret\\n')
 process.exitCode = 4
 `)
     await assert.rejects(
-      () => exec(process.execPath, [join(home, 'hairness.mjs'), 'hud', 'prompt'], { cwd: home }),
+      () => exec(process.execPath, [join(home, 'endroit.mjs'), 'hud', 'prompt'], { cwd: home }),
       (error) => error.code === 4 && /private-downstream-secret/.test(error.stderr),
     )
     const failed = (await exec('node', [codexPath], { cwd: home })).stdout
     assert.deepEqual(JSON.parse(failed), {
       hookSpecificOutput: {
         hookEventName: 'SessionStart',
-        additionalContext: '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />',
+        additionalContext: '<endroit-front-door version="1" status="degraded" reason="wake-up-unavailable" />',
       },
     })
     assert.doesNotMatch(failed, /private-downstream-secret/)
 
     await rm(local)
     await symlink('missing-cli', local)
-    assert.equal((await exec('node', [claudePath], { cwd: home })).stdout, '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
+    assert.equal((await exec('node', [claudePath], { cwd: home })).stdout, '<endroit-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
 
     await rm(local)
-    const boundedPath = join(home, '.claude/hooks/hairness-session-bounded.mjs')
+    const boundedPath = join(home, '.claude/hooks/endroit-session-bounded.mjs')
     await writeFile(boundedPath, sessionWrapper('claude', { namespace: 'hud', command: 'prompt' }, { timeoutMs: 20, maxBytes: 32 }))
     await executable(local, '#!/usr/bin/env node\nsetInterval(() => {}, 1_000)\n')
-    assert.equal((await exec('node', [boundedPath], { cwd: home })).stdout, '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
+    assert.equal((await exec('node', [boundedPath], { cwd: home })).stdout, '<endroit-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
     await executable(local, "#!/usr/bin/env node\nprocess.stdout.write('x'.repeat(33))\n")
-    assert.equal((await exec('node', [boundedPath], { cwd: home })).stdout, '<hairness-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
+    assert.equal((await exec('node', [boundedPath], { cwd: home })).stdout, '<endroit-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
     await rm(local)
 
     const fakeBin = join(temporary, 'bin')
@@ -338,17 +342,17 @@ process.exitCode = 4
     await mkdir(fakeBin)
     await executable(join(fakeBin, 'npx'), `#!/usr/bin/env node
 import { writeFileSync } from 'node:fs'
-writeFileSync(process.env.HAIRNESS_TEST_ARGS, JSON.stringify(process.argv.slice(2)))
-process.stdout.write('<wake-up source="' + process.env.HAIRNESS_RUNTIME_SOURCE + '"/>\\n')
+writeFileSync(process.env.ENDROIT_TEST_ARGS, JSON.stringify(process.argv.slice(2)))
+process.stdout.write('<wake-up source="' + process.env.ENDROIT_RUNTIME_SOURCE + '"/>\\n')
 `)
     const npm = await exec('node', [claudePath], {
       cwd: home,
-      env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, HAIRNESS_TEST_ARGS: argsPath },
+      env: { ...process.env, PATH: `${fakeBin}:${process.env.PATH}`, ENDROIT_TEST_ARGS: argsPath },
     })
     assert.equal(npm.stdout, '<wake-up source="npm"/>\n')
     assert.deepEqual(JSON.parse(await readFile(argsPath, 'utf8')), [
       '--yes',
-      '@hairness/cli@0.6.0-alpha.0',
+      '@endroit/cli@0.7.0-alpha.0',
       'hud',
       'prompt',
     ])
@@ -374,7 +378,7 @@ process.stdout.write('<wake-up source="' + process.env.HAIRNESS_RUNTIME_SOURCE +
       },
       {
         matcher: 'startup|resume|clear|compact',
-        hooks: [{ type: 'command', command: 'node .codex/hooks/hairness-session-start.mjs' }],
+        hooks: [{ type: 'command', command: 'node .codex/hooks/endroit-session-start.mjs' }],
       },
     ])
   } finally {
@@ -383,11 +387,11 @@ process.stdout.write('<wake-up source="' + process.env.HAIRNESS_RUNTIME_SOURCE +
 })
 
 test('the Home Console is a fully owned regular projection', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-console-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-console-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
-    const path = join(home, 'hairness.mjs')
+    const path = join(home, 'endroit.mjs')
     await rm(path)
     await assert.rejects(() => buildHome(home, { check: true }), (error) => error.code === 'build_stale')
     await buildHome(home)
@@ -403,7 +407,7 @@ test('the Home Console is a fully owned regular projection', async () => {
 })
 
 test('team Homes remain usable before a private Desk exists', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-team-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-team-'))
   try {
     const home = join(temporary, 'team-home')
     await mkdir(home)
@@ -412,7 +416,7 @@ test('team Homes remain usable before a private Desk exists', async () => {
     assert.equal(await loadDesk(home), null)
     await buildHome(home)
     assert.equal((await readFile(join(home, 'AGENTS.md'), 'utf8')).includes('Wake-up: not configured.'), true)
-    await assert.rejects(readFile(join(home, '.codex/hooks/hairness-session-start.mjs')), (error) => error.code === 'ENOENT')
+    await assert.rejects(readFile(join(home, '.codex/hooks/endroit-session-start.mjs')), (error) => error.code === 'ENOENT')
     assert.equal((await doctorHome(home)).status, 'ready')
     assert.equal((await initDesk(home, { id: 'alexis', git: true })).repository, true)
     assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /alexis/)
@@ -430,7 +434,7 @@ test('team Homes remain usable before a private Desk exists', async () => {
 })
 
 test('canonical Home and Desk instructions are required, source-owned and fully projected', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-instructions-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-instructions-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home, { providers: ['codex'] })
@@ -478,7 +482,7 @@ test('canonical Home and Desk instructions are required, source-owned and fully 
     await initHome(emptyDesk, { mode: 'team' })
     const deskRepository = join(temporary, 'desk-repository')
     await exec('git', ['init', '--quiet', '--initial-branch=main', deskRepository])
-    await writeFile(join(deskRepository, 'desk.json'), '{"$schema":"https://hairness.dev/schema/desk.json","id":"alexis"}\n')
+    await writeFile(join(deskRepository, 'desk.json'), '{"$schema":"https://endroit.org/schema/desk.json","id":"alexis"}\n')
     await exec('git', ['add', 'desk.json'], { cwd: deskRepository })
     await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'desk'], { cwd: deskRepository })
     await assert.rejects(() => cloneDesk(emptyDesk, deskRepository), (error) => error.code === 'desk_instruction_missing')
@@ -489,13 +493,13 @@ test('canonical Home and Desk instructions are required, source-owned and fully 
 })
 
 test('a clone is immediately usable from tracked projections without local build state', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-clone-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-clone-'))
   try {
     const source = join(temporary, 'source')
     const clone = join(temporary, 'clone')
     await createHome(source)
     await exec('git', ['clone', '--quiet', source, clone])
-    await assert.rejects(readFile(join(clone, '.hairness/build.json')), (error) => error.code === 'ENOENT')
+    await assert.rejects(readFile(join(clone, '.endroit/build.json')), (error) => error.code === 'ENOENT')
     assert.equal((await doctorHome(clone)).status, 'ready')
     await buildHome(clone, { check: true })
   } finally {
@@ -504,22 +508,22 @@ test('a clone is immediately usable from tracked projections without local build
 })
 
 test('doctor reports a missing runtime as a limit instead of crashing', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-doctor-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-doctor-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
-    await rm(join(home, 'assets/hairness/hud/runtime.mjs'))
+    await rm(join(home, 'assets/endroit/hud/runtime.mjs'))
     const report = await doctorHome(home)
     assert.equal(report.status, 'partial')
-    assert.equal(report.runtimes.find((entry) => entry.name === 'hairness/hud').error, 'ENOENT')
-    assert.ok(report.limits.includes('runtime-invalid:hairness/hud:ENOENT'))
+    assert.equal(report.runtimes.find((entry) => entry.name === 'endroit/hud').error, 'ENOENT')
+    assert.ok(report.limits.includes('runtime-invalid:endroit/hud:ENOENT'))
   } finally {
     await removeTree(temporary, { force: true })
   }
 })
 
 test('team Desk projections remain local while Desk sources stay in the nested repository', async () => {
-  const temporary = await mkdtemp(join(tmpdir(), 'hairness-team-projection-'))
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-team-projection-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home, { mode: 'team', providers: ['codex'] })

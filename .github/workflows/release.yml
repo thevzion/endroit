@@ -14,7 +14,7 @@ concurrency:
 
 env:
   NPM_VERSION: 11.5.1
-  RELEASE_ARTIFACT: hairness-0.6-release-candidate
+  RELEASE_ARTIFACT: endroit-0.7-release-candidate
 
 jobs:
   qualify:
@@ -84,7 +84,7 @@ jobs:
     runs-on: ubuntu-latest
     environment:
       name: npm
-      url: https://www.npmjs.com/package/@hairness/cli
+      url: https://www.npmjs.com/package/@endroit/cli
     permissions:
       contents: read
       id-token: write

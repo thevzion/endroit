@@ -1,6 +1,6 @@
 # {{home.name}}
 
-This is a {{home.mode}} Hairness Home: a provider-agnostic environment shared
+This is a {{home.mode}} Endroit Home: a provider-agnostic environment shared
 by humans and agents.
 
 ## Ownership

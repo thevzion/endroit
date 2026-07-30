@@ -4,7 +4,7 @@ export const claude = {
   id: 'claude',
   instructionPath: 'CLAUDE.md',
   hookPath: '.claude/settings.json',
-  sessionPath: '.claude/hooks/hairness-session-start.mjs',
+  sessionPath: '.claude/hooks/endroit-session-start.mjs',
   skillRoot: '.claude/skills',
   invocation: '/',
   output(surface, capability) {

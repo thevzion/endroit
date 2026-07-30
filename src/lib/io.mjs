@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { dirname, relative, resolve, sep } from 'node:path'
-import { HairnessError } from './errors.mjs'
+import { EndroitError } from './errors.mjs'
 
 export function digest(value) {
   const bytes = Buffer.isBuffer(value) ? value : Buffer.from(typeof value === 'string' ? value : JSON.stringify(value))
@@ -27,7 +27,7 @@ export async function readJson(path, fallback) {
     return JSON.parse(await readFile(path, 'utf8'))
   } catch (error) {
     if (error.code === 'ENOENT' && fallback !== undefined) return fallback
-    if (error instanceof SyntaxError) throw new HairnessError('invalid_json', `Invalid JSON at ${path}.`, { cause: error })
+    if (error instanceof SyntaxError) throw new EndroitError('invalid_json', `Invalid JSON at ${path}.`, { cause: error })
     throw error
   }
 }
@@ -45,7 +45,7 @@ export async function writeFileAtomic(path, value, mode = 0o600) {
 
 export function assertId(value, label = 'id') {
   if (!/^[a-z0-9][a-z0-9._/-]{0,127}$/.test(String(value ?? '')) || String(value).includes('..')) {
-    throw new HairnessError('invalid_id', `Invalid ${label}: ${value}`)
+    throw new EndroitError('invalid_id', `Invalid ${label}: ${value}`)
   }
   return value
 }
@@ -54,7 +54,7 @@ export function assertInside(root, candidate, label = 'path') {
   const base = resolve(root)
   const target = resolve(candidate)
   const rel = relative(base, target)
-  if (rel === '..' || rel.startsWith(`..${sep}`)) throw new HairnessError('path_escape', `${label} escapes ${base}.`)
+  if (rel === '..' || rel.startsWith(`..${sep}`)) throw new EndroitError('path_escape', `${label} escapes ${base}.`)
   return target
 }
 
@@ -62,7 +62,7 @@ export async function resolvePackageFile(root, path, label = 'package path') {
   const base = await realpath(root)
   const target = assertInside(base, resolve(base, path), label)
   const stat = await lstat(target)
-  if (stat.isSymbolicLink()) throw new HairnessError('symlink_forbidden', `${label} must not be a symbolic link.`)
+  if (stat.isSymbolicLink()) throw new EndroitError('symlink_forbidden', `${label} must not be a symbolic link.`)
   const resolved = await realpath(target)
   assertInside(base, resolved, label)
   return resolved

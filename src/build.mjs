@@ -3,14 +3,14 @@ import { join, relative } from 'node:path'
 import { applyTransaction } from './assets.mjs'
 import { homeConsole, renderFloorPlan, sessionWrapper } from './front-door.mjs'
 import { git } from './git.mjs'
-import { HairnessError } from './lib/errors.mjs'
+import { EndroitError } from './lib/errors.mjs'
 import { digest, exists, readJson, resolvePackageFile, writeFileAtomic } from './lib/io.mjs'
 import { provider } from './providers/index.mjs'
 import { resolveHome } from './resolved.mjs'
 
 export async function buildHome(root, options = {}) {
   const plan = await resolveHome(root)
-  const statePath = join(root, '.hairness', 'build.json')
+  const statePath = join(root, '.endroit', 'build.json')
   const previous = await readJson(statePath, null)
   const wanted = await providerOutputs(plan)
   wanted.sort((left, right) => left.path.localeCompare(right.path))
@@ -50,10 +50,10 @@ async function providerOutputs(plan) {
 
   const values = []
   values.push({
-    path: 'hairness.mjs',
+    path: 'endroit.mjs',
     content: Buffer.from(homeConsole()),
     provider: null,
-    owner: 'hairness/kernel',
+    owner: 'endroit/kernel',
     scope: 'home',
   })
   for (const providerId of plan.home.providers) {
@@ -62,7 +62,7 @@ async function providerOutputs(plan) {
       path: projector.instructionPath,
       content: Buffer.from(await renderAgentContract(plan)),
       provider: providerId,
-      owner: 'hairness/instructions',
+      owner: 'endroit/instructions',
       scope: 'home',
     })
     if (plan.frontDoor) {
@@ -70,13 +70,13 @@ async function providerOutputs(plan) {
         path: projector.sessionPath,
         content: Buffer.from(sessionWrapper(providerId, plan.frontDoor)),
         provider: providerId,
-        owner: 'hairness/kernel',
+        owner: 'endroit/kernel',
         scope: 'home',
       })
     }
     for (const surface of [...surfaces.values()].sort((left, right) => left.projectedId.localeCompare(right.projectedId))) {
       const capability = capabilities.get(surface.capability)
-      if (!capability) throw new HairnessError('capability_missing', `${surface.id} references missing ${surface.capability}.`)
+      if (!capability) throw new EndroitError('capability_missing', `${surface.id} references missing ${surface.capability}.`)
       const output = projector.output(surface, capability)
       values.push({ ...output, provider: providerId, owner: surface.owner, scope: surface.scope, content: Buffer.from(output.content) })
     }
@@ -87,7 +87,7 @@ async function providerOutputs(plan) {
 function mergeSurface(surfaces, item, kind) {
   const key = `${item.projectedId}:${item.capability}`
   const conflicting = [...surfaces.values()].find((entry) => entry.projectedId === item.projectedId && entry.capability !== item.capability)
-  if (conflicting) throw new HairnessError('surface_collision', `${item.projectedId} maps to multiple Capabilities.`)
+  if (conflicting) throw new EndroitError('surface_collision', `${item.projectedId} maps to multiple Capabilities.`)
   const surface = surfaces.get(key) ?? {
     id: item.id,
     owner: item.owner,
@@ -132,7 +132,7 @@ async function reconcileOutputs(root, previous, wanted, check) {
     const prior = previous.find((item) => item.path === entry.path)
     const current = await generatedFile(path, entry.path)
     if (current && prior && digest(current) !== prior.digest) throw diverged(entry.path)
-    if (current && !prior && digest(current) !== digest(entry.content)) throw new HairnessError('generated_output_collision', `${entry.path} already exists and Hairness does not own it.`, { exitCode: 5 })
+    if (current && !prior && digest(current) !== digest(entry.content)) throw new EndroitError('generated_output_collision', `${entry.path} already exists and Endroit does not own it.`, { exitCode: 5 })
     if (check && (!current || digest(current) !== digest(entry.content))) throw stale(`${entry.path} needs a rebuild.`)
     if (!check && (!current || digest(current) !== digest(entry.content))) writes.push({ path, content: entry.content })
     outputs.push({ path: entry.path, provider: entry.provider, owner: entry.owner, scope: entry.scope, digest: digest(entry.content) })
@@ -144,7 +144,7 @@ async function generatedFile(path, label) {
   try {
     const info = await lstat(path)
     if (info.isSymbolicLink() || !info.isFile()) {
-      throw new HairnessError('generated_output_invalid', `${label} must be a regular non-symlink file.`, { exitCode: 5 })
+      throw new EndroitError('generated_output_invalid', `${label} must be a regular non-symlink file.`, { exitCode: 5 })
     }
     return readFile(path)
   } catch (error) {
@@ -159,7 +159,7 @@ async function planHookConfig(path, active, projector, check) {
   const current = currentText ? JSON.parse(currentText) : {}
   current.hooks ??= {}
   const entries = (current.hooks.SessionStart ?? []).flatMap((entry) => {
-    const hooks = (entry.hooks ?? []).filter((hook) => !hairnessSessionHook(hook.command))
+    const hooks = (entry.hooks ?? []).filter((hook) => !endroitSessionHook(hook.command))
     return hooks.length ? [{ ...entry, hooks }] : []
   })
   if (active) entries.push(projector.hook())
@@ -174,8 +174,8 @@ async function planHookConfig(path, active, projector, check) {
   }
 }
 
-function hairnessSessionHook(command = '') {
-  return /hairness-session-start\.mjs$/.test(command)
+function endroitSessionHook(command = '') {
+  return /endroit-session-start\.mjs$/.test(command)
 }
 
 async function reconcileDeskExcludes(root, plan, outputs, check) {
@@ -187,12 +187,12 @@ async function reconcileDeskExcludes(root, plan, outputs, check) {
   }
   if (!path.startsWith('/')) path = join(root, path)
   const current = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? '' : Promise.reject(error))
-  const region = /# hairness:desk-projections begin\n[\s\S]*?# hairness:desk-projections end\n?/g
+  const region = /# endroit:desk-projections begin\n[\s\S]*?# endroit:desk-projections end\n?/g
   const base = current.replace(region, '')
   const paths = plan.home.mode === 'team' && plan.desk
     ? outputs.filter((entry) => entry.scope === 'desk').map((entry) => `/${entry.path}`).sort()
     : []
-  const block = paths.length ? `# hairness:desk-projections begin\n${paths.join('\n')}\n# hairness:desk-projections end\n` : ''
+  const block = paths.length ? `# endroit:desk-projections begin\n${paths.join('\n')}\n# endroit:desk-projections end\n` : ''
   const next = block ? `${base.trimEnd()}${base.trim() ? '\n' : ''}${block}` : `${base.trimEnd()}${base.trim() ? '\n' : ''}`
   if (check && current !== next) throw stale('Local Git excludes do not match Desk projections.')
   if (!check && current !== next) await writeFileAtomic(path, next, 0o644)
@@ -201,11 +201,11 @@ async function reconcileDeskExcludes(root, plan, outputs, check) {
 function assertNoOutputCollisions(outputs) {
   const owners = new Map()
   for (const output of outputs) {
-    if (owners.has(output.path)) throw new HairnessError('generated_output_collision', `${output.path} is owned by both ${owners.get(output.path)} and ${output.owner}.`)
+    if (owners.has(output.path)) throw new EndroitError('generated_output_collision', `${output.path} is owned by both ${owners.get(output.path)} and ${output.owner}.`)
     owners.set(output.path, output.owner)
   }
 }
 
 function relativeManaged(root, entry) { return { ...entry, path: relative(root, entry.path) } }
-function stale(message) { return new HairnessError('build_stale', message, { exitCode: 5 }) }
-function diverged(path) { return new HairnessError('generated_output_diverged', `${path} was edited.`, { exitCode: 5 }) }
+function stale(message) { return new EndroitError('build_stale', message, { exitCode: 5 }) }
+function diverged(path) { return new EndroitError('generated_output_diverged', `${path} was edited.`, { exitCode: 5 }) }
