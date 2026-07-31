@@ -3,7 +3,7 @@
 Read the [technical reference](docs/reference.md) and [security policy](SECURITY.md)
 before changing public behavior.
 
-Change canonical source under `src/`, `schemas/` or `assets/`. Keep the
+Change canonical source under `src/`, `schemas/` or `equipment/`. Keep the
 README, reference, schemas, CLI and tests aligned. Add a durable test for a
 recurring correction.
 
@@ -16,12 +16,12 @@ npm run dev:verify
 ```
 
 The default Home is `../endroit-development-home`. It is a team Home whose
-`endroit/main` Binding points back to this repository. Use
+`endroit/main` Route points back to this Site. Use
 `npm run dev:home:recreate` for a clean rebuild; it refuses dirty Home or Desk
 repositories and rolls back a failed replacement. The scripts never create a
 remote, commit or push.
 
-Edit `HOME.md`, `DESK.md` or the relevant Asset Instruction as canonical
+Edit `HOME.md`, `DESK.md` or the relevant Equipment Instruction as canonical
 source. Never edit `AGENTS.md` or `CLAUDE.md`; they are fully owned provider
 projections. The development reconciler preserves these source-owned
 instructions and refuses an incomplete Desk.
@@ -55,7 +55,7 @@ release or another external delivery effect.
 ## Runtime support
 
 Endroit qualifies runtimes through evidence, not a compatibility claim. Check
-the [runtime matrix and qualification gate](ROADMAP.md#runtime-matrix), then
+the [provider evidence and qualification work](ROADMAP.md#provider-evidence), then
 open a
 [Runtime support request](https://github.com/thevzion/endroit/issues/new?template=runtime-support.yml)
 before implementation.
@@ -94,5 +94,5 @@ Trusted publishing does not authorize a later `npm dist-tag` mutation. Keep
 that authenticated step separate from the OIDC workflow.
 
 Use Conventional Commits and keep changes focused. A new dependency, executable
-Asset runtime or public contract change needs a concrete consumer and maintainer
+Equipment runtime or public contract change needs a concrete consumer and maintainer
 agreement.

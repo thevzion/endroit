@@ -1,18 +1,12 @@
 import { resolve } from 'node:path'
 
-export const CREATE_WORDMARK = [
-  ' _           _',
-  '| |__   __ _(_)_ __ _ __   ___  ___ ___',
-  "| '_ \\ / _` | | '__| '_ \\ / _ \\/ __/ __|",
-  '| | | | (_| | | |  | | | |  __/\\__ \\__ \\',
-  '|_| |_|\\__,_|_|_|  |_| |_|\\___||___/___/',
-].join('\n')
+export const CREATE_WORDMARK = 'endroit'
 
 const modes = [
   {
     value: 'solo',
     label: 'Solo',
-    hint: 'Home and personal Desk share Git; Target Bindings stay local',
+    hint: 'Home and personal Desk share Git; Site Routes stay local',
   },
   {
     value: 'team',
@@ -21,7 +15,7 @@ const modes = [
   },
 ]
 
-const assets = [
+const equipment = [
   { value: 'research', label: 'Research', hint: 'reusable evidence-backed studies' },
   { value: 'planning', label: 'Planning', hint: 'roadmaps and bounded initiatives' },
   { value: 'publishing', label: 'Publishing', hint: 'source-owned publications and external Handles' },
@@ -48,9 +42,9 @@ async function renderWizard(options) {
 
   prompts.intro(`${CREATE_WORDMARK}\n\nOwn the place where your agents work.`, common)
   prompts.note([
-    'A Home owns shared rules and Workspaces.',
+    'A Home owns shared rules and Rooms.',
     'Your Desk keeps personal continuity.',
-    'Targets keep their repositories and history.',
+    'Sites keep their repositories and history.',
   ].join('\n'), 'What Endroit owns', common)
 
   let mode = options.mode
@@ -68,8 +62,8 @@ async function renderWizard(options) {
   if (!options.selectionProvided) {
     selected = await prompts.multiselect({
       ...common,
-      message: 'Add optional capabilities',
-      options: assets,
+      message: 'Add optional Equipment',
+      options: equipment,
       initialValues: [],
       required: false,
     })

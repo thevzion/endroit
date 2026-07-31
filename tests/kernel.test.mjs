@@ -16,12 +16,12 @@ import { removeTree } from '../src/lib/io.mjs'
 import { renderFloorPlan, sessionWrapper } from '../src/front-door.mjs'
 import { assertRuntime } from '../src/home.mjs'
 import { resolveHome } from '../src/resolved.mjs'
-import { addAssets } from '../src/assets.mjs'
-import { asset, captureIo, writeAsset } from './helpers.mjs'
+import { addEquipment } from '../src/equipment.mjs'
+import { equipment, captureIo, writeEquipment } from './helpers.mjs'
 
 const exec = promisify(execFile)
 
-test('create supports a TTY preview and explicit optional native Assets', async () => {
+test('create supports a TTY preview and explicit optional native Equipment', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-create-wizard-'))
   try {
     const home = join(temporary, 'home')
@@ -39,13 +39,13 @@ test('create supports a TTY preview and explicit optional native Assets', async 
     ])
     assert.ok(CREATE_WORDMARK.split('\n').every((line) => line.length < 64))
     assert.equal(JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')).mode, 'team')
-    assert.equal(await readFile(join(home, 'workspaces/home/workspace.md'), 'utf8').then((value) => value.includes('workspace:home/home')), true)
-    assert.equal(await readFile(join(home, 'assets/endroit/research/asset.json'), 'utf8').then(Boolean), true)
-    assert.equal(await readFile(join(home, 'assets/endroit/publishing/asset.json'), 'utf8').then(Boolean), true)
-    await assert.rejects(readFile(join(home, 'assets/endroit/planning/asset.json')), (error) => error.code === 'ENOENT')
+    assert.equal(await readFile(join(home, 'rooms/home/ROOM.md'), 'utf8').then((value) => value.includes('room:home/home')), true)
+    assert.equal(await readFile(join(home, 'equipment/endroit/research/equipment.json'), 'utf8').then(Boolean), true)
+    assert.equal(await readFile(join(home, 'equipment/endroit/publishing/equipment.json'), 'utf8').then(Boolean), true)
+    await assert.rejects(readFile(join(home, 'equipment/endroit/planning/equipment.json')), (error) => error.code === 'ENOENT')
     const catalog = captureIo()
-    assert.equal(await runCli(['asset', 'catalog', '--home', home, '--json'], catalog.io), 0, catalog.stderr())
-    const native = JSON.parse(catalog.stdout()).assets
+    assert.equal(await runCli(['equipment', 'catalog', '--home', home, '--json'], catalog.io), 0, catalog.stderr())
+    const native = JSON.parse(catalog.stdout()).equipment
     assert.equal(native.find((entry) => entry.id === 'endroit/research').installed.includes('home'), true)
     assert.equal(native.find((entry) => entry.id === 'endroit/planning').installed.length, 0)
 
@@ -54,7 +54,7 @@ test('create supports a TTY preview and explicit optional native Assets', async 
     assert.equal(await runCli(['create', automatic, '--with', 'all', '--no-interactive', '--yes'], captured.io), 0, captured.stderr())
     assert.doesNotMatch(captured.stdout(), /\u001b\[/)
     for (const id of ['research', 'planning', 'publishing', 'scratch']) {
-      assert.equal(await readFile(join(automatic, `assets/endroit/${id}/asset.json`), 'utf8').then(Boolean), true)
+      assert.equal(await readFile(join(automatic, `equipment/endroit/${id}/equipment.json`), 'utf8').then(Boolean), true)
     }
 
     const flagged = join(temporary, 'flagged')
@@ -87,7 +87,7 @@ test('create supports a TTY preview and explicit optional native Assets', async 
       forceColor: '0',
     })
     assert.equal(JSON.parse(await readFile(join(flagged, 'endroit.json'), 'utf8')).mode, 'team')
-    assert.equal(await readFile(join(flagged, 'assets/endroit/scratch/asset.json'), 'utf8').then(Boolean), true)
+    assert.equal(await readFile(join(flagged, 'equipment/endroit/scratch/equipment.json'), 'utf8').then(Boolean), true)
 
     const structured = join(temporary, 'structured')
     const structuredIo = captureTtyIo()
@@ -121,11 +121,49 @@ test('create cancellation is friendly and leaves no destination', async () => {
   }
 })
 
+test('init embeds a Home in an existing repository without merging Site and Home ownership', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-init-'))
+  try {
+    const repository = join(temporary, 'repository')
+    await exec('git', ['init', '--quiet', '--initial-branch=main', repository])
+    await writeFile(join(repository, 'README.md'), '# Existing product\n')
+    await exec('git', ['add', 'README.md'], { cwd: repository })
+    await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'initial'], { cwd: repository })
+    const output = captureIo()
+    assert.equal(await runCli(['init', repository, '--json'], output.io), 0, output.stderr())
+    const initialized = JSON.parse(output.stdout())
+    assert.equal(initialized.status, 'initialized')
+    assert.equal(await readFile(join(repository, 'README.md'), 'utf8'), '# Existing product\n')
+    assert.match(await readFile(join(repository, 'sites/self/SITE.md'), 'utf8'), /kind: "site"/)
+    assert.deepEqual(JSON.parse(await readFile(join(repository, '.desk/routes/self/embedded.json'), 'utf8')), {
+      $schema: 'https://endroit.org/schema/route.json',
+      id: 'embedded',
+      site: 'self',
+      mode: 'embedded',
+      path: '.',
+    })
+    assert.equal((await exec('git', ['check-ignore', '.desk/routes/self/embedded.json'], { cwd: repository })).stdout.trim(), '.desk/routes/self/embedded.json')
+    assert.equal((await resolveHome(repository)).sites[0].id, 'self')
+    assert.equal((await doctorHome(repository)).status, 'ready')
+
+    const collision = join(temporary, 'collision')
+    await exec('git', ['init', '--quiet', '--initial-branch=main', collision])
+    await mkdir(join(collision, 'rooms', 'home'), { recursive: true })
+    await writeFile(join(collision, 'rooms', 'home', 'ROOM.md'), 'product-owned\n')
+    const refused = captureIo()
+    assert.notEqual(await runCli(['init', collision], refused.io), 0)
+    assert.match(refused.stderr(), /home_room_exists/)
+    assert.equal(await readFile(join(collision, 'rooms', 'home', 'ROOM.md'), 'utf8'), 'product-owned\n')
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
 test('create builds a source-owned Home and tracks shared provider projections', async () => {
-  assert.deepEqual(await compileSchemas(), ['home', 'desk', 'asset', 'runtime'])
+  assert.deepEqual(await compileSchemas(), ['home', 'desk', 'equipment', 'site', 'route', 'runtime'])
   await assert.rejects(
     () => validateDocument({ $schema: 'https://example.invalid/schema/home.json' }, 'home'),
-    (error) => error.code === 'schema_version_mismatch' && /Endroit 0\.7 requires https:\/\/endroit\.org\/schema\/home\.json/.test(error.message),
+    (error) => error.code === 'schema_version_mismatch' && /Endroit 0\.8 requires https:\/\/endroit\.org\/schema\/home\.json/.test(error.message),
   )
   const help = captureIo()
   assert.equal(await runCli([], help.io), 0)
@@ -139,18 +177,18 @@ test('create builds a source-owned Home and tracks shared provider projections',
       $schema: 'https://endroit.org/schema/home.json',
       name: 'home',
       emoji: '🏠',
-      runtime: '@endroit/cli@0.7.0-alpha.1',
+      runtime: '@endroit/cli@0.8.0-alpha.0',
       mode: 'solo',
       providers: ['codex', 'claude'],
       prefix: 'acme',
       frontDoor: { wakeUp: 'endroit/hud:prompt' },
     })
-    for (const name of ['artifacts', 'hud', 'onboarding', 'targets']) {
-      const manifest = JSON.parse(await readFile(join(home, `assets/endroit/${name}/asset.json`), 'utf8'))
+    for (const name of ['artifacts', 'hud', 'onboarding', 'sites']) {
+      const manifest = JSON.parse(await readFile(join(home, `equipment/endroit/${name}/equipment.json`), 'utf8'))
       assert.equal(manifest.origin.source, `@endroit/${name}`)
       assert.match(manifest.origin.baseManifestDigest, /^sha256:[a-f0-9]{64}$/)
     }
-    await assert.rejects(readFile(join(home, 'assets/endroit/scratch/asset.json')), (error) => error.code === 'ENOENT')
+    await assert.rejects(readFile(join(home, 'equipment/endroit/scratch/equipment.json')), (error) => error.code === 'ENOENT')
     const tracked = (await exec('git', ['ls-files'], { cwd: home })).stdout
     for (const path of [
       'HOME.md',
@@ -159,13 +197,13 @@ test('create builds a source-owned Home and tracks shared provider projections',
       'CLAUDE.md',
       '.agents/skills/acme-endroit-onboarding/SKILL.md',
       '.agents/skills/acme-endroit-artifacts/SKILL.md',
-      '.agents/skills/acme-endroit-target-manage/SKILL.md',
+      '.agents/skills/acme-endroit-site-manage/SKILL.md',
       '.claude/settings.json',
       '.claude/hooks/endroit-session-start.mjs',
       '.codex/hooks.json',
       '.codex/hooks/endroit-session-start.mjs',
       'endroit.mjs',
-      'assets/endroit/hud/runtime.mjs',
+      'equipment/endroit/hud/runtime.mjs',
     ]) assert.match(tracked, new RegExp(`^${escape(path)}$`, 'm'))
     assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /^# home$/m)
     assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /^# local's Desk$/m)
@@ -180,7 +218,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
     assert.equal((await doctorHome(home)).status, 'ready')
     await buildHome(home, { check: true })
     const plan = await resolveHome(home)
-    assert.deepEqual(plan.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'target', 'workspace'])
+    assert.deepEqual(plan.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'room', 'site'])
     assert.deepEqual(plan.frontDoor, {
       route: 'endroit/hud:prompt',
       owner: 'endroit/hud',
@@ -206,18 +244,18 @@ test('forEach accessors bind generated aliases to resolved Home items', async ()
   try {
     const home = join(temporary, 'home')
     await createHome(home)
-    const workspace = join(home, '.desk', 'workspaces', 'demo')
-    await mkdir(join(workspace, 'workstreams', 'delivery'), { recursive: true })
-    await writeFile(join(workspace, 'workspace.md'), [
+    const room = join(home, '.desk', 'rooms', 'demo')
+    await mkdir(join(room, 'meetings', 'delivery'), { recursive: true })
+    await writeFile(join(room, 'ROOM.md'), [
       '---',
       'emoji: "🎛️"',
-      'summary: "Demo Workspace."',
+      'summary: "Demo Room."',
       'when: ["Working on the demo."]',
       'tags: ["demo"]',
       '---',
       '',
     ].join('\n'))
-    await writeFile(join(workspace, 'workstreams', 'delivery', 'workstream.md'), [
+    await writeFile(join(room, 'meetings', 'delivery', 'MEETING.md'), [
       '---',
       'emoji: "🚚"',
       'summary: "Deliver the demo."',
@@ -230,56 +268,58 @@ test('forEach accessors bind generated aliases to resolved Home items', async ()
       '`active`',
       '',
     ].join('\n'))
-    const homePath = join(home, 'endroit.json')
-    const document = JSON.parse(await readFile(homePath, 'utf8'))
-    document.settings = {
-      'endroit/targets': {
-        targets: [{
-          id: 'product',
-          emoji: '📦',
-          repository: 'github.com/example/product',
-          source: 'https://github.com/example/product.git',
-        }],
-      },
-    }
-    await writeFile(homePath, `${JSON.stringify(document, null, 2)}\n`)
-    const source = await writeAsset(join(temporary, 'routing'), asset({
+    await mkdir(join(home, 'sites', 'product'), { recursive: true })
+    await writeFile(join(home, 'sites', 'product', 'SITE.md'), [
+      '---',
+      '$schema: "https://endroit.org/schema/site.json"',
+      'id: "product"',
+      'kind: "site"',
+      'status: "active"',
+      'emoji: "📦"',
+      'repository: "github.com/example/product"',
+      'source: "https://github.com/example/product.git"',
+      '---',
+      '',
+      '# product',
+      '',
+    ].join('\n'))
+    const source = await writeEquipment(join(temporary, 'routing'), equipment({
       skills: [],
       commands: [
-        { id: 'workspace', capability: 'review', description: 'Review one Workspace.', forEach: 'workspace' },
-        { id: 'workstream', capability: 'review', description: 'Review one Workstream.', forEach: 'workstream' },
-        { id: 'target', capability: 'review', description: 'Review one Target.', forEach: 'target' },
+        { id: 'room', capability: 'review', description: 'Review one Room.', forEach: 'room' },
+        { id: 'meeting', capability: 'review', description: 'Review one Meeting.', forEach: 'meeting' },
+        { id: 'site', capability: 'review', description: 'Review one Site.', forEach: 'site' },
       ],
     }), {
       'capabilities/review.md': 'Review the bound item.\n',
     })
-    await addAssets(home, [source])
+    await addEquipment(home, [source])
     await buildHome(home)
 
     const plan = await resolveHome(home)
     assert.deepEqual(
-      plan.commands.filter(({ owner }) => owner === 'fixture/review').map(({ projectedId, binding }) => [projectedId, binding.ref, binding.emoji]),
+      plan.commands.filter(({ owner }) => owner === 'fixture/review').map(({ projectedId, route }) => [projectedId, route.ref, route.emoji]),
       [
-        ['review-workspace-home', 'workspace:home/home', null],
-        ['review-workspace-demo', 'workspace:desk/demo', '🎛️'],
-        ['review-workstream-demo-delivery', 'workstream:desk/demo/delivery', '🚚'],
-        ['review-target-product', 'target:product', '📦'],
+        ['review-room-home', 'room:home/home', null],
+        ['review-room-demo', 'room:desk/demo', '🎛️'],
+        ['review-meeting-demo-delivery', 'meeting:desk/demo/delivery', '🚚'],
+        ['review-site-product', 'site:product', '📦'],
       ],
     )
     assert.match(
-      await readFile(join(home, '.agents/skills/review-workstream-demo-delivery/SKILL.md'), 'utf8'),
-      /bound to workstream:desk\/demo\/delivery 🚚/,
+      await readFile(join(home, '.agents/skills/review-meeting-demo-delivery/SKILL.md'), 'utf8'),
+      /bound to meeting:desk\/demo\/delivery 🚚/,
     )
     assert.match(
-      await readFile(join(home, '.claude/skills/review-target-product/SKILL.md'), 'utf8'),
-      /bound to target:product 📦/,
+      await readFile(join(home, '.claude/skills/review-site-product/SKILL.md'), 'utf8'),
+      /bound to site:product 📦/,
     )
     const json = captureIo()
     assert.equal(await runCli(['hud', 'json', '--home', home], json.io), 0, json.stderr())
-    assert.ok(JSON.parse(json.stdout()).items.capabilities.some(({ id }) => id === 'review-workspace-demo'))
+    assert.ok(JSON.parse(json.stdout()).items.capabilities.some(({ id }) => id === 'review-room-demo'))
     const prompt = captureIo()
     assert.equal(await runCli(['hud', 'prompt', '--home', home], prompt.io), 0, prompt.stderr())
-    assert.doesNotMatch(prompt.stdout(), /review-workspace-demo/)
+    assert.doesNotMatch(prompt.stdout(), /review-room-demo/)
   } finally {
     await removeTree(temporary, { force: true })
   }
@@ -352,7 +392,7 @@ process.stdout.write('<wake-up source="' + process.env.ENDROIT_RUNTIME_SOURCE + 
     assert.equal(npm.stdout, '<wake-up source="npm"/>\n')
     assert.deepEqual(JSON.parse(await readFile(argsPath, 'utf8')), [
       '--yes',
-      '@endroit/cli@0.7.0-alpha.1',
+      '@endroit/cli@0.8.0-alpha.0',
       'hud',
       'prompt',
     ])
@@ -512,7 +552,7 @@ test('doctor reports a missing runtime as a limit instead of crashing', async ()
   try {
     const home = join(temporary, 'home')
     await createHome(home)
-    await rm(join(home, 'assets/endroit/hud/runtime.mjs'))
+    await rm(join(home, 'equipment/endroit/hud/runtime.mjs'))
     const report = await doctorHome(home)
     assert.equal(report.status, 'partial')
     assert.equal(report.runtimes.find((entry) => entry.name === 'endroit/hud').error, 'ENOENT')
@@ -528,7 +568,7 @@ test('team Desk projections remain local while Desk sources stay in the nested r
     const home = join(temporary, 'home')
     await createHome(home, { mode: 'team', providers: ['codex'] })
     await initDesk(home, { id: 'alexis', git: true })
-    const source = await writeAsset(join(temporary, 'personal'), asset({
+    const source = await writeEquipment(join(temporary, 'personal'), equipment({
       name: 'alexis/review',
       files: ['capabilities/review.md', 'instructions/personal.md'],
       instructions: [{ id: 'personal', path: 'instructions/personal.md' }],
@@ -536,7 +576,7 @@ test('team Desk projections remain local while Desk sources stay in the nested r
       'capabilities/review.md': 'Review from my Desk.\n',
       'instructions/personal.md': 'Reply in French.\n',
     })
-    await addAssets(home, [source], { scope: 'desk' })
+    await addEquipment(home, [source], { scope: 'desk' })
     await buildHome(home)
     const projection = '.agents/skills/review-review/SKILL.md'
     assert.match(await readFile(join(home, projection), 'utf8'), /my Desk/)

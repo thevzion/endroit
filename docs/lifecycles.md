@@ -1,204 +1,100 @@
 # Lifecycles
 
-## Home and Desk instructions
+## Home bootstrap
 
 ```text
-create          → render HOME.md once → source-owned constitution
-solo Desk      → render DESK.md once → versionable personal conventions
-team Desk      → init or clone       → private repository with DESK.md
+standalone: create <directory> → initialize Git → source files → Equipment → build → doctor → initial commit
+embedded:   init [repository]  → source files → Site self → Route embedded:. → build → doctor
 ```
 
-The built-in templates accept only `home.name`, `home.mode` and `desk.id`.
-Rendering happens once. Later edits are canonical source changes and are never
-re-templated. A team Home remains valid without a Desk; an existing Desk is
-valid only with both `desk.json` and `DESK.md`.
+`create` refuses an existing destination. `init` requires an existing Git
+repository and refuses an existing Home, Desk or canonical instruction source.
+It preserves existing product files.
 
-## Asset source
+## Desk
 
 ```text
-validate source → add → clean
-                         ├─ edit Home source → customized → sync --check blocks
-                         └─ override → Desk variant → promote → Home diff/PR
+solo Home → local Desk in Home Git
+team Home → no Desk required → desk init or desk clone
 ```
 
-`asset validate <source>` works outside a Home and validates the manifest,
-referenced files, schemas, templates and digest without installation. `add`
-previews and transactionally copies files. `status` is offline and exposes the
-effective digest. `sync --check` resolves the recorded or selected source and
-returns the complete upstream diff without writing. `remove` deletes only
-declared source-owned files and preserves unknown files.
+The Desk owns personal Guidance and Routes. Team Desk paths are never promoted
+to Home settings.
 
-An override records the Home base digests. Promotion replaces the Home Asset
-only if those bytes are unchanged; no automatic merge occurs.
-
-If the Home selected an Asset command for `frontDoor.wakeUp`, add, sync, remove,
-override and promote compute the effective post-mutation composition first.
-They refuse any write that would remove its runtime or command.
-
-## Runtime trust
+## Equipment
 
 ```text
-installed static source
-  → inspect source + offline status and digest
-  → trust exact digest locally
-  → dispatch runtime
-  → any byte changes
-  → approval no longer matches
+validate → preview → explicit install → build
+                          ├─ edit source → customized
+                          ├─ sync --check → upstream diff
+                          ├─ override → Desk variant → promote
+                          └─ remove declared files only
 ```
+
+Runtime trust is separate:
 
 ```text
-exact npm-bundled bytes → bundled
-matching local approval → approved
-anything else           → pending
+exact bundled bytes → bundled
+exact local approval → approved
+changed bytes        → pending
 ```
 
-Only `bundled` and `approved` runtimes can execute. Any byte change returns an
-approved runtime to `pending`.
-
-## Workspace
+## Room, Meeting and Material
 
 ```text
-create Home → workspace:home/home
-durable personal milestone → workspace create <id> --scope desk
+Room persists
+  └─ Meeting begins with hot context
+       ├─ no durable outcome
+       ├─ retain safe Material
+       ├─ accept Material as Room truth
+       └─ deliver through a Route
+retained or accepted Material → archive explicitly when inactive
 ```
 
-Every live Workspace has `workspace.md` and `inbox.md`. Home and Desk IDs are
-unique in one Resolved Home. `workstreams/` and `decisions/` remain sparse.
-`workspace doctor` is read-only and never repairs or archives implicitly.
+Chat creation alone writes nothing. `meetings/` is reserved for explicitly
+retained records. Transcripts, hidden reasoning and credentials are never
+canonical Material.
 
-## Artifact
+The 0.8 Core exposes Room creation and inspection. Retention, acceptance and
+delivery remain explicit Equipment or human workflows; they are not silently
+performed by the Kernel.
+
+## Site and Route
 
 ```text
-create/import in Workspace → validate → promote to Home Workspace or Target
-                                   └── source remains
+site add remote                  → remote-only Site
+site add existing checkout       → Site + existing Route main
+route bind                       → existing | embedded | submodule
+route clone                      → managed-clone under .desk/sites
+route worktree                   → managed-worktree under .desk/sites
+route inspect                    → deterministic Git evidence
+route remove                     → metadata only
+route remove --delete            → guarded managed-checkout deletion
+site remove                      → only after all Routes are gone
 ```
 
-An Artifact kind is declared by an Asset. The kind owns allowed owners, states,
-schema and template. `--from <directory>` imports a tree atomically after
-rejecting symbolic links and the reserved `artifact.md`.
+Managed worktree creation resolves local refs and revalidates repository,
+branch and HEAD. It never fetches or copies dirty source changes.
 
-New Artifact sources use
-`<workspace>/<workspaceNamespace>/<kind>/<id>/artifact.md`. Legacy
-`artifacts/` and `.desk/artifacts/` roots are read-only: list, inspect,
-validate and promote can consume them, but create never writes there.
+Managed removal refuses dirty, locked, prunable, unavailable or dependent
+checkouts. Endroit does not delete branches or manage submodule lifecycle.
 
-Promotion preserves content, records the canonical source ref and digest, and
-never removes the source. Desk → Home or Target and Home → Target are allowed;
-Home → Desk is not.
-
-Artifact-to-Asset curation is a separate human authoring step. `artifact
-publish` and `asset publish` are deprecated prerelease aliases for promotion.
-
-## Publishing
+## Build and Front Door
 
 ```text
-outline → draft → ready → exact consent → observed remote success → published
-                                                        └── Handle
-published → draft revision ─────────────────────────────┘
+owned sources → resolve → static Floor Plan → provider projections
+                                      └────→ optional Wake-up/HUD
 ```
 
-A Publication Artifact requires `content.md`, the exact projectable source.
-The instruction-only Publishing Capability obtains consent for content,
-account and destination, uses an available connector, verifies the external
-result and only then writes a Handle. Without a connector it returns a manual
-handoff and records neither a Handle nor `published`. Revalidation updates
-dated observations and drift status without importing remote content
-implicitly.
+Build is deterministic. The HUD is observational and executes no other
+Equipment runtime. Its absence degrades live orientation, not the Home.
 
-Publication source state and remote Handle state are independent. Reopening a
-published Publication sets its current source revision to `draft` without
-changing, deleting or fabricating the existing Handle. The Publication record
-keeps the prior URL, publication time and digest. A later approved projection
-updates or supersedes the remote object; an observed withdrawal marks its
-Handle `removed`.
-
-`derived_from` records provenance. Optional `canonical_dependencies` identify
-definitions whose changes require a targeted re-read.
-`related_publications` supports navigation without making another article a
-prerequisite. `stability` and `update_triggers` declare why a Publication may
-change.
-
-## Target
+## Artifact promotion
 
 ```text
-declare remote identity
-  ├─ clone → managed Binding
-  ├─ bind existing checkout → external Binding
-  └─ usable Binding → managed linked worktree
-          ↓
-      deterministic inspect
-          ↓
-    agent interpretation
-          ↓
-    Desk Target Map Artifact
+create/import in Room → validate → promote to broader Room or Site
+                                   └─ source remains
 ```
 
-A Target accepts multiple named Bindings. A unique Binding is inferred;
-ambiguity requires `--binding` or `--from-binding` while creating a worktree.
-Bindings preserve compatible ownership as `bound | managed` and separately
-identify their checkout as `main | linked-worktree`.
-
-`target worktree` creates only below `.desk/targets/<target>/<binding>`, from a
-local branch or a new branch at a locally resolved commit. It never fetches,
-forces or copies source working-tree changes. `target list` aggregates
-`git worktree list --porcelain -z` across usable Bindings and exposes
-unregistered worktrees without binding them.
-
-`target inspect` reads tracked paths, manifests, test names and local Git
-evidence, caps inspection at 5,000 paths and never writes into the Target. The
-Target Map Capability then guides the agent to interpret the bounded evidence
-and create one inspectable Artifact per Target.
-
-Unbinding a symlink removes only the link. Deleting a clean managed clone uses
-filesystem removal only when its common Git directory has no dependent
-worktrees. Deleting a clean, unlocked linked worktree uses
-`git worktree remove`; Endroit never deletes its branch or automatically
-forces, prunes, repairs or unlocks Git metadata.
-
-## Front Door
-
-```text
-build
-  → HOME.md
-  → static Floor Plan
-  → Home Asset Instructions
-  → provider entrypoint
-  → optional SessionStart Bridge
-  → Home Console
-  → selected Wake-up route
-```
-
-The Floor Plan is immediately usable from tracked projections. A Home without a
-Wake-up route has no Endroit SessionStart wrapper and remains valid.
-
-When configured, the provider Bridge invokes the route through
-`node ./endroit.mjs`. The Console uses a regular non-symlink
-`.endroit/dev-cli` when present; otherwise it invokes the exact
-`endroit.json#runtime` through `npx`. A present but failing development
-launcher never falls back to npm.
-
-The Bridge treats output as opaque. It discards stderr, caps stdout at 256 KiB
-and expires after 30 seconds. Failure yields a bounded
-`<endroit-front-door status="degraded" … />` marker while the Floor Plan
-continues to orient the session.
-
-The first-party default is `endroit/hud:prompt`. HUD reads local evidence and
-the Resolved Home, includes `DESK.md` and Desk Asset Instructions, then emits
-XML for the active agent. It executes no other Asset runtime. Its optional
-prompt budget is owned by `settings["endroit/hud"].promptBytes`.
-
-`hud activity` computes recent attributed observations on demand. It stores no
-event log and does not run during `build`, `doctor` or Home resolution.
-
-## Endroit development
-
-```text
-dev:home → reconcile sibling team Home → bind repository → build → doctor
-dev:session → open provider inside that Home → static Floor Plan + Wake-up
-dev:verify → contracts + persistent Home
-dev:verify --full → release qualification
-```
-
-`dev:home:recreate` requires clean Home and Desk repositories. It qualifies a
-staged replacement, moves the original Desk without transforming it, swaps the
-Home and restores the previous instance after any failure.
+Promotion records lineage and never deletes the source. Remote publication is
+complete only after an external result is observed.

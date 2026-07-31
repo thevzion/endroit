@@ -11,26 +11,30 @@ export function renderFloorPlan(plan) {
 
 - Home: \`${plan.home.name}\` (\`${plan.home.mode}\`)
 - Providers: ${plan.home.providers.map((provider) => `\`${provider}\``).join(', ')}
-- Home sources: \`endroit.json\`, \`HOME.md\`, \`assets/\`, \`workspaces/\`
-- Desk sources: \`.desk/DESK.md\`, \`.desk/assets/\`, \`.desk/workspaces/\`, \`.desk/targets/\`
+- Home sources: \`endroit.json\`, \`HOME.md\`, \`equipment/\`, \`rooms/\`
+- Desk sources: \`.desk/DESK.md\`, \`.desk/equipment/\`, \`.desk/rooms/\`, \`.desk/routes/\`
+- Local Site checkouts: \`.desk/sites/\` (ignored)
 - Local rebuildable state: \`.endroit/\`
 
-The Home owns its constitution, shared Workspaces and projections. The Desk
-owns collaborator-local Workspaces. Targets own product sources. Artifacts live
-inside their owning Workspace; legacy Artifact roots are read-only. Generated
+The Home owns its constitution, shared Rooms and projections. The Desk
+owns collaborator-local Rooms. Sites own product sources. Artifacts live
+inside their owning Room; legacy Artifact roots are read-only. Generated
 provider files and external systems are never canonical.
 
-Use the tracked Home Console for every Kernel or Asset route:
+Use the tracked Home Console for every Kernel or Equipment route:
 
     node ./endroit.mjs <namespace> <command> [...arguments]
 
 Kernel routes:
 
 - \`desk init|clone\`
-- \`asset validate|add|status|sync|remove|override|promote|catalog|trust\`
+- \`equipment validate|add|status|sync|remove|override|promote|catalog|trust\`
+- \`room create|list|inspect|doctor\`
+- \`site add|list|inspect|doctor|remove\`
+- \`route bind|clone|worktree|list|inspect|remove\`
 - \`validate\`, \`build\`, \`doctor\`
 
-Asset runtime namespaces:
+Equipment runtime namespaces:
 
 ${runtimes}
 

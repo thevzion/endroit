@@ -1,0 +1,124 @@
+{
+  "$schema": "https://endroit.org/schema/equipment.json",
+  "name": "endroit/planning",
+  "version": "0.8.0-alpha.0",
+  "description": "Conversation-first operational planning owned by one Room.",
+  "prefix": "planning",
+  "roomNamespace": "planning",
+  "files": [
+    "capabilities/initiative.md",
+    "capabilities/roadmap.md",
+    "capabilities/to-prd.md",
+    "capabilities/to-spec.md",
+    "capabilities/to-tickets.md",
+    "capabilities/handoff.md",
+    "schemas/initiative.schema.json",
+    "templates/initiative.md",
+    "templates/roadmap.md"
+  ],
+  "capabilities": [
+    {
+      "id": "initiative",
+      "path": "capabilities/initiative.md",
+      "description": "Create or resume one bounded durable Initiative."
+    },
+    {
+      "id": "roadmap",
+      "path": "capabilities/roadmap.md",
+      "description": "Maintain a living Room roadmap across Initiatives."
+    },
+    {
+      "id": "to-prd",
+      "path": "capabilities/to-prd.md",
+      "description": "Create or update the Initiative product contract."
+    },
+    {
+      "id": "to-spec",
+      "path": "capabilities/to-spec.md",
+      "description": "Create or update the Initiative technical contract."
+    },
+    {
+      "id": "to-tickets",
+      "path": "capabilities/to-tickets.md",
+      "description": "Maintain stable executable tickets."
+    },
+    {
+      "id": "handoff",
+      "path": "capabilities/handoff.md",
+      "description": "Preserve the current resumption state."
+    }
+  ],
+  "skills": [
+    {
+      "id": "initiative",
+      "capability": "initiative",
+      "description": "Use when durable work needs one bounded operational Initiative."
+    },
+    {
+      "id": "roadmap",
+      "capability": "roadmap",
+      "description": "Use when a Room needs a living view of its Initiatives."
+    },
+    {
+      "id": "to-prd",
+      "capability": "to-prd",
+      "description": "Use when an Initiative needs a current product contract."
+    },
+    {
+      "id": "to-spec",
+      "capability": "to-spec",
+      "description": "Use when an Initiative needs a current technical contract."
+    },
+    {
+      "id": "to-tickets",
+      "capability": "to-tickets",
+      "description": "Use when an Initiative benefits from stable executable tickets."
+    },
+    {
+      "id": "handoff",
+      "capability": "handoff",
+      "description": "Use when an Initiative needs a compact resumption state."
+    }
+  ],
+  "commands": [
+    {
+      "id": "initiative",
+      "capability": "initiative",
+      "description": "Create or resume a Planning Initiative."
+    },
+    {
+      "id": "roadmap",
+      "capability": "roadmap",
+      "description": "Maintain a Room roadmap."
+    },
+    {
+      "id": "to-prd",
+      "capability": "to-prd",
+      "description": "Create or update an Initiative PRD."
+    },
+    {
+      "id": "to-spec",
+      "capability": "to-spec",
+      "description": "Create or update an Initiative spec."
+    },
+    {
+      "id": "to-tickets",
+      "capability": "to-tickets",
+      "description": "Create or update Initiative tickets."
+    },
+    {
+      "id": "handoff",
+      "capability": "handoff",
+      "description": "Create or update an Initiative handoff."
+    }
+  ],
+  "artifactKinds": [
+    {
+      "id": "initiative",
+      "schema": "schemas/initiative.schema.json",
+      "template": "templates/initiative.md",
+      "owners": ["desk", "home"],
+      "states": ["draft", "ready", "active", "blocked", "complete", "cancelled"]
+    }
+  ]
+}

@@ -28,7 +28,7 @@ export async function initDesk(root, options = {}) {
       'desk.id': document.id,
       'home.name': home.name,
     }), 0o644)
-    await writeFileAtomic(join(directory, '.gitignore'), '/targets/\n/.DS_Store\n', 0o644)
+    await writeFileAtomic(join(directory, '.gitignore'), '/routes/\n/sites/\n/.DS_Store\n', 0o644)
     return { status: 'initialized', id: options.id, repository: home.mode === 'team' && options.git !== false }
   } catch (error) {
     await removeTree(directory, { force: true })

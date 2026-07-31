@@ -1,17 +1,17 @@
 #!/usr/bin/env node
 import { pathToFileURL } from 'node:url'
 import {
-  addAssets,
-  catalogAssets,
-  overrideAsset,
-  promoteAsset,
-  removeAsset,
-  statusAssets,
-  syncAssets,
-  validateAssetSource,
-} from './assets.mjs'
+  addEquipment,
+  catalogEquipment,
+  overrideEquipment,
+  promoteEquipment,
+  removeEquipment,
+  statusEquipment,
+  syncEquipment,
+  validateEquipmentSource,
+} from './equipment.mjs'
 import { buildHome } from './build.mjs'
-import { bootstrapAssets, createHome } from './create.mjs'
+import { bootstrapEquipment, createHome, initializeExistingHome } from './create.mjs'
 import { runCreateWizard } from './create-wizard.mjs'
 import { cloneDesk, initDesk } from './desk.mjs'
 import { doctorHome } from './doctor.mjs'
@@ -40,28 +40,46 @@ export async function runCli(argv = process.argv.slice(2), io = process, depende
 async function route(command, action, rest, flags, argv, io, dependencies) {
   if (!command) return help()
   if (command === 'create') return createRoute(required(action, 'destination'), flags, io, dependencies.prompts)
-  if (command === 'asset' && action === 'validate') {
-    return validateAssetSource(flags.home ?? process.cwd(), required(rest[0], 'Asset source'))
+  if (command === 'init') return initRoute(action ?? flags.home ?? process.cwd(), flags)
+  if (command === 'equipment' && action === 'validate') {
+    return validateEquipmentSource(flags.home ?? process.cwd(), required(rest[0], 'Equipment source'))
   }
   const root = await findHome(flags.home ?? process.cwd())
   await assertRuntime(root)
   if (command === 'desk') return deskRoute(root, action, rest, flags)
-  if (command === 'asset') return assetRoute(root, action, rest, flags, io)
+  if (command === 'equipment') return equipmentRoute(root, action, rest, flags, io)
   if (command === 'validate') return publicPlan(await resolveHome(root))
   if (command === 'build') return buildHome(root, { check: booleanFlag(flags.check) })
   if (command === 'doctor') return doctorHome(root)
+  if (command === 'route') {
+    const runtimeArgs = ['route', ...withoutHomeFlag(argv.slice(argv.indexOf(command) + 1))]
+    return { passthrough: true, exitCode: await dispatchRuntime(root, 'site', runtimeArgs, io) }
+  }
   const runtimeArgs = withoutHomeFlag(argv.slice(argv.indexOf(command) + 1))
   return { passthrough: true, exitCode: await dispatchRuntime(root, command, runtimeArgs, io) }
 }
 
-const optionalCreateAssets = ['research', 'planning', 'publishing', 'scratch']
+async function initRoute(destination, flags) {
+  const selected = createEquipmentSelection(flags.with)
+  return initializeExistingHome(destination, {
+    providers: csv(flags.providers) ?? ['codex', 'claude'],
+    name: flags.name,
+    mode: flags.mode,
+    deskId: flags.desk,
+    prefix: flags.prefix,
+    siteId: flags.site,
+    equipment: selected.map((id) => `@endroit/${id}`),
+  })
+}
+
+const optionalCreateEquipment = ['research', 'planning', 'publishing', 'scratch']
 
 async function createRoute(destination, flags, io, prompts) {
   const interactive = !booleanFlag(flags['no-interactive'])
     && !booleanFlag(flags.json)
     && io.stdin?.isTTY
     && io.stdout?.isTTY
-  const selected = createAssetSelection(flags.with)
+  const selected = createEquipmentSelection(flags.with)
   const providers = csv(flags.providers) ?? ['codex', 'claude']
   const create = ({ mode = flags.mode, selected: chosen = selected } = {}) => createHome(destination, {
     providers,
@@ -69,7 +87,7 @@ async function createRoute(destination, flags, io, prompts) {
     mode,
     deskId: flags.desk,
     prefix: flags.prefix,
-    assets: chosen.map((id) => `@endroit/${id}`),
+    equipment: chosen.map((id) => `@endroit/${id}`),
   })
   if (!interactive) return create()
   return runCreateWizard({
@@ -79,27 +97,27 @@ async function createRoute(destination, flags, io, prompts) {
     selectionProvided: flags.with !== undefined,
     yes: booleanFlag(flags.yes),
     providers,
-    foundation: bootstrapAssetNames(),
+    foundation: bootstrapEquipmentNames(),
     io,
     prompts,
     create,
   })
 }
 
-function createAssetSelection(value) {
+function createEquipmentSelection(value) {
   if (value === undefined || value === true || String(value).trim() === '' || value === 'none') return []
   const selected = csv(value)
   if (selected.includes('all')) {
-    if (selected.length !== 1) throw usage('--with all cannot be combined with another Asset.')
-    return optionalCreateAssets
+    if (selected.length !== 1) throw usage('--with all cannot be combined with another Equipment.')
+    return optionalCreateEquipment
   }
-  const unknown = selected.filter((id) => !optionalCreateAssets.includes(id))
-  if (unknown.length) throw usage(`Unknown optional Asset: ${unknown.join(', ')}.`)
+  const unknown = selected.filter((id) => !optionalCreateEquipment.includes(id))
+  if (unknown.length) throw usage(`Unknown optional Equipment: ${unknown.join(', ')}.`)
   return [...new Set(selected)]
 }
 
-function bootstrapAssetNames() {
-  return bootstrapAssets.map((id) => id.replace('@endroit/', ''))
+function bootstrapEquipmentNames() {
+  return bootstrapEquipment.map((id) => id.replace('@endroit/', ''))
 }
 
 async function deskRoute(root, action, rest, flags) {
@@ -108,20 +126,20 @@ async function deskRoute(root, action, rest, flags) {
   throw usage('endroit desk init|clone')
 }
 
-async function assetRoute(root, action, rest, flags, io) {
+async function equipmentRoute(root, action, rest, flags, io) {
   const scope = booleanFlag(flags.desk) ? 'desk' : flags.scope
   if (action === 'add') {
-    if (!rest.length) throw usage('At least one Asset is required.')
+    if (!rest.length) throw usage('At least one Equipment is required.')
     const overwrite = booleanFlag(flags.overwrite)
-    const preview = await addAssets(root, rest, { dryRun: true, overwrite, scope })
+    const preview = await addEquipment(root, rest, { dryRun: true, overwrite, scope })
     if (booleanFlag(flags['dry-run']) || booleanFlag(flags.diff)) return preview
     if (!booleanFlag(flags.yes) && !await confirm(io, preview)) throw new EndroitError('confirmation_required', 'Installation cancelled. Pass -y for non-interactive use.')
-    return addAssets(root, rest, { overwrite, scope })
+    return addEquipment(root, rest, { overwrite, scope })
   }
-  if (action === 'status') return statusAssets(root, rest[0], { scope })
+  if (action === 'status') return statusEquipment(root, rest[0], { scope })
   if (action === 'sync') {
-    if (!rest[0] && !booleanFlag(flags.all)) throw usage('An Asset or --all is required.')
-    return syncAssets(root, rest[0], {
+    if (!rest[0] && !booleanFlag(flags.all)) throw usage('An Equipment or --all is required.')
+    return syncEquipment(root, rest[0], {
       all: booleanFlag(flags.all),
       check: booleanFlag(flags.check),
       to: flags.to,
@@ -129,29 +147,31 @@ async function assetRoute(root, action, rest, flags, io) {
       scope,
     })
   }
-  if (action === 'remove') return removeAsset(root, required(rest[0], 'Asset'), { overwrite: booleanFlag(flags.overwrite), scope })
-  if (action === 'override') return overrideAsset(root, required(rest[0], 'Asset'))
-  if (action === 'catalog') return { status: 'catalogued', assets: await catalogAssets(root) }
+  if (action === 'remove') return removeEquipment(root, required(rest[0], 'Equipment'), { overwrite: booleanFlag(flags.overwrite), scope })
+  if (action === 'override') return overrideEquipment(root, required(rest[0], 'Equipment'))
+  if (action === 'catalog') return { status: 'catalogued', equipment: await catalogEquipment(root) }
   if (action === 'promote' || action === 'publish') {
-    if (flags.to !== 'home') throw usage(`endroit asset ${action} <id> --to home`)
-    const result = await promoteAsset(root, required(rest[0], 'Asset'))
+    if (flags.to !== 'home') throw usage(`endroit equipment ${action} <id> --to home`)
+    const result = await promoteEquipment(root, required(rest[0], 'Equipment'))
     return action === 'publish'
-      ? { ...result, deprecated: 'asset publish is deprecated; use asset promote.' }
+      ? { ...result, deprecated: 'equipment publish is deprecated; use equipment promote.' }
       : result
   }
-  if (action === 'trust') return runtimeTrust(root, required(rest[0], 'Asset'), { digest: flags.digest, revoke: booleanFlag(flags.revoke) })
-  throw usage('endroit asset validate|add|status|sync|remove|override|promote|catalog|trust')
+  if (action === 'trust') return runtimeTrust(root, required(rest[0], 'Equipment'), { digest: flags.digest, revoke: booleanFlag(flags.revoke) })
+  throw usage('endroit equipment validate|add|status|sync|remove|override|promote|catalog|trust')
 }
 
 function help() {
   return {
     summary: 'One Home for the agents, methods, and repositories you already use.',
-    next: ['endroit create <home>', 'open an agent in <home>', 'invoke endroit-onboarding'],
+    next: ['endroit create <home> or endroit init', 'open an agent in the Home', 'invoke endroit-onboarding'],
     commands: [
-      'create <home>', 'desk init|clone',
-      'asset validate|add|status|sync|remove|override|promote|catalog|trust',
+      'create <home>', 'init [repository]', 'desk init|clone',
+      'equipment validate|add|status|sync|remove|override|promote|catalog|trust',
+      'room create|list|inspect|doctor', 'site add|list|inspect|doctor|remove',
+      'route bind|clone|worktree|list|inspect|remove',
       'validate', 'build [--check]', 'doctor',
-      '<Asset runtime namespace> <command...>',
+      '<Equipment runtime namespace> <command...>',
     ],
   }
 }
@@ -173,16 +193,24 @@ function parseArguments(argv) {
 
 function renderHuman(value) {
   if (value?.summary && value?.commands) return [value.summary, '', 'Next:', ...value.next.map((item) => `  ${item}`), '', 'Commands:', ...value.commands.map((item) => `  endroit ${item}`)].join('\n')
-  if (value?.status === 'created') return ['Endroit Home created', value.home, `Mode: ${value.mode}`, `Assets: ${value.assets.join(', ')}`, '', ...value.launch.flatMap((entry) => [`${entry.provider}: ${entry.command}`, `Then invoke ${entry.onboarding}.`])].join('\n')
-  if (value?.status === 'catalogued') return value.assets.map((entry) => `- ${entry.id}${entry.installed.length ? ` [${entry.installed.join(',')}]` : ''}: ${entry.description}`).join('\n')
-  if (value?.home?.name && value?.limits) return [`Endroit doctor — ${value.status}`, `Home: ${value.home.name}`, `Desk: ${value.desk.configured ? value.desk.id : 'not configured'}`, `Assets: ${value.assets.length}`, `Build: ${value.build}`, ...(value.limits.length ? ['', 'Limits:', ...value.limits.map((item) => `  - ${item}`)] : []), ...(value.warnings?.length ? ['', 'Warnings:', ...value.warnings.map((item) => `  - ${item}`)] : [])].join('\n')
+  if ((value?.status === 'created' || value?.status === 'initialized') && value.home) return [
+    value.status === 'created' ? 'Endroit Home created' : 'Endroit Home initialized',
+    value.home,
+    `Mode: ${value.mode}`,
+    ...(value.site ? [`Embedded Site: ${value.site}`] : []),
+    `Equipment: ${value.equipment.join(', ')}`,
+    '',
+    ...value.launch.flatMap((entry) => [`${entry.provider}: ${entry.command}`, `Then invoke ${entry.onboarding}.`]),
+  ].join('\n')
+  if (value?.status === 'catalogued') return value.equipment.map((entry) => `- ${entry.id}${entry.installed.length ? ` [${entry.installed.join(',')}]` : ''}: ${entry.description}`).join('\n')
+  if (value?.home?.name && value?.limits) return [`Endroit doctor — ${value.status}`, `Home: ${value.home.name}`, `Desk: ${value.desk.configured ? value.desk.id : 'not configured'}`, `Equipment: ${value.equipment.length}`, `Build: ${value.build}`, ...(value.limits.length ? ['', 'Limits:', ...value.limits.map((item) => `  - ${item}`)] : []), ...(value.warnings?.length ? ['', 'Warnings:', ...value.warnings.map((item) => `  - ${item}`)] : [])].join('\n')
   if (Array.isArray(value)) return value.length ? value.map((entry) => `- ${entry.name ?? entry.id ?? JSON.stringify(entry)}${entry.state ? `: ${entry.state}` : ''}`).join('\n') : 'No entries.'
   return Object.entries(value ?? {}).map(([key, entry]) => `${key}: ${typeof entry === 'object' ? JSON.stringify(entry) : entry}`).join('\n')
 }
 
 async function confirm(io, preview) {
   if (!io.stdin?.isTTY || !io.stdout?.isTTY) return false
-  io.stdout.write(`Install ${preview.assets.join(', ')} and write ${preview.writes.length} files? [y/N] `)
+  io.stdout.write(`Install ${preview.equipment.join(', ')} and write ${preview.writes.length} files? [y/N] `)
   return new Promise((resolvePromise) => {
     io.stdin.once('data', (chunk) => resolvePromise(/^y(?:es)?\s*$/i.test(String(chunk))))
     io.stdin.resume?.()

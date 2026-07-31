@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.0-alpha.0
+
+- Reset Endroit around the Home-first workplace grammar: Home, Desk, Room,
+  Meeting, Equipment, Material, Site and Route.
+- Separate shared Site declarations, Desk-local Route metadata and physical
+  checkouts.
+- Add Embedded Homes through `endroit init`, remote-only Sites and guarded
+  managed clone/worktree Routes.
+- Replace provider-facing Workspace, Asset, Target and Binding surfaces without
+  permanent compatibility aliases. See [migration](docs/migration-0.8.md).
+
 ## 0.7.0-alpha.1
 
 - Define the five Home-first environment responsibilities and map them to the

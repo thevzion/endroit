@@ -18,14 +18,14 @@ async function files(directory) {
   return values
 }
 
-assert.deepEqual(await compileSchemas(), ['home', 'desk', 'asset', 'runtime'])
-for (const name of ['onboarding', 'hud', 'artifacts', 'targets', 'workspaces', 'research', 'planning', 'publishing', 'scratch', 'project']) {
-  await validateDocument(JSON.parse(await readFile(join(root, 'assets', 'endroit', name, 'asset.json'), 'utf8')), 'asset')
+assert.deepEqual(await compileSchemas(), ['home', 'desk', 'equipment', 'site', 'route', 'runtime'])
+for (const name of ['onboarding', 'hud', 'artifacts', 'sites', 'rooms', 'research', 'planning', 'publishing', 'scratch', 'project']) {
+  await validateDocument(JSON.parse(await readFile(join(root, 'equipment', 'endroit', name, 'equipment.json'), 'utf8')), 'equipment')
 }
 await validateDocument({
   $schema: 'https://endroit.org/schema/home.json',
   name: 'check',
-  runtime: '@endroit/cli@0.7.0-alpha.0',
+  runtime: '@endroit/cli@0.8.0-alpha.0',
   mode: 'solo',
   providers: ['codex'],
   frontDoor: { wakeUp: 'endroit/hud:prompt' },
@@ -41,7 +41,7 @@ for (const path of all) {
   if (!/\.(?:md|mjs|json|yml|yaml)$/.test(name)) continue
   const body = await readFile(path, 'utf8')
   assert.ok(!/AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC )?PRIVATE KEY/.test(body), `${name} contains secret-like material`)
-  if (!['CHANGELOG.md', 'docs/releases/0.7.0-alpha.0.md', 'docs/releases/0.7.0-alpha.1.md'].includes(name)) {
+  if (!['CHANGELOG.md', 'docs/releases/0.7.0-alpha.0.md', 'docs/releases/0.7.0-alpha.1.md', 'docs/releases/0.8.0-alpha.0.md'].includes(name)) {
     assert.doesNotMatch(body, legacyBrand, `${name} contains a legacy brand contract`)
   }
 }

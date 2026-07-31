@@ -31,8 +31,8 @@ process.exitCode = result.status ?? 1
   return { launcher, cli: join(packageRoot, filename) }
 }
 
-async function pack(root, destination, workspace) {
-  const { stdout } = await exec('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', destination, ...workspace], {
+async function pack(root, destination, room) {
+  const { stdout } = await exec('npm', ['pack', '--json', '--ignore-scripts', '--pack-destination', destination, ...room], {
     cwd: root,
     maxBuffer: 20 * 1024 * 1024,
   })

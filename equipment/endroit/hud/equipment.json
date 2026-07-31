@@ -1,0 +1,65 @@
+{
+  "$schema": "https://endroit.org/schema/equipment.json",
+  "name": "endroit/hud",
+  "version": "0.8.0-alpha.0",
+  "description": "Dense local orientation for the active agent at session start and on demand.",
+  "prefix": "endroit",
+  "files": [
+    "instructions/orientation.md",
+    "capabilities/orient.md",
+    "schemas/home-settings.schema.json",
+    "runtime.mjs"
+  ],
+  "instructions": [
+    {
+      "id": "orientation",
+      "path": "instructions/orientation.md"
+    }
+  ],
+  "capabilities": [
+    {
+      "id": "orient",
+      "path": "capabilities/orient.md",
+      "description": "Inspect the current Home, Desk, Sites and anomalies before acting."
+    }
+  ],
+  "skills": [
+    {
+      "id": "home",
+      "capability": "orient",
+      "description": "Use when orientation, current Home state or the next safe route is needed."
+    }
+  ],
+  "commands": [
+    {
+      "id": "home",
+      "capability": "orient",
+      "description": "Show and interpret the current Endroit Home."
+    }
+  ],
+  "settings": {
+    "home": "schemas/home-settings.schema.json"
+  },
+  "runtime": {
+    "namespace": "hud",
+    "entry": "runtime.mjs",
+    "commands": [
+      {
+        "name": "show",
+        "description": "Render the compact human HUD; pass --full for its complete inventory."
+      },
+      {
+        "name": "prompt",
+        "description": "Render the deterministic agent-facing HUD selected by the Front Door."
+      },
+      {
+        "name": "json",
+        "description": "Render the stable machine-readable HUD."
+      },
+      {
+        "name": "activity",
+        "description": "Show recent sourced observations without persisting an event log."
+      }
+    ]
+  }
+}

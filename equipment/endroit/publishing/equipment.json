@@ -1,0 +1,78 @@
+{
+  "$schema": "https://endroit.org/schema/equipment.json",
+  "name": "endroit/publishing",
+  "version": "0.8.0-alpha.0",
+  "description": "Source-owned publications and verified external Handles.",
+  "prefix": "publishing",
+  "roomNamespace": "publishing",
+  "files": [
+    "capabilities/prepare.md",
+    "capabilities/publish.md",
+    "capabilities/revalidate.md",
+    "schemas/publication.schema.json",
+    "templates/publication.md",
+    "templates/content.md",
+    "templates/handle.md"
+  ],
+  "capabilities": [
+    {
+      "id": "prepare",
+      "path": "capabilities/prepare.md",
+      "description": "Create or continue one source-owned Publication."
+    },
+    {
+      "id": "publish",
+      "path": "capabilities/publish.md",
+      "description": "Publish one approved projection and record its verified Handle."
+    },
+    {
+      "id": "revalidate",
+      "path": "capabilities/revalidate.md",
+      "description": "Revalidate an external Handle, metrics and content drift."
+    }
+  ],
+  "skills": [
+    {
+      "id": "prepare",
+      "capability": "prepare",
+      "description": "Use when local evidence should become a bounded publication source."
+    },
+    {
+      "id": "publish",
+      "capability": "publish",
+      "description": "Use when an approved local Publication should be projected externally."
+    },
+    {
+      "id": "revalidate",
+      "capability": "revalidate",
+      "description": "Use when a published Handle or dated external evidence must be refreshed."
+    }
+  ],
+  "commands": [
+    {
+      "id": "prepare",
+      "capability": "prepare",
+      "description": "Create or continue a Publication."
+    },
+    {
+      "id": "publish",
+      "capability": "publish",
+      "description": "Publish one approved external projection."
+    },
+    {
+      "id": "revalidate",
+      "capability": "revalidate",
+      "description": "Revalidate a published Handle."
+    }
+  ],
+  "artifactKinds": [
+    {
+      "id": "publication",
+      "schema": "schemas/publication.schema.json",
+      "template": "templates/publication.md",
+      "owners": ["desk", "home"],
+      "states": ["outline", "draft", "ready", "published", "superseded"],
+      "requiredFiles": ["templates/content.md"]
+    }
+  ]
+}
