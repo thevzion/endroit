@@ -1,6 +1,20 @@
 # Endroit
 
-> Give agentic work a place to compound.
+> A more intuitive way to work with agents.
+
+## New session. Same workplace.
+
+Your way of working stays. Each agent adapts at the door.
+
+**Places make intent legible. Gestures make it explicit.**
+
+Say what you want to work on in normal conversation:
+
+> Continue the Endroit 0.8 launch.
+
+The provider Front Door exposes the Home Floor Plan and its routing rules. The
+agent can resolve the relevant Room or ask when the subject is ambiguous, then
+inspect retained Material, available Equipment and declared Sites.
 
 **The place layer for agentic work.**
 
@@ -16,16 +30,6 @@ memory service or orchestration runtime.
 > **Alpha — usable, actively maintained and dogfooded.** Endroit is pre-1.0.
 > Its ownership and safety contracts are deliberate; its public grammar and
 > schemas may still change through explicit releases and migration notes.
-
-## New session. Same workplace.
-
-Say what you want to work on in normal conversation:
-
-> Continue the Endroit 0.8 launch.
-
-The provider Front Door exposes the Home Floor Plan and its routing rules. The
-agent can resolve the relevant Room or ask when the subject is ambiguous, then
-inspect retained Material, available Equipment and declared Sites.
 
 At the end of the Meeting, the result stays ephemeral unless you choose to:
 
@@ -52,6 +56,48 @@ Human transition → Room / Desk Material
 **Responsibilities, not a required stack.** Providers supply execution. The
 Workplace owns continuity. A harness runs the agent; a Workplace holds the
 work.
+
+## One Home. Several sessions. More to build on.
+
+Claude can enter a Room, produce a candidate and leave. You can retain the
+useful result without accepting it as truth. Later, Codex enters the same owned
+Home, reads the retained Material and prepares the next candidate. It never
+needs Claude's private memory.
+
+Home Hygiene can then report an ambiguous owner or destination without moving
+anything. An accepted result reaches a Site only through an approved,
+revalidated Route.
+
+Each useful session can leave the Home better prepared for the next. Endroit
+compounds retained Material, accepted decisions, stabilized Equipment,
+verified Routes and observed Site results. It does not retain every transcript
+or output.
+
+## Start with conversation. Add precision when it matters.
+
+```text
+Talk naturally
+      ↓
+Inspect the shared workplace
+      ↓
+Use explicit gestures when authority matters
+      ↓
+Use the CLI for deterministic operations
+```
+
+Commands are optional. They help you steer, retain, accept and deliver without
+surrendering control of the session. A natural sentence with the same explicit
+meaning works too. An acknowledgement alone never retains, accepts, archives,
+delivers, repairs or calls another Occupant.
+
+- **Enter:** recover or recenter the Home and Room.
+- **Equip:** call an Occupant, adopt a Role or activate a method.
+- **Keep:** retain, accept or archive Material.
+- **Reach:** revalidate a Site Route and deliver explicitly.
+- **Maintain:** inspect the Home read-only and approve a bounded repair.
+
+Endroit makes placement inferable, explainable and correctable. It does not
+infer intent, personalize the model or organize work without human authority.
 
 ## Start a Home
 
