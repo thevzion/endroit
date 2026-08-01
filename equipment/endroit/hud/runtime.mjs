@@ -542,7 +542,7 @@ async function scanSites(sites, homeRoot, deskRoot, artifacts) {
         routes.push({
           id: route.id,
           type: route.mode,
-          mount: relative(deskRoot, join(siteRoot, entry.name)),
+          declaration: relative(deskRoot, join(siteRoot, entry.name)),
           root: resolved,
           git: resolved ? await gitProbe(resolved) : { available: false, error: 'Broken Route.' },
         })

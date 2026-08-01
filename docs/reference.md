@@ -1,8 +1,8 @@
 # Endroit 0.8 reference
 
-Endroit is a local-first, headless framework for durable human-agent
-workplaces. This reference describes `0.8.0-alpha.0`; the [migration guide](migration-0.8.md)
-is the only 0.7 → 0.8 vocabulary map.
+Endroit is a local-first, headless, file-based implementation of the Open
+Workplace model. This reference describes `0.8.0-alpha.0`; the
+[migration guide](migration-0.8.md) is the only 0.7 → 0.8 vocabulary map.
 
 ## Requirements
 
@@ -20,7 +20,7 @@ desk init|clone
 equipment validate|add|status|sync|remove|override|promote|catalog|trust
 room create|list|inspect|doctor
 site add|list|inspect|doctor|remove
-route bind|clone|worktree|list|inspect|remove
+route bind|clone|worktree|mount|unmount|list|inspect|remove
 validate
 build [--check]
 doctor
@@ -62,10 +62,11 @@ CLAUDE.md
 .claude/
 .codex/
 .endroit/
+checkouts/<site>/<route>/
 ```
 
-`.desk/sites/` contains ignored managed Git checkouts. It is materialization,
-not Route metadata.
+`checkouts/` contains ignored managed Git checkouts and optional Mounts. It is
+physical access, not Route metadata or Site identity.
 
 ## Home, Member and Desk
 
@@ -175,9 +176,15 @@ Supported modes:
 |---|---|---|
 | `embedded` | Home and Site share root `.` | existing repository |
 | `existing` | checkout elsewhere | Endroit removes only Route metadata |
-| `managed-clone` | `.desk/sites/<site>/<route>/` | explicit clean deletion |
-| `managed-worktree` | `.desk/sites/<site>/<route>/` | explicit `git worktree remove` |
+| `managed-clone` | `checkouts/<site>/<route>/` | explicit clean deletion |
+| `managed-worktree` | `checkouts/<site>/<route>/` | explicit `git worktree remove` |
 | `submodule` | user-managed submodule path | recognized, never lifecycle-managed |
+
+An `existing` Route may be exposed at the same root address with `route mount`.
+The result is a rebuildable symlink called a Mount, not a new Route or owner.
+`route unmount` refuses non-symlink paths and removes only the Mount. Route
+removal is blocked while a Mount remains, and Doctor reports broken, invalid
+or mismatched Mounts.
 
 `route worktree` uses only local refs. It never fetches, forces, copies working
 tree changes, deletes branches, prunes, repairs or unlocks Git metadata.
@@ -217,5 +224,6 @@ orientation; its failure cannot remove the Floor Plan.
 - provider status and portability levels are recorded in [providers](providers.md);
 - no daemon, semantic index, graph or persistent agent is required;
 - no automated 0.7 migration or submodule manager ships in 0.8;
-- no generated Site symlink view ships in 0.8; Routes resolve checkouts directly;
+- Mounts are optional explicit views for `existing` Routes; Routes always
+  resolve their source checkout directly;
 - Endroit never infers remote success or upgrades model intelligence.

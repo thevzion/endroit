@@ -2,10 +2,11 @@
 
 > Give agentic work a place to compound.
 
-**The place layer for agentic work.**
+**Not another harness. A place for the work.**
 
-Endroit is a lightweight, local-first framework for durable human-agent
-workplaces across sessions, tools, and repositories.
+Endroit is a local-first, headless, file-based implementation of the
+[Open Workplace](https://open-workplace.org/) model. It gives durable
+human-agent work an owned place across sessions, tools and repositories.
 
 It gives humans and the agents they already use a familiar place to work
 across meetings, tools and repositories—without moving the work into a
@@ -52,15 +53,15 @@ Site       sovereign external truth
 Route      how this Desk reaches that Site
 ```
 
-Technical formats tell agents what to read or execute. Home-first names who
-owns each responsibility before it is projected.
+Technical formats tell agents what to read or execute. Open Workplace names
+who owns each responsibility before Endroit projects those formats.
 
 > `AGENTS.md` guides an agent. Skills equip it. Endroit gives the work a
 > place, an owner and a destination.
 
 The pieces were already there. They just needed a place.
 
-## Make the workplace first-class
+## Not workspace. Workplace.
 
 Most current setups concentrate on two useful questions:
 
@@ -69,20 +70,28 @@ Prompt-centric  What should I tell the model?
 Agent-centric   What should the agent have?
 ```
 
-Home-first adds a different architectural question:
+Workplace-first adds a different architectural question:
 
 > What should the durable workplace own?
 
 These are composable centers of attention, not three formal paradigms or a
-historical sequence. Agent-centric design equips the occupant. Home-first
-equips the place.
+historical sequence. Agent-centric design equips the occupant.
+Workplace-first makes the workplace first-class.
 
 It makes the workplace first-class through identity, ownership, composition,
 time and sovereignty.
 
-The agent can change. The provider can change. The method can change. The
-owned workplace, its material and its relationships remain inspectable by the
+The agent can change. The provider can change. The method can change. One
+owned Home, its Material and its relationships remain inspectable by the
 human.
+
+> A workspace gives the agent somewhere to run. A workplace gives the work
+> somewhere to belong.
+
+Open Workplace defines the shared vocabulary and ownership model. Endroit
+implements it through files, schemas, deterministic composition and provider
+projections. A Home is one concrete workplace instance. “Endroit” means
+“place” in French.
 
 ## Start a Home
 
@@ -124,11 +133,11 @@ my-home/
 │       └── inbox.md
 ├── equipment/
 ├── sites/
+├── checkouts/        local and ignored when materialized
 ├── .desk/
 │   ├── DESK.md
 │   ├── rooms/
-│   ├── routes/        local and ignored
-│   └── sites/         local and ignored
+│   └── routes/        local and ignored
 ├── endroit.mjs
 ├── AGENTS.md        generated
 ├── CLAUDE.md        generated
@@ -198,8 +207,9 @@ Endroit does not make the agent smarter. It makes the situation clearer.
 
 ### Home
 
-The durable workplace and trust boundary. A Home owns shared composition and
-house rules. `HOME.md` is one source inside the Home; it is not the whole Home.
+One concrete, durable workplace instance and trust boundary. A Home owns
+shared composition and house rules. `HOME.md` is one source inside the Home;
+it is not the whole Home.
 
 ### Desk
 
@@ -253,9 +263,9 @@ model:
 | Mode | Example |
 |---|---|
 | Embedded | the current repository also contains the Home |
-| Managed clone | checkout stored under `.desk/sites/` |
-| Managed worktree | linked worktree stored under `.desk/sites/` |
-| Existing checkout | repository already present elsewhere |
+| Managed clone | real checkout under `checkouts/<site>/<route>/` |
+| Managed worktree | real linked worktree under `checkouts/<site>/<route>/` |
+| Existing checkout | repository kept in place, with an optional Mount under `checkouts/` |
 | Submodule | user-managed submodule addressed by a Route |
 | Remote-only | declared Site with no local checkout |
 
@@ -271,8 +281,10 @@ Local, ignored access declarations stay with the Desk:
 .desk/routes/<site>/<route>.json
 ```
 
-Endroit 0.8 resolves each checkout from its Route directly. It neither requires
-nor generates a symlink as the identity of a Site.
+Endroit 0.8 resolves each checkout from its Route directly. For an `existing`
+Route, `route mount` can create a rebuildable symlink at
+`checkouts/<site>/<route>/`; `route unmount` removes only that symlink. A Mount
+is never the identity of the Site or Route and never grants new permissions.
 
 ## Core and optional Equipment
 
@@ -283,6 +295,8 @@ manages safe local Routes. For example:
 node ./endroit.mjs site add https://github.com/acme/product.git --id product
 node ./endroit.mjs route clone product --id main
 node ./endroit.mjs route worktree product --id feature --from main --new-branch feature
+node ./endroit.mjs route bind product ../product --id existing
+node ./endroit.mjs route mount product --id existing
 node ./endroit.mjs site doctor
 ```
 
@@ -295,25 +309,30 @@ You can bring GSD, Spec Kit, BMAD, Superpowers, LifeOS-style practices or your
 own Markdown conventions. They equip Rooms; they do not need to become the
 Home’s ontology.
 
-## HACP: explicit verbs, optional protocol
+## Human gestures, optional protocol
 
-The workplace provides nouns and ownership. HACP can provide explicit verbs.
+Open Workplace provides nouns and ownership. Endroit's first-party Workplace
+Equipment ships inspectable activation surfaces for the concrete gestures in
+the 0.8 journey:
 
 ```text
-call-researcher   add an occupant
-work-as-engineer  adopt a role
-use-research      activate equipment
-retain            keep material
-accept            accept room truth
-deliver           act through a route
+call-the-researcher   add a temporary Occupant
+work-as-an-engineer  adopt a Role for one Meeting
+use-research         activate Equipment
+retain-this          keep inspectable Material
+accept-this          accept current Room truth
+deliver-this         act through an explicit Route
+archive-this         remove inactive Material from active context
 ```
+
+Codex and Claude receive these as generated Skills and Commands. They operate
+through provider-native tools and ordinary owned files; Endroit does not add a
+persistent agent runtime. A missing native operation returns `blocked` rather
+than simulating success.
 
 [HACP](https://github.com/control-decks/human-agent-control-protocol) is an
 independent draft semantic protocol. Endroit does not require it and never
 infers a Card from ordinary conversation.
-
-The verbs above are illustrative Home-native vocabulary. Neither Endroit nor
-HACP ships those commands today.
 
 ## What Endroit does not replace
 
@@ -340,7 +359,7 @@ repositories and generated projections can be discarded and rebuilt.
 
 ## Related reading
 
-- [The Home-first Proposal](https://thevzion.com/home-first/)
+- [The Workplace-first Proposal](https://open-workplace.org/proposal/)
 - [Harness engineering: leveraging Codex in an agent-first world](https://openai.com/index/harness-engineering/)
 - [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
 - [100 Tips & Tricks for building your own personal AI](https://www.reddit.com/r/ClaudeAI/comments/1thi6nh/100_tips_tricks_for_building_your_own_personal_ai/)

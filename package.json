@@ -1,11 +1,12 @@
 {
   "name": "@endroit/cli",
   "version": "0.8.0-alpha.0",
-  "description": "A lightweight, local-first framework for durable human-agent workplaces across sessions, tools, and repositories.",
+  "description": "A local-first, headless, file-based implementation of the Open Workplace model.",
   "keywords": [
     "ai-agents",
     "agentic",
-    "home-first",
+    "workplace-first",
+    "open-workplace",
     "human-agent-collaboration",
     "local-first",
     "developer-tools",

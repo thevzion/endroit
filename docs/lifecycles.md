@@ -78,8 +78,10 @@ periodic cleanup is created.
 site add remote                  → remote-only Site
 site add existing checkout       → Site + existing Route main
 route bind                       → existing | embedded | submodule
-route clone                      → managed-clone under .desk/sites
-route worktree                   → managed-worktree under .desk/sites
+route clone                      → managed-clone under checkouts/
+route worktree                   → managed-worktree under checkouts/
+route mount existing             → rebuildable symlink under checkouts/
+route unmount existing           → remove the symlink, preserve its target
 route inspect                    → deterministic Git evidence
 route remove                     → metadata only
 route remove --delete            → guarded managed-checkout deletion
@@ -91,6 +93,8 @@ branch and HEAD. It never fetches or copies dirty source changes.
 
 Managed removal refuses dirty, locked, prunable, unavailable or dependent
 checkouts. Endroit does not delete branches or manage submodule lifecycle.
+Removing a Route with a Mount is refused until the Mount is explicitly
+unmounted.
 
 ## Build and Front Door
 

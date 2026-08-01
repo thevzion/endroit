@@ -197,7 +197,7 @@ function help() {
       'member create|list|inspect|doctor', 'desk init|clone',
       'equipment validate|add|status|sync|remove|override|promote|catalog|trust',
       'room create|list|inspect|doctor', 'site add|list|inspect|doctor|remove',
-      'route bind|clone|worktree|list|inspect|remove',
+      'route bind|clone|worktree|mount|unmount|list|inspect|remove',
       'validate', 'build [--check]', 'doctor',
       '<Equipment runtime namespace> <command...>',
     ],

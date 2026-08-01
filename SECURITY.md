@@ -46,8 +46,10 @@ Endroit does not claim to sandbox them.
   reconciliation instead of being preserved or overwritten.
 - Context budgets fail validation and build when explicitly configured.
 - Site Routes verify normalized Git remote identity.
-- Managed Route declarations are anchored to their exact `.desk/sites/`
+- Managed Route declarations are anchored to their exact `checkouts/`
   checkout path before any deletion can occur.
+- Mount removal accepts only the exact symlink derived from an existing Route;
+  it never follows or removes the target checkout.
 - Site Map generation reads tracked paths, is bounded, rejects secret-like
   output and writes only to the Desk.
 - Desk recent-file discovery does not follow symbolic links.

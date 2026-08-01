@@ -2,8 +2,8 @@
 
 ## 0.8.0-alpha.0
 
-- Reset Endroit around the Home-first workplace grammar: Home, Desk, Room,
-  Meeting, Equipment, Material, Site and Route.
+- Implement the Workplace-first paradigm and Open Workplace grammar through
+  Home, Desk, Room, Meeting, Equipment, Material, Site and Route.
 - Separate shared Site declarations, Desk-local Route metadata and physical
   checkouts.
 - Add Embedded Homes through `endroit init`, remote-only Sites and guarded
@@ -12,8 +12,10 @@
   permanent compatibility aliases. See [migration](docs/migration-0.8.md).
 - Add Home-owned Members, required Desk-to-Member references and
   `--desk tracked|separate|later`; remove `solo|team` and `--mode`.
-- Project the complete static Home-first journey through human operational
+- Project the complete static Workplace-first journey through human operational
   gestures, with native provider delegation that fails `blocked` when absent.
+- Place managed checkouts under ignored root `checkouts/` paths and expose
+  optional rebuildable Mounts for existing Routes.
 - Install whole-Home Hygiene by default for read-only categorized inspection
   and exactly approved bounded repair.
 - Publish the prerelease to npm `next`, smoke that registry artifact, then keep

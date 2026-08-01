@@ -36,7 +36,7 @@ export async function initDesk(root, options = {}) {
       'desk.member': document.member,
       'home.name': home.name,
     }), 0o644)
-    await writeFileAtomic(join(directory, '.gitignore'), '/routes/\n/sites/\n/.DS_Store\n', 0o644)
+    await writeFileAtomic(join(directory, '.gitignore'), '/routes/\n/.DS_Store\n', 0o644)
     await configureParentIgnore(root, repository, previousIgnore)
     return { status: 'initialized', id: document.id, member, repository: await deskGitBoundary(root) }
   } catch (error) {
@@ -83,9 +83,9 @@ export async function deskGitBoundary(root) {
 async function configureParentIgnore(root, strategy, content) {
   const path = join(root, '.gitignore')
   content ??= await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? '' : Promise.reject(error))
-  const deskRules = new Set(['/.desk/', '/.desk/routes/', '/.desk/sites/'])
+  const deskRules = new Set(['/.desk/', '/.desk/routes/'])
   const lines = content.split(/\r?\n/).filter((line) => !deskRules.has(line))
-  const required = strategy === 'separate' ? ['/.desk/'] : ['/.desk/routes/', '/.desk/sites/']
+  const required = strategy === 'separate' ? ['/.desk/'] : ['/.desk/routes/']
   const base = lines.join('\n').trimEnd()
   await writeFileAtomic(path, `${base}${base ? '\n' : ''}${required.join('\n')}\n`, 0o644)
 }

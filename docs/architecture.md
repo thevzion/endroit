@@ -2,8 +2,9 @@
 
 ## Boundary
 
-> The Home owns the workplace. Equipment equips it. Sites keep their truth.
-> The Kernel resolves and projects explicit sources.
+> Open Workplace defines the model. A Home owns one concrete workplace.
+> Equipment equips it. Sites keep their truth. Endroit resolves and projects
+> explicit sources.
 
 ```mermaid
 flowchart TD
@@ -73,11 +74,13 @@ edits are divergence, not source changes.
 ```text
 sites/product/SITE.md                 shared identity and orientation
 .desk/routes/product/main.json        ignored local access declaration
-.desk/sites/product/main/             optional ignored managed checkout
+checkouts/product/main/               ignored checkout or rebuildable Mount
 ```
 
 Site identity never depends on a symlink. Route metadata never depends on the
-physical checkout surviving. A Route must be re-observed before mutation.
+physical checkout surviving. For an `existing` Route, a Mount is an optional
+rebuildable symlink at the conventional checkout address; removing it never
+touches its target. A Route must be re-observed before mutation.
 
 ## Equipment trust
 

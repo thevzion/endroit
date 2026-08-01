@@ -3,16 +3,21 @@
 A Site is an independent repository known by stable identity. Its declaration
 is shared at `sites/<site>/SITE.md`. Each collaborator owns zero or more Route
 declarations under `.desk/routes/<site>/<route>.json`; managed checkout
-material may live separately under `.desk/sites/<site>/<route>/`.
+material lives separately under `checkouts/<site>/<route>/`.
 
 Resolve the intended Site and inspect its current declarations and Routes
 before proposing a change. When several Routes exist, require an explicit
 selection. Explain separately whether the operation changes shared Home state,
 personal Desk state or a managed checkout.
 
-Apply only the accepted declaration, bind, clone, worktree, Route removal or Site removal
-effect. The canonical managed root is
-`.desk/sites/<site>/<route>`. Keep Route IDs and Git branches separate.
+Apply only the accepted declaration, bind, clone, worktree, Mount, Route
+removal or Site removal effect. The canonical managed root is
+`checkouts/<site>/<route>`. Keep Route IDs and Git branches separate.
+
+For an `existing` Route, `mount` may create a rebuildable symlink at that
+conventional address. `unmount` removes only that symlink. Refuse non-symlink
+paths, report broken or mismatched Mounts, and require explicit unmount before
+Route removal.
 
 Use `route worktree` for a new linked worktree. It never fetches or copies
 uncommitted changes: an existing local branch keeps its commit, while a new

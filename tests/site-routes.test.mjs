@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -34,6 +34,7 @@ test('Site worktrees are created, classified, discovered and adopted explicitly'
 
     const created = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'new-route', '--from', 'main', '--new-branch', 'new-work', '--json'])
     assert.equal(created.head, sourceHead)
+    assert.equal(created.path, join(await realpath(home), 'checkouts', 'demo', 'new-route'))
     assert.equal(await exists(join(created.path, 'dirty.txt')), false)
 
     const fromRef = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'ref-route', '--from', 'main', '--new-branch', 'from-ref', '--start-point', 'starting-point'])
@@ -96,7 +97,7 @@ test('Site worktree validation rejects ambiguous or unsafe creation without impl
     await runtimeFailure(home, ['route', 'worktree', 'demo', '--id', 'bad-start', '--new-branch', 'bad-start', '--start-point', 'unknown-local-ref'], 'site_start_point_missing')
     assert.equal(await localBranch(repository, 'bad-start'), false)
 
-    const occupied = join(home, '.desk', 'sites', 'demo', 'occupied')
+    const occupied = join(home, 'checkouts', 'demo', 'occupied')
     await mkdir(occupied, { recursive: true })
     await runtimeFailure(home, ['route', 'worktree', 'demo', '--id', 'occupied', '--from', 'main', '--new-branch', 'occupied-branch'], 'route_checkout_exists')
     assert.equal(await localBranch(repository, 'occupied-branch'), false)
@@ -209,6 +210,38 @@ test('Sites can stay remote-only while different Desks own independent Routes', 
   }
 })
 
+test('an existing Route can expose and remove a reconstructible Mount without touching its checkout', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-site-mount-'))
+  const home = join(temporary, 'home')
+  const repository = join(temporary, 'repository')
+  const moved = join(temporary, 'repository-moved')
+  try {
+    await createHome(home)
+    await gitInit(repository)
+    await writeFile(join(repository, 'README.md'), '# mounted\n')
+    await commit(repository, 'mounted')
+    await runtimeJson(home, ['add', repository, '--id', 'demo'])
+
+    const mounted = await runtimeJson(home, ['route', 'mount', 'demo'])
+    assert.equal(mounted.path, join(await realpath(home), 'checkouts', 'demo', 'main'))
+    assert.equal((await lstat(mounted.path)).isSymbolicLink(), true)
+    assert.equal(await realpath(mounted.path), await realpath(repository))
+    assert.equal((await runtimeJson(home, ['route', 'mount', 'demo'])).status, 'mounted')
+    await runtimeFailure(home, ['route', 'remove', 'demo'], 'route_mount_exists')
+
+    await rename(repository, moved)
+    assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('route-mount-broken:demo:main'))
+    await runtimeJson(home, ['route', 'unmount', 'demo'])
+    assert.equal(await pathExists(mounted.path), false)
+    assert.equal(await exists(join(moved, 'README.md')), true)
+    await rename(moved, repository)
+    await runtimeJson(home, ['route', 'remove', 'demo'])
+    assert.equal(await exists(join(repository, 'README.md')), true)
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
 test('a submodule is recognized as a Route without Endroit managing its lifecycle', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-site-submodule-'))
   const home = join(temporary, 'home')
@@ -305,6 +338,13 @@ async function exists(path) {
     return true
   } catch (error) {
     if (error.code === 'EISDIR') return true
+    if (error.code === 'ENOENT') return false
+    throw error
+  }
+}
+
+async function pathExists(path) {
+  try { await lstat(path); return true } catch (error) {
     if (error.code === 'ENOENT') return false
     throw error
   }

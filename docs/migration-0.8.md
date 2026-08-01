@@ -33,7 +33,9 @@ meaning before renaming files.
 10. Resolve every Binding to its real Git root and write a Desk Route JSON.
 11. Classify each Route as embedded, existing, managed clone, managed worktree
    or submodule. A Target without a checkout becomes remote-only.
-12. Rebuild, run Doctor and inspect every Route before retiring 0.7 sources.
+12. Keep existing checkouts in place. Optionally expose one with `route mount`;
+   create new managed clones and worktrees under ignored `checkouts/` paths.
+13. Rebuild, run Doctor and inspect every Route before retiring 0.7 sources.
 
 Do not import a symlink as Site identity. Do not move a checkout merely to make
 the migration look tidy. Paths are Desk state; ownership is the durable part.

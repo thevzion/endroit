@@ -29,12 +29,15 @@ test('create and init choose explicit Desk Git boundaries around Home-owned Memb
     })
     assert.equal(await gitRoot(join(tracked, '.desk')), await realpath(tracked))
     assert.match((await exec('git', ['ls-files'], { cwd: tracked })).stdout, /^members\/alexis\/MEMBER\.md$/m)
+    assert.match(await readFile(join(tracked, '.gitignore'), 'utf8'), /^\/checkouts\/$/m)
+    assert.match(await readFile(join(tracked, 'AGENTS.md'), 'utf8'), /Local Site checkouts and Mounts: `checkouts\/`/)
 
     const embedded = join(temporary, 'embedded')
     await exec('git', ['init', '--quiet', '--initial-branch=main', embedded])
     await initializeExistingHome(embedded, { memberId: 'alexis', memberName: 'Alexis' })
     assert.equal(await gitRoot(join(embedded, '.desk')), await realpath(join(embedded, '.desk')))
     assert.equal((await exec('git', ['check-ignore', '.desk/desk.json'], { cwd: embedded })).stdout.trim(), '.desk/desk.json')
+    assert.match(await readFile(join(embedded, '.gitignore'), 'utf8'), /^\/checkouts\/$/m)
     assert.equal(await readFile(join(embedded, '.agents/skills/work-on-self/SKILL.md'), 'utf8').then(Boolean), true)
     assert.equal(await readFile(join(embedded, '.claude/skills/deliver-this-to-self/SKILL.md'), 'utf8').then(Boolean), true)
 

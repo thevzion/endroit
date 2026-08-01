@@ -13,7 +13,7 @@ direction without release dates.
 
 ## In progress
 
-The 0.8 Home-first hard reset is the current release line. Its baseline is one
+The 0.8 Workplace-first reset is the current release line. Its baseline is one
 complete static journey:
 
 ```text
@@ -23,10 +23,11 @@ create/init → enter → call/work-as/use
 ```
 
 The release adds Home-owned Members, tracked/separate/later Desk bootstrap,
-human projected gestures, whole-Home Hygiene and the existing Site/Route
-materialization contract. Local qualification, dogfood and a packed npm smoke
-test gate the alpha; cold reads and the first external Home feed the next
-alpha and gate beta.
+human projected gestures, whole-Home Hygiene and Site/Route separation with
+visible root-level checkouts and optional rebuildable Mounts for existing
+Routes. Local qualification, dogfood and a packed npm smoke test gate the
+alpha; cold reads and the first external Home feed the next alpha and gate
+beta.
 
 ## Exploring
 
@@ -39,7 +40,7 @@ five levels:
 | L1 | static instructions and capabilities project without loss |
 | L2 | native invocation can call an Occupant and apply a Role |
 | L3 | entry/Wake-up restores place-owned continuity |
-| L4 | the full Home-first slice passes local qualification and dogfood |
+| L4 | the full Workplace-first slice passes local qualification and dogfood |
 
 Codex and Claude are currently qualified at L4. A new provider advances only
 with dated evidence; Endroit does not infer support from file similarity.

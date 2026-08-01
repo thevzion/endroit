@@ -1,7 +1,7 @@
 # {{home.name}}
 
-This is an Endroit Home: a provider-agnostic environment shared by humans and
-agents.
+This is an Open Workplace Home implemented by Endroit: a provider-agnostic
+environment shared by humans and agents.
 
 ## Ownership
 

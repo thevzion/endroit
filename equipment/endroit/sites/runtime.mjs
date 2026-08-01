@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
-import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -18,6 +18,8 @@ const ROUTE_HELP = {
   bind: 'endroit route bind <site> <repository-path> [--id <route>] [--json]',
   clone: 'endroit route clone <site> [--id <route>] [--json]',
   worktree: 'endroit route worktree <site> --id <route> [--from <route>] (--branch <existing> | --new-branch <name> [--start-point <ref>]) [--json]',
+  mount: 'endroit route mount <site> [--id <route>] [--json]',
+  unmount: 'endroit route unmount <site> [--id <route>] [--json]',
   remove: 'endroit route remove <site> [--id <route>] [--delete] [--json]',
 }
 
@@ -54,8 +56,10 @@ async function routeCommand(input, command, args, flags) {
   if (command === 'bind') return bindRoute(input, required(args[0], 'Site id'), required(args[1], 'Repository path'), flags.id)
   if (command === 'clone') return cloneRoute(input, required(args[0], 'Site id'), flags.id)
   if (command === 'worktree') return createWorktree(input, required(args[0], 'Site id'), flags)
+  if (command === 'mount') return mountRoute(input, required(args[0], 'Site id'), flags.id)
+  if (command === 'unmount') return unmountRoute(input, required(args[0], 'Site id'), flags.id)
   if (command === 'remove') return removeRoute(input, required(args[0], 'Site id'), flags.id, flags)
-  throw failure('usage', 'endroit route bind|clone|worktree|list|inspect|remove', 2)
+  throw failure('usage', 'endroit route bind|clone|worktree|mount|unmount|list|inspect|remove', 2)
 }
 
 async function listSites(input) {
@@ -63,7 +67,7 @@ async function listSites(input) {
     const routes = await routesFor(input, site.id)
     const inspected = await Promise.all(routes.map(async (route) => {
       const evidence = await inspectRepository(route.path).catch((error) => ({ available: false, error: error.message }))
-      return { ...route, matches: matchesSite(site, evidence), evidence }
+      return { ...route, mount: await inspectMount(input, route), matches: matchesSite(site, evidence), evidence }
     }))
     const registered = new Map(inspected.filter((route) => route.path).map((route) => [route.path, route.id]))
     const worktrees = new Map()
@@ -121,6 +125,7 @@ async function inspectRoute(input, id, routeId) {
     root: evidence.root,
     head: evidence.head,
     branch: evidence.branch,
+    mount: await inspectMount(input, route),
     workingTree: {
       clean: evidence.clean,
       changes: evidence.changes.length,
@@ -150,6 +155,7 @@ async function doctorSites(input) {
       if (!route.evidence.available) limits.push(`route-broken:${site.id}:${route.id}`)
       else if (!route.matches) limits.push(`route-site-mismatch:${site.id}:${route.id}`)
       if (route.evidence.conflicts) limits.push(`route-conflicts:${site.id}:${route.id}`)
+      if (route.mount && !['ready', 'direct'].includes(route.mount.status)) limits.push(`route-mount-${route.mount.status}:${site.id}:${route.id}`)
     }
     const unregistered = site.worktrees.filter((worktree) => !worktree.registered)
     if (unregistered.length) limits.push(`site-worktrees-unrouted:${site.id}:${unregistered.length}`)
@@ -326,6 +332,8 @@ async function createWorktree(input, id, flags) {
 
 async function removeRoute(input, id, routeId, flags) {
   const route = await selectRoute(input, id, routeId)
+  const mount = await inspectMount(input, route)
+  if (mount && mount.status !== 'direct') throw failure('route_mount_exists', `Route ${id}/${route.id} still has a Mount; unmount it first.`)
   if (route.mode.startsWith('managed-')) {
     if (!truthy(flags.delete)) throw failure('route_managed_delete_required', `Route ${id}/${route.id} is managed; pass --delete.`)
     if (!await exists(route.path)) throw failure('route_broken', `Managed Route ${id}/${route.id} has no checkout.`)
@@ -348,6 +356,50 @@ async function removeRoute(input, id, routeId, flags) {
   await rm(route.documentPath)
   await removeEmpty(dirname(route.documentPath), join(input.deskRoot, 'routes'))
   return { status: 'removed', site: id, route: route.id, mode: route.mode }
+}
+
+async function mountRoute(input, id, routeId) {
+  const route = await selectRoute(input, id, routeId)
+  if (route.mode !== 'existing') throw failure('route_mount_mode', `Only an existing Route can be mounted; ${id}/${route.id} is ${route.mode}.`)
+  const destination = mountPath(input, id, route.id)
+  const current = await inspectMount(input, route)
+  if (current?.status === 'ready') return { status: 'mounted', site: id, route: route.id, path: destination, target: route.path }
+  if (current?.status === 'direct') return { status: 'already-addressed', site: id, route: route.id, path: destination, target: route.path }
+  if (current) throw failure('route_mount_conflict', `Mount ${relative(input.homeRoot, destination)} is ${current.status}; remove it explicitly before rebuilding.`)
+  await mkdir(dirname(destination), { recursive: true })
+  await symlink(route.path, destination, 'dir')
+  return { status: 'mounted', site: id, route: route.id, path: destination, target: route.path }
+}
+
+async function unmountRoute(input, id, routeId) {
+  const route = await selectRoute(input, id, routeId)
+  const destination = mountPath(input, id, route.id)
+  let info
+  try { info = await lstat(destination) } catch (error) {
+    if (error.code === 'ENOENT') return { status: 'unmounted', site: id, route: route.id, path: destination }
+    throw error
+  }
+  if (!info.isSymbolicLink()) throw failure('route_mount_not_symlink', `Refusing to remove non-symlink path ${relative(input.homeRoot, destination)}.`)
+  await rm(destination)
+  await removeEmpty(dirname(destination), join(input.homeRoot, 'checkouts'))
+  return { status: 'unmounted', site: id, route: route.id, path: destination }
+}
+
+async function inspectMount(input, route) {
+  if (route.mode !== 'existing') return null
+  const path = mountPath(input, route.site, route.id)
+  let info
+  try { info = await lstat(path) } catch (error) {
+    if (error.code === 'ENOENT') return null
+    throw error
+  }
+  if (!info.isSymbolicLink()) {
+    const target = await realpath(path).catch(() => null)
+    return { status: target === route.path ? 'direct' : 'invalid', path, ...(target ? { target } : {}) }
+  }
+  const target = await realpath(path).catch(() => null)
+  if (!target) return { status: 'broken', path }
+  return { status: target === route.path ? 'ready' : 'mismatch', path, target }
 }
 
 async function routesFor(input, id) {
@@ -420,10 +472,14 @@ async function assertRouteAvailable(input, site, route) {
 }
 
 function managedPath(input, site, route) {
-  const root = join(input.deskRoot, 'sites', site)
+  const root = join(input.homeRoot, 'checkouts', site)
   const destination = join(root, route)
-  if (relative(root, destination).startsWith('..')) throw failure('route_path_invalid', 'Managed checkout must stay below .desk/sites.')
+  if (relative(root, destination).startsWith('..')) throw failure('route_path_invalid', 'Managed checkout must stay below checkouts/.')
   return destination
+}
+
+function mountPath(input, site, route) {
+  return managedPath(input, site, route)
 }
 
 async function inspectRepository(path) {

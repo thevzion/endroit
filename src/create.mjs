@@ -146,7 +146,7 @@ export async function initHome(root = process.cwd(), options = {}) {
     await writeFileAtomic(instructionPath, await renderInstructionTemplate('home', {
       'home.name': home.name,
     }), 0o644)
-    const required = ['/.endroit/', ...(deskStrategy === 'separate' || deskStrategy === 'later' ? ['/.desk/'] : ['/.desk/routes/', '/.desk/sites/']), '/.DS_Store']
+    const required = ['/.endroit/', '/checkouts/', ...(deskStrategy === 'separate' || deskStrategy === 'later' ? ['/.desk/'] : ['/.desk/routes/']), '/.DS_Store']
     const lines = currentIgnore.split(/\r?\n/)
     const missing = required.filter((line) => !lines.includes(line))
     if (missing.length) await writeFileAtomic(ignorePath, `${currentIgnore.trimEnd()}${currentIgnore.trim() ? '\n' : ''}${missing.join('\n')}\n`, 0o644)
