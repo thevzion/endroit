@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://endroit.org/schema/home.json",
+  "$id": "https://endroit.org/schema/v7/home.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["$schema", "name", "runtime", "providers"],
   "properties": {
-    "$schema": { "const": "https://endroit.org/schema/home.json" },
+    "$schema": { "const": "https://endroit.org/schema/v7/home.json" },
     "name": { "$ref": "#/$defs/id" },
     "emoji": { "$ref": "#/$defs/emoji" },
     "runtime": {

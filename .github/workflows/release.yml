@@ -63,7 +63,7 @@ jobs:
         run: npm install --global npm@${{ env.NPM_VERSION }}
       - run: npm ci --ignore-scripts
       - run: npm run check:lab
-      - name: Build and dry-run all release artifacts
+      - name: Build, probe public schemas and dry-run the release artifact
         shell: bash
         run: |
           release_dir="$RUNNER_TEMP/npm-release"

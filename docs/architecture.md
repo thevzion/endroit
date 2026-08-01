@@ -22,6 +22,11 @@ flowchart TD
 `@endroit/cli` is the only package. There is no daemon, registry service,
 public Core package, graph store or required SaaS.
 
+Git owns the 0.8 contract sources under `schemas/v7/`; the npm package carries
+the same files for offline validation; `endroit.org/schema/v7/` gives them
+stable public addresses. Runtime dispatch uses
+`endroit.org/runtime/v2alpha1`. The CLI never downloads a schema to operate.
+
 ## Ownership
 
 ```text

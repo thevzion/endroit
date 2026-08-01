@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://endroit.org/schema/equipment.json",
+  "$id": "https://endroit.org/schema/v7/equipment.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["$schema", "name", "version", "description", "files"],
   "properties": {
-    "$schema": { "const": "https://endroit.org/schema/equipment.json" },
+    "$schema": { "const": "https://endroit.org/schema/v7/equipment.json" },
     "name": { "$ref": "#/$defs/name" },
     "version": {
       "type": "string",

@@ -4,16 +4,17 @@ import { fileURLToPath } from 'node:url'
 import { EndroitError } from './lib/errors.mjs'
 
 export const API = Object.freeze({
-  home: 'https://endroit.org/schema/home.json',
-  equipment: 'https://endroit.org/schema/equipment.json',
-  desk: 'https://endroit.org/schema/desk.json',
-  member: 'https://endroit.org/schema/member.json',
-  site: 'https://endroit.org/schema/site.json',
-  route: 'https://endroit.org/schema/route.json',
-  runtime: 'endroit.org/runtime/v1alpha1',
+  home: 'https://endroit.org/schema/v7/home.json',
+  equipment: 'https://endroit.org/schema/v7/equipment.json',
+  desk: 'https://endroit.org/schema/v7/desk.json',
+  member: 'https://endroit.org/schema/v7/member.json',
+  site: 'https://endroit.org/schema/v7/site.json',
+  route: 'https://endroit.org/schema/v7/route.json',
+  artifact: 'https://endroit.org/schema/v7/artifact.json',
+  runtime: 'endroit.org/runtime/v2alpha1',
 })
 
-const schemaFiles = ['home.schema.json', 'desk.schema.json', 'member.schema.json', 'equipment.schema.json', 'site.schema.json', 'route.schema.json', 'runtime.schema.json']
+const schemaFiles = ['home.schema.json', 'desk.schema.json', 'member.schema.json', 'equipment.schema.json', 'site.schema.json', 'route.schema.json', 'runtime.schema.json', 'artifact.schema.json']
 let validatorsPromise
 
 async function validators() {

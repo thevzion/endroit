@@ -77,7 +77,7 @@ async function createArtifact(input, kindSelector, id, flags) {
   const timestamp = new Date().toISOString()
   const metadata = {
     ...extraFields(flags.field),
-    $schema: 'https://endroit.org/schema/artifact.json',
+    $schema: 'https://endroit.org/schema/v7/artifact.json',
     id,
     kind: kind.id,
     status: flags.status ?? flags.state ?? kind.states?.[0] ?? 'draft',
@@ -268,7 +268,10 @@ async function validateDirectory(directory, metadata, kind, ownerScope, legacy) 
   for (const key of ['$schema', 'id', 'kind', 'owner', 'status', 'created_at', 'updated_at', 'derived_from']) {
     if (metadata[key] === undefined || metadata[key] === '') throw failure('artifact_invalid', `Artifact metadata requires ${key}.`)
   }
-  if (metadata.$schema !== 'https://endroit.org/schema/artifact.json') throw failure('artifact_invalid', 'Artifact schema is invalid.')
+  const expectedSchema = legacy
+    ? 'https://endroit.org/schema/artifact.json'
+    : 'https://endroit.org/schema/v7/artifact.json'
+  if (metadata.$schema !== expectedSchema) throw failure('artifact_invalid', `Artifact schema must be ${expectedSchema}.`)
   if (metadata.kind !== kind.id) throw failure('artifact_invalid', `Artifact kind ${metadata.kind} does not match ${kind.id}.`)
   if (!Array.isArray(metadata.derived_from)) throw failure('artifact_invalid', 'derived_from must be an array.')
   if (kind.states?.length && !kind.states.includes(metadata.status)) throw failure('artifact_invalid', `${metadata.status} is not valid for ${kind.id}.`)
@@ -430,7 +433,7 @@ async function routes(input, siteId) {
   for (const entry of await safeReadDir(root)) {
     if (!entry.isFile() || entry.isSymbolicLink() || !entry.name.endsWith('.json')) continue
     const document = JSON.parse(await readFile(join(root, entry.name), 'utf8'))
-    if (document.$schema !== 'https://endroit.org/schema/route.json' || document.site !== siteId) continue
+    if (document.$schema !== 'https://endroit.org/schema/v7/route.json' || document.site !== siteId) continue
     const path = await realpath(resolve(input.homeRoot, document.path)).catch(() => null)
     if (path) found.push({ id: document.id, path })
   }

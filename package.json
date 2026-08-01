@@ -52,6 +52,7 @@
     "templates/",
     "schemas/v7/",
     "src/",
+    "INSTALL.md",
     "LICENSE",
     "README.md"
   ],

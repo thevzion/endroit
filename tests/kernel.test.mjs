@@ -135,7 +135,7 @@ test('init embeds a Home in an existing repository without merging Site and Home
     assert.equal(await readFile(join(repository, 'README.md'), 'utf8'), '# Existing product\n')
     assert.match(await readFile(join(repository, 'sites/self/SITE.md'), 'utf8'), /kind: "site"/)
     assert.deepEqual(JSON.parse(await readFile(join(repository, '.desk/routes/self/embedded.json'), 'utf8')), {
-      $schema: 'https://endroit.org/schema/route.json',
+      $schema: 'https://endroit.org/schema/v7/route.json',
       id: 'embedded',
       site: 'self',
       mode: 'embedded',
@@ -159,10 +159,14 @@ test('init embeds a Home in an existing repository without merging Site and Home
 })
 
 test('create builds a source-owned Home and tracks shared provider projections', async () => {
-  assert.deepEqual(await compileSchemas(), ['home', 'desk', 'member', 'equipment', 'site', 'route', 'runtime'])
+  assert.deepEqual(await compileSchemas(), ['home', 'desk', 'member', 'equipment', 'site', 'route', 'runtime', 'artifact'])
   await assert.rejects(
     () => validateDocument({ $schema: 'https://example.invalid/schema/home.json' }, 'home'),
-    (error) => error.code === 'schema_version_mismatch' && /Endroit 0\.8 requires https:\/\/endroit\.org\/schema\/home\.json/.test(error.message),
+    (error) => error.code === 'schema_version_mismatch' && /Endroit 0\.8 requires https:\/\/endroit\.org\/schema\/v7\/home\.json/.test(error.message),
+  )
+  await assert.rejects(
+    () => validateDocument({ $schema: 'https://endroit.org/schema/home.json' }, 'home'),
+    (error) => error.code === 'schema_version_mismatch',
   )
   const help = captureIo()
   assert.equal(await runCli([], help.io), 0)
@@ -173,7 +177,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
     const document = JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8'))
     await validateDocument(document, 'home')
     assert.deepEqual(document, {
-      $schema: 'https://endroit.org/schema/home.json',
+      $schema: 'https://endroit.org/schema/v7/home.json',
       name: 'home',
       emoji: '🏠',
       runtime: '@endroit/cli@0.8.0-alpha.0',
@@ -270,7 +274,7 @@ test('forEach accessors bind generated aliases to resolved Home items', async ()
     await mkdir(join(home, 'sites', 'product'), { recursive: true })
     await writeFile(join(home, 'sites', 'product', 'SITE.md'), [
       '---',
-      '$schema: "https://endroit.org/schema/site.json"',
+      '$schema: "https://endroit.org/schema/v7/site.json"',
       'id: "product"',
       'kind: "site"',
       'status: "active"',
@@ -521,7 +525,7 @@ test('canonical Home and Desk instructions are required, source-owned and fully 
     await initHome(emptyDesk, { deskStrategy: 'later' })
     const deskRepository = join(temporary, 'desk-repository')
     await exec('git', ['init', '--quiet', '--initial-branch=main', deskRepository])
-    await writeFile(join(deskRepository, 'desk.json'), '{"$schema":"https://endroit.org/schema/desk.json","id":"alexis","member":"owner"}\n')
+    await writeFile(join(deskRepository, 'desk.json'), '{"$schema":"https://endroit.org/schema/v7/desk.json","id":"alexis","member":"owner"}\n')
     await exec('git', ['add', 'desk.json'], { cwd: deskRepository })
     await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'desk'], { cwd: deskRepository })
     await assert.rejects(() => cloneDesk(emptyDesk, deskRepository), (error) => error.code === 'desk_instruction_missing')

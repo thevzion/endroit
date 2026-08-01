@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://endroit.org/schema/site.json",
+  "$id": "https://endroit.org/schema/v7/site.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["$schema", "id", "kind", "status"],
   "properties": {
-    "$schema": { "const": "https://endroit.org/schema/site.json" },
+    "$schema": { "const": "https://endroit.org/schema/v7/site.json" },
     "id": { "$ref": "#/$defs/id" },
     "kind": { "const": "site" },
     "status": { "enum": ["active", "archived"] },

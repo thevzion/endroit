@@ -13,7 +13,7 @@ status applies only to the evidence named here.
 Codex and Claude projections. The Node 22/24, package and Development Home
 gates prove deterministic generation and execute wrapper scripts outside the
 provider hosts. They do not prove that a provider accepted its hook, performed
-native delegation or completed the full workplace journey.
+provider-hosted delegation or completed the full workplace journey.
 
 ## Status vocabulary
 

@@ -1,5 +1,5 @@
 {
-  "$schema": "https://endroit.org/schema/equipment.json",
+  "$schema": "https://endroit.org/schema/v7/equipment.json",
   "name": "endroit/workplace",
   "version": "0.8.0-alpha.0",
   "description": "Human operational gestures for entering, using and advancing work in a Home.",
@@ -13,7 +13,7 @@
   ],
   "capabilities": [
     { "id": "enter", "path": "capabilities/enter.md", "description": "Enter the Home or one Room from authoritative sources." },
-    { "id": "call", "path": "capabilities/call.md", "description": "Call the concrete researcher occupant through provider-native delegation." },
+    { "id": "call", "path": "capabilities/call.md", "description": "Call the concrete researcher occupant through provider-hosted delegation." },
     { "id": "work-as", "path": "capabilities/work-as.md", "description": "Work through the concrete engineer role for the current Meeting." },
     { "id": "use", "path": "capabilities/use.md", "description": "Use the first-party research method without transferring ownership to the Skill." },
     { "id": "lifecycle", "path": "capabilities/lifecycle.md", "description": "Retain, accept, deliver or archive the current bounded result explicitly." },

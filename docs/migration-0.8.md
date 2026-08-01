@@ -4,6 +4,11 @@ Endroit 0.8 is an intentional alpha break. There are no permanent command or
 schema aliases. Migrate in Git, keep the last valid 0.7 commit and preserve
 meaning before renaming files.
 
+All active 0.8 documents use `https://endroit.org/schema/v7/<type>.json`.
+Historical unversioned schema URLs remain 0.7 contracts and never redirect to
+v7. Runtime Equipment moves from `endroit.org/runtime/v1alpha1` to
+`endroit.org/runtime/v2alpha1`.
+
 ## Vocabulary
 
 | 0.7 | 0.8 |
@@ -45,7 +50,7 @@ the migration look tidy. Paths are Desk state; ownership is the durable part.
 For a repository that should also contain its Home, run:
 
 ```bash
-npx @endroit/cli init
+npx --yes --package @endroit/cli@0.8.0-alpha.0 endroit init .
 ```
 
 This creates Site `self` and Route `embedded` at `.`. The Home owns only its

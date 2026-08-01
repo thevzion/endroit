@@ -1,5 +1,5 @@
 {
-  "$schema": "https://endroit.org/schema/equipment.json",
+  "$schema": "https://endroit.org/schema/v7/equipment.json",
   "name": "endroit/sites",
   "version": "0.8.0-alpha.0",
   "description": "Sovereign Sites declared by a Home and reached through Desk-owned Routes.",

@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://endroit.org/schema/runtime.json",
+  "$id": "https://endroit.org/schema/v7/runtime.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["protocol", "argv", "homeRoot", "equipmentRoot", "resolvedHome", "kernel", "runtimeTrust", "invocation"],
   "properties": {
-    "protocol": { "const": "endroit.org/runtime/v1alpha1" },
+    "protocol": { "const": "endroit.org/runtime/v2alpha1" },
     "argv": { "type": "array", "items": { "type": "string" } },
     "homeRoot": { "type": "string", "minLength": 1 },
     "deskRoot": { "type": ["string", "null"] },

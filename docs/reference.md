@@ -8,7 +8,7 @@ Workplace model. This reference describes `0.8.0-alpha.0`; the
 
 - Node.js 22 or newer;
 - Git;
-- Codex and/or Claude for first-class provider projections.
+- Codex and/or Claude for L1 Projection-qualified provider surfaces.
 
 ## CLI surfaces
 
@@ -144,9 +144,31 @@ The first-party Workplace Equipment projects human gestures such as
 `enter-the-home`, `enter-the-<room>-room`, `work-on-<site>`,
 `call-the-researcher`, `work-as-an-engineer`, `use-research`, `retain-this`,
 `accept-this`, `deliver-this` and `archive-this`. Entry reloads authoritative
-sources and creates no global active-Room state. Provider-native call and Role
+sources and creates no global active-Room state. Provider-hosted call and Role
 operations return `blocked` when the mechanism is unavailable; they never
 simulate an Occupant.
+
+## Versioned contracts
+
+The 0.8 package validates offline from its bundled v7 schemas. Their immutable
+public identifiers are:
+
+```text
+https://endroit.org/schema/v7/home.json
+https://endroit.org/schema/v7/desk.json
+https://endroit.org/schema/v7/member.json
+https://endroit.org/schema/v7/equipment.json
+https://endroit.org/schema/v7/site.json
+https://endroit.org/schema/v7/route.json
+https://endroit.org/schema/v7/runtime.json
+https://endroit.org/schema/v7/artifact.json
+```
+
+Equipment runtimes receive protocol `endroit.org/runtime/v2alpha1`. Public
+schema URLs identify and document contracts; the CLI never needs network
+access to validate a Home. Historical unversioned 0.7 contracts remain frozen
+at `home.json`, `desk.json`, `asset.json`, `runtime.json` and `artifact.json`;
+they are not aliases for v7.
 
 ## Sites
 
@@ -180,7 +202,7 @@ A Route is a Desk-local JSON declaration:
 
 ```json
 {
-  "$schema": "https://endroit.org/schema/route.json",
+  "$schema": "https://endroit.org/schema/v7/route.json",
   "id": "main",
   "site": "product",
   "mode": "existing",
@@ -232,7 +254,7 @@ orientation; its failure cannot remove the Floor Plan.
 - `endroit/rooms`: `create|list|inspect|doctor`;
 - `endroit/artifacts`: Room-owned validated results and promotion;
 - `endroit/sites`: Site, Route and deterministic Git inspection;
-- `endroit/workplace`: provider-native entry, Occupant, Role, method and
+- `endroit/workplace`: provider-projected entry, Occupant, Role, method and
   lifecycle gestures;
 - `endroit/hygiene`: read-only `maintain-the-home` inspection and one exactly
   approved bounded repair;
@@ -242,7 +264,7 @@ orientation; its failure cannot remove the Floor Plan.
 ## Alpha boundaries
 
 - schemas and grammar may still break before 1.0;
-- Codex and Claude are projection-qualified first-party targets; L2–L4 live
+- Codex and Claude are L1 Projection-qualified first-party targets; L2–L4 live
   runtime qualification remains unclaimed until provider-hosted smoke evidence;
 - provider status and portability levels are recorded in [providers](providers.md);
 - no daemon, semantic index, graph or persistent agent is required;

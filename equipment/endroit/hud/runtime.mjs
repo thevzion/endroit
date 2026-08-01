@@ -537,7 +537,7 @@ async function scanSites(sites, homeRoot, deskRoot, artifacts) {
       for (const entry of await safeReadDir(siteRoot)) {
         if (!entry.isFile() || entry.isSymbolicLink() || !entry.name.endsWith('.json')) continue
         const route = JSON.parse(await readFile(join(siteRoot, entry.name), 'utf8'))
-        if (route.$schema !== 'https://endroit.org/schema/route.json' || route.site !== site.id) continue
+        if (route.$schema !== 'https://endroit.org/schema/v7/route.json' || route.site !== site.id) continue
         const resolved = await realpath(resolve(homeRoot, route.path)).catch(() => null)
         routes.push({
           id: route.id,

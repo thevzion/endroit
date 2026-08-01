@@ -1,5 +1,5 @@
 ---
-$schema: "https://endroit.org/schema/member.json"
+$schema: "https://endroit.org/schema/v7/member.json"
 id: {{member.id}}
 name: {{member.name}}
 status: {{member.status}}

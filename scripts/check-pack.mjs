@@ -17,6 +17,8 @@ for (const required of [
   'schemas/v7/site.schema.json',
   'schemas/v7/route.schema.json',
   'schemas/v7/runtime.schema.json',
+  'schemas/v7/artifact.schema.json',
+  'INSTALL.md',
   'templates/HOME.md',
   'templates/DESK.md',
   'templates/MEMBER.md',

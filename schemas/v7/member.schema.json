@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://endroit.org/schema/member.json",
+  "$id": "https://endroit.org/schema/v7/member.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["$schema", "id", "name", "status", "accounts"],
   "properties": {
-    "$schema": { "const": "https://endroit.org/schema/member.json" },
+    "$schema": { "const": "https://endroit.org/schema/v7/member.json" },
     "id": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"

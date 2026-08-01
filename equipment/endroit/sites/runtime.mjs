@@ -191,7 +191,7 @@ async function addSite(input, repository, flags) {
   if (flags.when !== undefined && !when) throw failure('usage', '--when requires a non-empty situation.', 2)
   if (flags.tag !== undefined && (!tag || !validId(tag))) throw failure('site_tag_invalid', `Invalid Site tag ${flags.tag}.`)
   const site = {
-    $schema: 'https://endroit.org/schema/site.json',
+    $schema: 'https://endroit.org/schema/v7/site.json',
     id,
     kind: 'site',
     status: 'active',
@@ -451,7 +451,7 @@ async function writeRoute(input, route) {
   const path = join(root, `${route.id}.json`)
   await mkdir(root, { recursive: true })
   const document = {
-    $schema: 'https://endroit.org/schema/route.json',
+    $schema: 'https://endroit.org/schema/v7/route.json',
     id: route.id,
     site: route.site,
     mode: route.mode,
@@ -587,7 +587,7 @@ function declaration(input, id) {
 function matchesSite(site, evidence) { return evidence.available !== false && (!site.repository || evidence.remotes.some((remote) => remote.repository === site.repository)) }
 function assertSiteMatches(site, evidence) { if (!matchesSite(site, evidence)) throw failure('route_site_mismatch', `${evidence.root} does not match ${site.repository}.`) }
 function validateRoute(route, site, id, input) {
-  if (route.$schema !== 'https://endroit.org/schema/route.json' || route.id !== id || route.site !== site || !['embedded', 'existing', 'managed-clone', 'managed-worktree', 'submodule'].includes(route.mode) || typeof route.path !== 'string' || !route.path) {
+  if (route.$schema !== 'https://endroit.org/schema/v7/route.json' || route.id !== id || route.site !== site || !['embedded', 'existing', 'managed-clone', 'managed-worktree', 'submodule'].includes(route.mode) || typeof route.path !== 'string' || !route.path) {
     throw failure('route_invalid', `Invalid Route ${site}/${id}.`)
   }
   if (route.mode === 'embedded' && route.path !== '.') throw failure('route_path_invalid', `Embedded Route ${site}/${id} must point to the Home root.`)

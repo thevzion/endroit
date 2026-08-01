@@ -111,7 +111,7 @@ test('Site worktree validation rejects ambiguous or unsafe creation without impl
 
     const forged = join(home, '.desk', 'routes', 'demo', 'forged.json')
     await writeFile(forged, `${JSON.stringify({
-      $schema: 'https://endroit.org/schema/route.json',
+      $schema: 'https://endroit.org/schema/v7/route.json',
       id: 'forged',
       site: 'demo',
       mode: 'managed-clone',

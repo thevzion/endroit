@@ -15,7 +15,7 @@ export async function writeEquipment(root, manifest = equipment(), files = {}) {
 
 export function equipment(overrides = {}) {
   return {
-    $schema: 'https://endroit.org/schema/equipment.json',
+    $schema: 'https://endroit.org/schema/v7/equipment.json',
     name: 'fixture/review',
     version: '1.0.0',
     description: 'Review agentic material.',

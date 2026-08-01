@@ -13,11 +13,14 @@
 - Add Home-owned Members, required Desk-to-Member references and
   `--desk tracked|separate|later`; remove `solo|team` and `--mode`.
 - Project the complete static Workplace-first journey through human operational
-  gestures, with native provider delegation that fails `blocked` when absent.
+  gestures, with provider-hosted delegation that fails `blocked` when absent.
 - Place managed checkouts under ignored root `checkouts/` paths and expose
   optional rebuildable Mounts for existing Routes.
 - Install whole-Home Hygiene by default for read-only categorized inspection
   and exactly approved bounded repair.
+- Version every active 0.8 schema under immutable `/schema/v7/` identifiers,
+  ship Artifact with the package and advance Equipment runtimes to `v2alpha1`.
+- Add the agent-led, CLI-backed and human-approved installation contract.
 - Publish the prerelease to npm `next`, smoke that registry artifact, then keep
   `latest` promotion as a separate authenticated effect.
 

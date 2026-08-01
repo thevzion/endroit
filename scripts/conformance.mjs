@@ -13,7 +13,7 @@ try {
   await createHome(home)
   await mkdir(source)
   const manifest = {
-    $schema: 'https://endroit.org/schema/equipment.json',
+    $schema: 'https://endroit.org/schema/v7/equipment.json',
     name: 'conformance/proof', version: '1.0.0', description: 'Conformance proof.',
     files: ['proof.md'],
     instructions: [{ id: 'proof', path: 'proof.md' }],

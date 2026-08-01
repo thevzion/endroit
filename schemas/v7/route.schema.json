@@ -1,11 +1,11 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://endroit.org/schema/route.json",
+  "$id": "https://endroit.org/schema/v7/route.json",
   "type": "object",
   "additionalProperties": false,
   "required": ["$schema", "id", "site", "mode", "path"],
   "properties": {
-    "$schema": { "const": "https://endroit.org/schema/route.json" },
+    "$schema": { "const": "https://endroit.org/schema/v7/route.json" },
     "id": { "$ref": "#/$defs/id" },
     "site": { "$ref": "#/$defs/id" },
     "mode": { "enum": ["embedded", "existing", "managed-clone", "managed-worktree", "submodule"] },

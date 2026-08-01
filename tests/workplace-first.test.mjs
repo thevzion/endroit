@@ -26,7 +26,7 @@ test('create and init choose explicit Desk Git boundaries around Home-owned Memb
     await createHome(tracked, { memberId: 'alexis', memberName: 'Alexis' })
     assert.match(await readFile(join(tracked, 'members/alexis/MEMBER.md'), 'utf8'), /id: "alexis"/)
     assert.deepEqual(JSON.parse(await readFile(join(tracked, '.desk/desk.json'), 'utf8')), {
-      $schema: 'https://endroit.org/schema/desk.json', id: 'local', member: 'alexis',
+      $schema: 'https://endroit.org/schema/v7/desk.json', id: 'local', member: 'alexis',
     })
     assert.equal(await gitRoot(join(tracked, '.desk')), await realpath(tracked))
     assert.match((await exec('git', ['ls-files'], { cwd: tracked })).stdout, /^members\/alexis\/MEMBER\.md$/m)

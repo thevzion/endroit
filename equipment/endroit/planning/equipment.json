@@ -1,5 +1,5 @@
 {
-  "$schema": "https://endroit.org/schema/equipment.json",
+  "$schema": "https://endroit.org/schema/v7/equipment.json",
   "name": "endroit/planning",
   "version": "0.8.0-alpha.0",
   "description": "Conversation-first operational planning owned by one Room.",

@@ -12,12 +12,16 @@ const manifestPath = resolve(manifestArgument ?? join(projectRoot, 'release/mani
 const releaseRoot = dirname(manifestPath)
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
 const expectedOrder = ['@endroit/cli']
+const expectedSchemas = ['home', 'desk', 'member', 'equipment', 'site', 'route', 'runtime', 'artifact']
+const expectedLegacySchemas = ['home', 'desk', 'asset', 'runtime', 'artifact']
 
 if (JSON.stringify(manifest.packages.map((entry) => entry.name)) !== JSON.stringify(expectedOrder)) {
   throw new Error(`Release order must be ${expectedOrder.join(' → ')}.`)
 }
 const { stdout: commit } = await exec('git', ['rev-parse', 'HEAD'], { cwd: projectRoot })
 if (manifest.commit !== commit.trim()) throw new Error(`Release manifest belongs to ${manifest.commit}, not ${commit.trim()}.`)
+await verifySchemas(manifest.schemas)
+await verifyLegacySchemas(manifest.legacySchemas)
 
 for (const entry of manifest.packages) {
   const tarball = join(releaseRoot, entry.filename)
@@ -37,6 +41,40 @@ for (const entry of manifest.packages) {
   await exec('npm', args, { cwd: projectRoot, maxBuffer: 20 * 1024 * 1024 })
   process.stdout.write(`${dryRun ? 'qualified' : 'published'} ${entry.name}@${entry.version}\n`)
   if (!dryRun) await verifyRegistry(entry, manifest.tag)
+}
+
+async function verifySchemas(schemas) {
+  if (JSON.stringify(schemas?.map((entry) => entry.name)) !== JSON.stringify(expectedSchemas)) {
+    throw new Error(`Release schemas must be ${expectedSchemas.join(', ')}.`)
+  }
+  for (const entry of schemas) {
+    const expectedUrl = `https://endroit.org/schema/v7/${entry.name}.json`
+    if (entry.url !== expectedUrl) throw new Error(`${entry.name} schema URL must be ${expectedUrl}.`)
+    await verifyPublicSchema(entry)
+  }
+}
+
+async function verifyLegacySchemas(schemas) {
+  if (JSON.stringify(schemas?.map((entry) => entry.name)) !== JSON.stringify(expectedLegacySchemas)) {
+    throw new Error(`Legacy release schemas must be ${expectedLegacySchemas.join(', ')}.`)
+  }
+  for (const entry of schemas) {
+    const expectedUrl = `https://endroit.org/schema/${entry.name}.json`
+    if (entry.url !== expectedUrl) throw new Error(`${entry.name} legacy schema URL must be ${expectedUrl}.`)
+    await verifyPublicSchema(entry)
+  }
+}
+
+async function verifyPublicSchema(entry) {
+  const response = await fetch(entry.url, { redirect: 'manual' })
+  if (response.status !== 200) throw new Error(`${entry.url} returned HTTP ${response.status}.`)
+  if (!response.headers.get('content-type')?.toLowerCase().startsWith('application/schema+json')) {
+    throw new Error(`${entry.url} must use application/schema+json.`)
+  }
+  if (response.headers.get('access-control-allow-origin') !== '*') throw new Error(`${entry.url} must allow CORS from *.`)
+  const content = Buffer.from(await response.arrayBuffer())
+  if (createHash('sha256').update(content).digest('hex') !== entry.sha256) throw new Error(`${entry.url} does not match its qualified SHA-256.`)
+  if (JSON.parse(content).$id !== entry.url) throw new Error(`${entry.url} has a mismatched $id.`)
 }
 
 async function remoteIntegrity(entry) {

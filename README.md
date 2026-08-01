@@ -96,12 +96,31 @@ projections. A Home is one concrete workplace instance. “Endroit” means
 ## Start a Home
 
 Requirements: Git and Node.js 22 or newer. Endroit currently ships
-first-class projections for Codex and Claude.
+Projection-qualified L1 surfaces for Codex and Claude.
+
+### Install with your agent
+
+Give your agent this instruction:
+
+```text
+Read https://endroit.org/install.md and set up Endroit here.
+Explain the plan and ask before changing anything.
+```
+
+The versioned source of that public contract is [INSTALL.md](INSTALL.md). The
+agent inspects and explains; the pinned Endroit CLI applies only the approved
+operation.
+
+> **Agent-led. CLI-backed. Human-approved.**
+>
+> The agent guides. The CLI applies. The human approves.
+
+### Use the terminal
 
 Create a standalone Home:
 
 ```bash
-npx @endroit/cli create my-home
+npx --yes --package @endroit/cli@0.8.0-alpha.0 endroit create my-home
 ```
 
 `create` adds a Home-owned Member and a Desk tracked with the Home. Use
@@ -112,11 +131,15 @@ Or add a Home to an existing repository:
 
 ```bash
 cd my-existing-repository
-npx @endroit/cli init
+npx --yes --package @endroit/cli@0.8.0-alpha.0 endroit init .
 ```
 
 `init` defaults to a separate Desk repository under ignored `.desk/`. Both
 commands accept `--desk tracked|separate|later`.
+
+Bootstrap does not move existing instructions, Skills, memory, product files
+or checkouts. Read the preview and approve only the destination and Desk
+strategy you intend.
 
 The standalone bootstrap is intentionally small:
 
@@ -158,6 +181,13 @@ The initial human-authored orientation is concentrated in these sources:
 `create` and `init` also install seven inspectable foundation Equipment:
 Onboarding, HUD, Artifacts, Rooms, Sites, Workplace and Hygiene. Additional
 Rooms, Sites and optional Equipment appear only when the work earns them.
+
+### Continue onboarding
+
+In an existing Home, ask the agent to inspect the generated Front Door and
+continue onboarding. Normal conversation remains the default interface. You
+can inspect the Home first, then use explicit workplace gestures when they
+become useful.
 
 ## The first experience
 
@@ -334,9 +364,9 @@ archive-this         remove inactive Material from active context
 ```
 
 Codex and Claude receive these as generated first-party Skills and Commands.
-Static parity and wrapper shape are tested for both; provider-native behavior
-still requires a live provider smoke. Endroit does not add a persistent agent
-runtime, and a missing native operation returns `blocked` rather than
+Static parity and wrapper shape are tested for both; provider-hosted behavior
+still requires a dated live smoke. Endroit does not add a persistent agent
+runtime, and a missing provider-hosted operation returns `blocked` rather than
 simulating success.
 
 [HACP](https://github.com/control-decks/human-agent-control-protocol) is an
@@ -354,7 +384,7 @@ infers a Card from ordinary conversation.
 
 ## Alpha boundaries
 
-- Codex and Claude are the first projection-qualified targets; live runtime
+- Codex and Claude are L1 Projection-qualified targets; live runtime
   qualification remains an explicit release gate.
 - The 0.8 workplace grammar is a breaking alpha change from 0.7.
 - Submodules are recognized through their paths; Endroit does not manage their
