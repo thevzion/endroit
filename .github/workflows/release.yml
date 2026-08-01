@@ -129,7 +129,7 @@ jobs:
           done
           test "$tagged" = "$version"
           smoke_root="$RUNNER_TEMP/endroit-next-smoke"
-          npx --yes --package "@endroit/cli@$version" endroit create "$smoke_root" --desk tracked --no-interactive --yes
+          npm exec --yes --package="@endroit/cli@$version" -- endroit create "$smoke_root" --desk tracked --no-interactive --yes
           cd "$smoke_root"
           node ./endroit.mjs doctor --json | node -e "let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{if(JSON.parse(s).status!=='ready')process.exit(1)})"
           node ./endroit.mjs hygiene maintain --json | node -e "let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{if(JSON.parse(s).readOnly!==true)process.exit(1)})"
