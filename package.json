@@ -1,17 +1,16 @@
 {
   "name": "@endroit/cli",
   "version": "0.8.0-alpha.0",
-  "description": "A local-first, headless, file-based implementation of the Open Workplace model.",
+  "description": "A lightweight, local-first framework for building and operating file-based Open Workplaces.",
   "keywords": [
     "ai-agents",
     "agentic",
     "workplace-first",
-    "open-workplace",
     "human-agent-collaboration",
     "local-first",
-    "developer-tools",
     "codex",
-    "claude-code"
+    "claude-code",
+    "cli"
   ],
   "private": false,
   "license": "MIT",
