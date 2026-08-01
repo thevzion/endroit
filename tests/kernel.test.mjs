@@ -151,6 +151,26 @@ test('init embeds a Home in an existing repository without merging Site and Home
     assert.equal((await resolveHome(repository)).sites[0].id, 'self')
     assert.equal((await doctorHome(repository)).status, 'ready')
 
+    const brownfield = join(temporary, 'brownfield')
+    await exec('git', ['init', '--quiet', '--initial-branch=main', brownfield])
+    await mkdir(join(brownfield, 'src'), { recursive: true })
+    const preserved = {
+      'KEEP.md': '# Keep\n',
+      'AGENTS.md': '# Product agents\n',
+      'CLAUDE.md': '# Product Claude\n',
+      'src/index.js': 'export const ready = true\n',
+    }
+    for (const [path, content] of Object.entries(preserved)) await writeFile(join(brownfield, path), content)
+    await exec('git', ['add', '.'], { cwd: brownfield })
+    await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'brownfield'], { cwd: brownfield })
+    const brownfieldOutput = captureIo()
+    assert.notEqual(await runCli(['init', brownfield], brownfieldOutput.io), 0)
+    assert.match(brownfieldOutput.stderr(), /generated_output_collision/)
+    assert.match(brownfieldOutput.stderr(), /AGENTS\.md, CLAUDE\.md/)
+    assert.equal((await exec('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: brownfield })).stdout, '')
+    for (const [path, content] of Object.entries(preserved)) assert.equal(await readFile(join(brownfield, path), 'utf8'), content)
+    await assert.rejects(readFile(join(brownfield, 'endroit.mjs')), (error) => error.code === 'ENOENT')
+
     const collision = join(temporary, 'collision')
     await exec('git', ['init', '--quiet', '--initial-branch=main', collision])
     await mkdir(join(collision, 'rooms', 'home'), { recursive: true })

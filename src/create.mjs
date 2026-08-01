@@ -1,4 +1,5 @@
-import { mkdir, mkdtemp, readFile, rename, rm, rmdir } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, rename, rm, rmdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { addEquipment } from './equipment.mjs'
 import { buildHome } from './build.mjs'
@@ -8,7 +9,7 @@ import { git } from './git.mjs'
 import { homeDocument, homeId } from './home.mjs'
 import { HOME_INSTRUCTION, renderInstructionTemplate } from './instructions.mjs'
 import { EndroitError } from './lib/errors.mjs'
-import { exists, removeTree, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
+import { digest, exists, removeTree, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
 import { createMember } from './member.mjs'
 import { writeRoute, writeSite } from './sites.mjs'
 
@@ -78,12 +79,14 @@ export async function initializeExistingHome(destination = process.cwd(), option
   const root = resolve(destination)
   const deskStrategy = options.deskStrategy ?? 'separate'
   if (!await exists(join(root, '.git'))) throw new EndroitError('git_repository_required', 'endroit init requires an existing Git repository.')
-  await initHome(root, {
+  const initOptions = {
     ...options,
     name: options.name ?? homeId(root),
     deskStrategy,
     frontDoor: { wakeUp: 'endroit/hud:prompt' },
-  })
+  }
+  await preflightEmbeddedProjections(root, initOptions)
+  await initHome(root, initOptions)
   try {
     const result = await addEquipment(root, [...bootstrapEquipment, ...(options.equipment ?? [])])
     await bootstrapHomeRoom(root)
@@ -113,6 +116,38 @@ export async function initializeExistingHome(destination = process.cwd(), option
     }
   } catch (error) {
     throw new EndroitError('init_incomplete', `Home initialization stopped after source creation (${error.code ?? 'unknown'}): ${error.message}`)
+  }
+}
+
+async function preflightEmbeddedProjections(root, options) {
+  const stage = await mkdtemp(join(tmpdir(), 'endroit-init-preflight-'))
+  try {
+    await git(['init', '--quiet', '--initial-branch=main'], { cwd: stage })
+    await initHome(stage, options)
+    const equipment = (options.equipment ?? []).map((address) => String(address).startsWith('.') ? resolve(root, address) : address)
+    await addEquipment(stage, [...bootstrapEquipment, ...equipment])
+    await bootstrapHomeRoom(stage)
+    const site = await writeSite(stage, {
+      id: options.siteId ?? 'self',
+      summary: 'The repository that contains this embedded Home.',
+      when: ['Working on this repository.'],
+    })
+    if (options.deskStrategy !== 'later') {
+      await writeRoute(stage, join(stage, '.desk'), { id: 'embedded', site: site.id, mode: 'embedded', path: '.' })
+    }
+    const state = await buildHome(stage)
+    const collisions = []
+    for (const output of state.outputs) {
+      const path = join(root, output.path)
+      const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+      if (!info) continue
+      if (info.isSymbolicLink() || !info.isFile() || digest(await readFile(path)) !== output.digest) collisions.push(output.path)
+    }
+    if (collisions.length) {
+      throw new EndroitError('generated_output_collision', `Generated outputs already exist and Endroit does not own them: ${collisions.join(', ')}.`, { exitCode: 5 })
+    }
+  } finally {
+    await removeTree(stage, { force: true })
   }
 }
 
