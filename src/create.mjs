@@ -90,6 +90,7 @@ export async function initializeExistingHome(destination = process.cwd(), option
     const site = await writeSite(root, {
       id: options.siteId ?? 'self',
       summary: 'The repository that contains this embedded Home.',
+      when: ['Working on this repository.'],
     })
     if (deskStrategy !== 'later') {
       await writeRoute(root, join(root, '.desk'), {

@@ -98,7 +98,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.match(prompt.stdout(), new RegExp(`<home name="home" emoji="🏠" root="${escapeRegex(model.home.root)}" providers="codex,claude" members="owner"/>`))
     assert.match(prompt.stdout(), /<kernel runtime="@endroit\/cli@0\.8\.0-alpha\.0" source="npm" invoke="node \.\/endroit\.mjs"\/>/)
     assert.match(prompt.stdout(), /<item id="demo" emoji="🎛️" state="active" access="model,user" summary="Demo Room\." tags="demo" when="Working on the demo\." ref="room:desk\/demo"/)
-    assert.match(prompt.stdout(), /<runtime namespace="site" commands="list,doctor,add,remove,inspect,route"\/>/)
+    assert.match(prompt.stdout(), /<runtimes namespaces="artifact,hud,hygiene,room,site"\/>/)
     assert.match(prompt.stdout(), /<instruction owner="endroit\/desk" id="desk" source="DESK\.md">/)
     assert.match(prompt.stdout(), /<advisory>\s+<item subject="home" code="home-dirty">/)
     assert.doesNotMatch(prompt.stdout(), /<equipment>|<skills>|<commands>|<recent-desk>/)
@@ -143,6 +143,50 @@ test('the HUD owns its prompt budget through namespaced Home settings', async ()
   }
 })
 
+test('HUD prompt groups canonical capabilities within fresh and mature budgets', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-hud-compact-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home)
+    const json = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hud', ['json'], json.io), 0, json.stderr())
+    const model = JSON.parse(json.stdout())
+    assert.ok(model.items.capabilities.length > 6)
+    assert.equal(model.items.capabilities.every((entry) => entry.entrypoint && !entry.entrypoints), true)
+
+    const first = captureIo()
+    const second = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], first.io), 0, first.stderr())
+    assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], second.io), 0, second.stderr())
+    assert.ok(Buffer.byteLength(first.stdout()) <= 6500, `fresh HUD is ${Buffer.byteLength(first.stdout())} B`)
+    assert.equal(normalizeGeneratedAt(first.stdout()), normalizeGeneratedAt(second.stdout()))
+    const capabilities = first.stdout().match(/<capabilities>([\s\S]*?)<\/capabilities>/)?.[1] ?? ''
+    assert.match(capabilities, /ref="capability:endroit\/onboarding:onboard"[^\n]+entrypoints="endroit-onboarding"/)
+    assert.match(capabilities, /ref="capability:endroit\/workplace:lifecycle"[^\n]+entrypoints="accept-this,archive-this,deliver-this,retain-this"/)
+    for (const summary of new Set(model.items.capabilities.map((entry) => entry.summary))) {
+      assert.equal((capabilities.match(new RegExp(`summary="${escapeRegex(summary)}"`, 'g')) ?? []).length, 1, summary)
+    }
+
+    for (let index = 1; index <= 8; index += 1) {
+      assert.equal(await dispatchRuntime(home, 'room', ['create', `room-${index}`, '--scope', 'desk'], captureIo().io), 0)
+    }
+    for (let index = 1; index <= 14; index += 1) {
+      await writeSite(home, {
+        id: `site-${index}`,
+        summary: `Site ${index}.`,
+        when: [`Working on Site ${index}.`],
+        tags: [`site-${index}`],
+      })
+    }
+    await buildHome(home)
+    const mature = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], mature.io), 0, mature.stderr())
+    assert.ok(Buffer.byteLength(mature.stdout()) <= 24955, `mature HUD is ${Buffer.byteLength(mature.stdout())} B`)
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
 test('HUD prompt reports incomplete orientation instead of crashing', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-hud-orientation-'))
   try {
@@ -153,6 +197,10 @@ test('HUD prompt reports incomplete orientation instead of crashing', async () =
       summary: 'Documentation truth.',
       when: ['Working on documentation.'],
       tags: ['docs'],
+    })
+    await writeSite(home, {
+      id: 'notes',
+      summary: 'Notes truth.',
     })
     await writeFile(join(home, 'rooms', 'home', 'ROOM.md'), [
       '---',
@@ -174,6 +222,68 @@ test('HUD prompt reports incomplete orientation instead of crashing', async () =
     assert.match(prompt.stdout(), /metadata-error="summary must be a non-empty string\."/)
     assert.match(prompt.stdout(), /id="docs" state="declared" routable="false" access="model,user" summary="Documentation truth\." tags="docs" when="Working on documentation\."/)
     assert.doesNotMatch(prompt.stdout(), /subject="site:docs" code="orientation-invalid"/)
+    assert.match(prompt.stdout(), /id="notes" state="declared" routable="false" access="model,user" summary="Notes truth\." tags="" ref="site:notes"[^\n]+map="missing"/)
+    assert.match(prompt.stdout(), /subject="site:notes" code="site-routing-hint-missing">notes has no routing hint\.<\/item>/)
+    assert.doesNotMatch(prompt.stdout(), /subject="site:notes" code="orientation-invalid"/)
+    assert.doesNotMatch(prompt.stdout(), /code="site-map-missing"/)
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
+test('HUD treats a valid separate Desk without a commit as unborn', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-hud-unborn-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home, { deskStrategy: 'separate' })
+    const json = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hud', ['json'], json.io), 0, json.stderr())
+    const model = JSON.parse(json.stdout())
+    assert.equal(model.desk.git.available, true)
+    assert.equal(model.desk.git.head, null)
+    const prompt = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], prompt.io), 0, prompt.stderr())
+    assert.match(prompt.stdout(), /<desk-git available="true"[^>]+state="unborn"/)
+    assert.doesNotMatch(prompt.stdout(), /<desk-git available="false"/)
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
+test('a retained Meeting is recoverable from a new inspection without transcript state', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-hud-recovery-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home)
+    assert.equal(await dispatchRuntime(home, 'room', ['create', 'recovery', '--scope', 'desk'], captureIo().io), 0)
+    const meeting = join(home, '.desk/rooms/recovery/meetings/checkpoint')
+    await mkdir(meeting, { recursive: true })
+    await writeFile(join(meeting, 'MEETING.md'), [
+      '---',
+      'status: "retained"',
+      'summary: "Resume the accepted checkpoint."',
+      'when: ["Resuming retained checkpoint work."]',
+      'tags: ["checkpoint"]',
+      '---',
+      '',
+      '# Retained checkpoint',
+      '',
+      'Candidate retained; no decision accepted.',
+      '',
+    ].join('\n'))
+    const before = await readdir(meeting)
+    const inspect = async () => {
+      const output = captureIo()
+      assert.equal(await dispatchRuntime(home, 'hud', ['json'], output.io), 0, output.stderr())
+      return JSON.parse(output.stdout()).items.meetings.find((entry) => entry.id === 'recovery/checkpoint')
+    }
+    const first = await inspect()
+    const second = await inspect()
+    assert.deepEqual(second, first)
+    assert.equal(first.state, 'retained')
+    assert.equal(first.routable, false)
+    assert.deepEqual(await readdir(meeting), before)
+    assert.deepEqual(before, ['MEETING.md'])
   } finally {
     await removeTree(temporary, { force: true })
   }
@@ -344,6 +454,10 @@ test('Sites separate deterministic inspection from agent-authored Map Artifacts'
     const added = captureIo()
     assert.equal(await dispatchRuntime(home, 'site', ['add', site, '--id', 'demo', '--emoji', '🧪'], added.io), 0, added.stderr())
     assert.match(await readFile(join(home, 'sites/demo/SITE.md'), 'utf8'), /emoji: "🧪"/)
+    const missingMap = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], missingMap.io), 0, missingMap.stderr())
+    assert.match(missingMap.stdout(), /id="demo"[^\n]+map="missing"/)
+    assert.doesNotMatch(missingMap.stdout(), /code="site-map-missing"/)
     const second = join(temporary, 'site-worktree')
     await exec('git', ['worktree', 'add', '--quiet', '--detach', second, 'HEAD'], { cwd: site })
     const bound = captureIo()
@@ -385,6 +499,15 @@ test('Sites separate deterministic inspection from agent-authored Map Artifacts'
     }
     assert.equal(await dispatchRuntime(home, 'artifact', ['validate', mapped.path], captureIo().io), 0)
     assert.deepEqual(await tree(site), before)
+    await writeFile(join(site, 'README.md'), '# Demo updated\n')
+    await exec('git', ['add', 'README.md'], { cwd: site })
+    await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'update'], { cwd: site })
+    await writeFile(join(second, 'README.md'), '# Demo experiment\n')
+    await exec('git', ['add', 'README.md'], { cwd: second })
+    await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'experiment'], { cwd: second })
+    const stale = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], stale.io), 0, stale.stderr())
+    assert.match(stale.stdout(), /subject="site:demo" code="site-map-stale"/)
   } finally {
     await removeTree(temporary, { force: true })
   }
@@ -401,4 +524,8 @@ async function tree(root) {
 
 function escapeRegex(value) {
   return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function normalizeGeneratedAt(value) {
+  return value.replace(/generated-at="[^"]+"/, 'generated-at="<time>"')
 }

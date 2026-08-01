@@ -9,6 +9,7 @@ import { buildHome } from '../src/build.mjs'
 import { runCli } from '../src/cli.mjs'
 import { createHome, initializeExistingHome, initHome } from '../src/create.mjs'
 import { initDesk } from '../src/desk.mjs'
+import { doctorHome } from '../src/doctor.mjs'
 import { addEquipment } from '../src/equipment.mjs'
 import { doctorMembers } from '../src/member.mjs'
 import { removeTree } from '../src/lib/io.mjs'
@@ -41,6 +42,7 @@ test('create and init choose explicit Desk Git boundaries around Home-owned Memb
     assert.match(await readFile(join(embedded, '.gitignore'), 'utf8'), /^\/checkouts\/$/m)
     assert.equal(await readFile(join(embedded, '.agents/skills/work-on-self/SKILL.md'), 'utf8').then(Boolean), true)
     assert.equal(await readFile(join(embedded, '.claude/skills/deliver-this-to-self/SKILL.md'), 'utf8').then(Boolean), true)
+    assert.match(await readFile(join(embedded, 'sites/self/SITE.md'), 'utf8'), /when: \["Working on this repository\."\]/)
 
     const later = join(temporary, 'later')
     await createHome(later, { deskStrategy: 'later' })
@@ -173,6 +175,12 @@ test('the static vertical slice is concrete on Codex and Claude and fails closed
       assert.match(await readFile(join(home, '.claude/skills', gesture, 'SKILL.md'), 'utf8'), /return `blocked`/i)
     }
     assert.match(await readFile(join(home, '.agents/skills/retain-this/SKILL.md'), 'utf8'), /Endroit\nownership|Endroit objects|These states are distinct/)
+    const lifecycle = await readFile(join(home, '.agents/skills/retain-this/SKILL.md'), 'utf8')
+    assert.match(lifecycle, /adds\s+one relative link under `Active retained Material`/)
+    assert.match(lifecycle, /updates `Current truth`/)
+    assert.match(lifecycle, /does not update Room truth/)
+    assert.match(lifecycle, /removes its active link from `ROOM\.md`/)
+    assert.match(lifecycle, /Never create a candidate-notes section or file/)
   } finally {
     await removeTree(temporary, { force: true })
   }
@@ -206,6 +214,40 @@ test('Home Hygiene composes Doctors read-only and repairs only an exactly approv
     assert.equal(result.status, 'repaired')
     assert.equal(result.after.confirmedInconsistencies.length, 0)
     assert.match(await readFile(projection, 'utf8'), /# Material lifecycle/)
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
+test('a Home without a Desk stays usable and reports one identical desk-missing finding', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-no-desk-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home, { deskStrategy: 'later' })
+    const before = (await exec('git', ['status', '--porcelain'], { cwd: home })).stdout
+    const doctor = await doctorHome(home)
+    assert.equal(doctor.status, 'ready')
+    const doctorWarnings = doctor.warnings.filter((warning) => warning.startsWith('desk-missing:'))
+    assert.equal(doctorWarnings.length, 1)
+    const expected = doctorWarnings[0].replace(/^desk-missing:\s*/, '')
+
+    const hudOutput = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hud', ['json'], hudOutput.io), 0, hudOutput.stderr())
+    const hud = JSON.parse(hudOutput.stdout())
+    assert.equal(hud.status, 'ready')
+    assert.equal(hud.artifacts.count, 0)
+    const hudFindings = hud.attention.advisory.filter((finding) => finding.code === 'desk-missing')
+    assert.equal(hudFindings.length, 1)
+    assert.equal(hudFindings[0].message, expected)
+
+    const hygieneOutput = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hygiene', ['maintain', '--json'], hygieneOutput.io), 0, hygieneOutput.stderr())
+    const hygiene = JSON.parse(hygieneOutput.stdout())
+    assert.equal(hygiene.readOnly, true)
+    const hygieneFindings = hygiene.findings.filter((finding) => finding.id === 'desk-missing')
+    assert.equal(hygieneFindings.length, 1)
+    assert.equal(hygieneFindings[0].message, expected)
+    assert.equal((await exec('git', ['status', '--porcelain'], { cwd: home })).stdout, before)
   } finally {
     await removeTree(temporary, { force: true })
   }

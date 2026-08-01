@@ -300,7 +300,7 @@ async function hud(input) {
 
   const attention = []
   if (!deskRoot) {
-    attention.push(item('advisory', 'desk', 'desk-missing', 'No Desk is configured; initialize or clone one when local continuity is needed.'))
+    attention.push(item('advisory', 'desk', 'desk-missing', 'No Desk is configured; continue without one or initialize or clone one when local continuity is needed.'))
   }
   if (!homeGit.available) attention.push(item('warning', 'home', 'home-git-unavailable', homeGit.error))
   else if (!homeGit.clean) attention.push(item('advisory', 'home', 'home-dirty', `Home has ${homeGit.changes} change(s).`))
@@ -309,10 +309,10 @@ async function hud(input) {
     if (projection.status !== 'fresh') attention.push(item('warning', `provider:${projection.id}`, 'projection-stale', `${projection.id} projections are ${projection.status}.`))
   }
   for (const site of sites) {
-    const metadataError = orientationError(site)
+    const metadataError = orientationError(site, false)
     if (metadataError) attention.push(item('warning', `site:${site.id}`, 'orientation-invalid', metadataError))
+    if (!(site.when?.length)) attention.push(item('advisory', `site:${site.id}`, 'site-routing-hint-missing', `${site.id} has no routing hint.`))
     if (!site.routes.length) attention.push(item('warning', `site:${site.id}`, 'site-unrouted', `${site.id} has no local Route.`))
-    if (site.map.state === 'missing') attention.push(item('advisory', `site:${site.id}`, 'site-map-missing', `${site.id} has no Site Map.`))
     if (site.map.state === 'stale') attention.push(item('advisory', `site:${site.id}`, 'site-map-stale', `${site.id} Site Map is stale.`))
     const unroutedWorktrees = site.worktrees.filter((worktree) => !worktree.route)
     if (unroutedWorktrees.length) {
@@ -442,15 +442,17 @@ async function orientationDocument(path) {
   }
 }
 
-function orientationError(value) {
+function orientationError(value, required = true) {
   if (value.emoji != null && (typeof value.emoji !== 'string' || !value.emoji.trim() || [...value.emoji].length > 16)) {
     return 'emoji must contain 1 to 16 characters.'
   }
-  if (typeof value.summary !== 'string' || !value.summary.trim()) return 'summary must be a non-empty string.'
-  if (!Array.isArray(value.when) || value.when.length < 1 || value.when.length > 3 || value.when.some((entry) => typeof entry !== 'string' || !entry.trim())) {
+  if ((required || (value.summary != null && value.summary !== '')) && (typeof value.summary !== 'string' || !value.summary.trim())) return 'summary must be a non-empty string.'
+  if ((required && (!Array.isArray(value.when) || value.when.length < 1 || value.when.length > 3 || value.when.some((entry) => typeof entry !== 'string' || !entry.trim())))
+    || (!required && value.when != null && (!Array.isArray(value.when) || value.when.length > 3 || value.when.some((entry) => typeof entry !== 'string' || !entry.trim())))) {
     return 'when must contain one to three non-empty situations.'
   }
-  if (!Array.isArray(value.tags) || !value.tags.length || value.tags.some((entry) => typeof entry !== 'string' || !/^[a-z0-9][a-z0-9._-]*$/.test(entry))) {
+  if ((required && (!Array.isArray(value.tags) || !value.tags.length || value.tags.some((entry) => typeof entry !== 'string' || !/^[a-z0-9][a-z0-9._-]*$/.test(entry))))
+    || (!required && value.tags != null && (!Array.isArray(value.tags) || value.tags.some((entry) => typeof entry !== 'string' || !/^[a-z0-9][a-z0-9._-]*$/.test(entry))))) {
     return 'tags must contain stable identifiers.'
   }
   return null
@@ -486,7 +488,7 @@ function capabilityItems(plan) {
 }
 
 function siteItem(site) {
-  const metadataError = orientationError(site)
+  const metadataError = orientationError(site, false)
   return {
     kind: 'site',
     id: site.id,
@@ -644,10 +646,10 @@ async function gitProbe(root) {
     const run = (args, cwd = root) => exec('git', args, { cwd, maxBuffer: 8 * 1024 * 1024 }).then((value) => value.stdout)
     const [top, head, branch, status, committedAt, worktreeOutput] = await Promise.all([
       run(['rev-parse', '--show-toplevel']).then((value) => value.trim()),
-      run(['rev-parse', 'HEAD']).then((value) => value.trim()),
+      run(['rev-parse', 'HEAD']).then((value) => value.trim()).catch(() => null),
       run(['symbolic-ref', '--quiet', '--short', 'HEAD']).then((value) => value.trim()).catch(() => null),
       run(['status', '--porcelain=v2', '--branch', '--untracked-files=all']),
-      run(['log', '-1', '--format=%cI']).then((value) => value.trim()),
+      run(['log', '-1', '--format=%cI']).then((value) => value.trim()).catch(() => null),
       run(['worktree', 'list', '--porcelain', '-z']),
     ])
     const state = parseStatus(status)
@@ -789,6 +791,7 @@ function human(model, full) {
 
 function gitSummary(git) {
   if (!git?.available) return 'unavailable'
+  if (!git.head) return `${git.branch ?? 'unborn'} · unborn · ${git.clean ? 'clean' : `${git.changes} changes`} · ${git.worktrees.length} worktrees`
   return `${git.branch ?? 'detached'} · ${git.clean ? 'clean' : `${git.changes} changes`} · ${short(git.head)} · ${git.worktrees.length} worktrees · ${date(git.committedAt)}`
 }
 
@@ -806,28 +809,16 @@ async function xml(model, input) {
   lines.push(`  ${gitXml('home-git', model.home.git)}`)
   if (model.desk.configured) lines.push(model.desk.git?.root === model.home.git?.root ? '  <desk-git same-as="home-git"/>' : `  ${gitXml('desk-git', model.desk.git)}`)
   lines.push('  <routing priority="explicit-human,unique-semantic-match,ask-if-ambiguous">The Wake-up does not know the user message. Use these items to infer later; do not resolve a route now.</routing>')
-  lines.push('  <providers>')
-  for (const projection of model.projections) {
-    lines.push(`    <provider id="${projection.id}" status="${projection.status}" instruction="${escape(projection.instruction)}" hook="${escape(projection.hook)}"/>`)
-  }
-  lines.push('  </providers>', '  <items>')
+  lines.push(`  <providers states="${escape(model.projections.map((entry) => `${entry.id}:${entry.status}`).join(','))}"/>`, '  <items>')
   for (const group of ['rooms', 'meetings', 'sites', 'capabilities']) {
     lines.push(`    <${group}>`)
-    const entries = group === 'capabilities'
-      ? model.items[group].filter((entry) => entry.access.includes('model'))
-      : model.items[group]
-    for (const entry of entries) lines.push(`      <item ${itemAttributes(entry)}/>`)
+    const entries = group === 'capabilities' ? promptCapabilityItems(input.resolvedHome) : model.items[group]
+    for (const entry of entries) lines.push(`      <item ${group === 'capabilities' ? promptCapabilityAttributes(entry) : itemAttributes(entry)}/>`)
     lines.push(`    </${group}>`)
   }
-  lines.push('  </items>', '  <runtimes>')
-  for (const runtime of model.surfaces.runtimes) {
-    lines.push(`    <runtime namespace="${escape(runtime.namespace)}" commands="${escape(runtime.commands.map((command) => command.name).join(','))}"/>`)
-  }
-  const available = model.surfaces.catalog.filter((entry) => !entry.installed.length).map((entry) => entry.id)
-  lines.push('  </runtimes>', `  <available-equipment ids="${escape(available.join(','))}"/>`, `  <context instructions-bytes="${model.context.instructionBytes}" desk-instructions-bytes="${model.context.deskInstructionBytes}" model-descriptions-bytes="${model.context.modelDescriptionBytes}"${model.context.promptBudgetBytes === null ? '' : ` hud-budget-bytes="${model.context.promptBudgetBytes}"`}/>`)
-  lines.push(`  <trust bundled="${model.trust.bundled}" approved="${model.trust.approved}" pending="${model.trust.pending}">`)
-  for (const runtime of model.trust.runtimes) lines.push(`    <runtime owner="${escape(runtime.owner)}" namespace="${escape(runtime.namespace)}" trust="${runtime.trust}"/>`)
-  lines.push('  </trust>', '  <desk-instructions>')
+  lines.push('  </items>', `  <runtimes namespaces="${escape(model.surfaces.runtimes.map((entry) => entry.namespace).join(','))}"/>`)
+  lines.push(`  <context instructions-bytes="${model.context.instructionBytes}" desk-instructions-bytes="${model.context.deskInstructionBytes}" model-descriptions-bytes="${model.context.modelDescriptionBytes}"${model.context.promptBudgetBytes === null ? '' : ` hud-budget-bytes="${model.context.promptBudgetBytes}"`}/>`)
+  lines.push(`  <trust bundled="${model.trust.bundled}" approved="${model.trust.approved}" pending="${model.trust.pending}"/>`, '  <desk-instructions>')
   for (const instruction of deskInstructions) {
     lines.push(`    <instruction owner="${escape(instruction.owner)}" id="${escape(instruction.id)}" source="${escape(instruction.source)}">${escape(instruction.content)}</instruction>`)
   }
@@ -856,14 +847,36 @@ function itemAttributes(entry) {
     ...((entry.when ?? []).length ? [`when="${escape(entry.when.join(' | '))}"`] : []),
     ...(capability ? [] : [`ref="${escape(entry.ref)}"`]),
     ...(entry.routes ? [`routes="${escape(entry.routes.map((route) => `${route.id}:${route.state}${route.head ? `@${short(route.head)}` : ''}`).join(','))}"`] : []),
-    ...(entry.map ? [`map="${entry.map.state}:${entry.map.count}${entry.map.derivedFrom ? `@${short(String(entry.map.derivedFrom).split('@').at(-1))}` : ''}"`] : []),
+    ...(entry.map ? [`map="${entry.map.state === 'missing' ? 'missing' : `${entry.map.state}:${entry.map.count}${entry.map.derivedFrom ? `@${short(String(entry.map.derivedFrom).split('@').at(-1))}` : ''}`}"`] : []),
     ...(entry.metadataError ? [`metadata-error="${escape(entry.metadataError)}"`] : []),
+  ].join(' ')
+}
+
+function promptCapabilityItems(plan) {
+  return plan.capabilities.flatMap((capability) => {
+    const skills = plan.skills.filter((entry) => entry.capability === capability.id)
+    if (!skills.length) return []
+    return [{
+      ref: `capability:${capability.id}`,
+      summary: capability.description,
+      when: [...new Set(skills.map((entry) => entry.description))],
+      entrypoints: [...new Set(skills.map((entry) => entry.projectedId))].sort(),
+    }]
+  }).sort((left, right) => left.ref.localeCompare(right.ref))
+}
+
+function promptCapabilityAttributes(entry) {
+  return [
+    `ref="${escape(entry.ref)}"`,
+    `summary="${escape(entry.summary)}"`,
+    ...(entry.when.length ? [`when="${escape(entry.when.join(' | '))}"`] : []),
+    `entrypoints="${escape(entry.entrypoints.join(','))}"`,
   ].join(' ')
 }
 
 function gitXml(name, git) {
   if (!git?.available) return `<${name} available="false"${git?.error ? ` error="${escape(git.error)}"` : ''}/>`
-  return `<${name} available="true" root="${escape(git.root)}" branch="${escape(git.branch ?? 'detached')}" head="${git.head}" clean="${git.clean}" changes="${git.changes}" conflicts="${git.conflicts}" ahead="${git.ahead}" behind="${git.behind}" operation="${git.operation ?? 'none'}" worktrees="${git.worktrees.length}" committed-at="${git.committedAt}"/>`
+  return `<${name} available="true" root="${escape(git.root)}" branch="${escape(git.branch ?? 'detached')}"${git.head ? ` head="${git.head}"` : ' state="unborn"'} clean="${git.clean}" changes="${git.changes}" conflicts="${git.conflicts}" ahead="${git.ahead}" behind="${git.behind}" operation="${git.operation ?? 'none'}" worktrees="${git.worktrees.length}"${git.committedAt ? ` committed-at="${git.committedAt}"` : ''}/>`
 }
 
 async function resolvedDeskInstructions(plan) {

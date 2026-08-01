@@ -21,36 +21,37 @@ import { equipment, captureIo, writeEquipment } from './helpers.mjs'
 
 const exec = promisify(execFile)
 
-test('create supports a TTY preview and explicit optional native Equipment', async () => {
+test('create defaults to conversation and keeps optional native Equipment explicit', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-create-wizard-'))
   try {
     const home = join(temporary, 'home')
     const io = captureTtyIo()
-    const ui = promptHarness({
-      selected: ['research', 'publishing'],
-      accepted: true,
-    })
+    const ui = promptHarness({ accepted: true })
     assert.equal(await runCli(['create', home], io.io, { prompts: ui.prompts }), 0, io.stderr())
     assert.deepEqual(ui.calls.filter(({ type }) => ['select', 'multiselect', 'confirm'].includes(type)).map(({ type }) => type), [
-      'multiselect',
       'confirm',
     ])
     assert.ok(CREATE_WORDMARK.split('\n').every((line) => line.length < 64))
     assert.equal(Object.hasOwn(JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')), 'mode'), false)
     assert.equal(await readFile(join(home, 'rooms/home/ROOM.md'), 'utf8').then((value) => value.includes('room:home/home')), true)
-    assert.equal(await readFile(join(home, 'equipment/endroit/research/equipment.json'), 'utf8').then(Boolean), true)
-    assert.equal(await readFile(join(home, 'equipment/endroit/publishing/equipment.json'), 'utf8').then(Boolean), true)
-    await assert.rejects(readFile(join(home, 'equipment/endroit/planning/equipment.json')), (error) => error.code === 'ENOENT')
+    for (const id of ['research', 'planning', 'publishing', 'scratch']) {
+      await assert.rejects(readFile(join(home, `equipment/endroit/${id}/equipment.json`)), (error) => error.code === 'ENOENT')
+    }
+    const openNote = ui.calls.find(({ type, message }) => type === 'note' && message.includes('Optional onboarding shortcut'))
+    assert.ok(openNote)
+    assert.match(openNote.message, /describe what you are working on in normal language/)
     const catalog = captureIo()
     assert.equal(await runCli(['equipment', 'catalog', '--home', home, '--json'], catalog.io), 0, catalog.stderr())
     const native = JSON.parse(catalog.stdout()).equipment
-    assert.equal(native.find((entry) => entry.id === 'endroit/research').installed.includes('home'), true)
+    assert.equal(native.find((entry) => entry.id === 'endroit/research').installed.length, 0)
     assert.equal(native.find((entry) => entry.id === 'endroit/planning').installed.length, 0)
 
     const automatic = join(temporary, 'automatic')
     const captured = captureIo()
     assert.equal(await runCli(['create', automatic, '--with', 'all', '--no-interactive', '--yes'], captured.io), 0, captured.stderr())
     assert.doesNotMatch(captured.stdout(), /\u001b\[/)
+    assert.match(captured.stdout(), /Then describe what you are working on in normal language\./)
+    assert.match(captured.stdout(), /Optional onboarding shortcut: \$endroit-onboarding\./)
     for (const id of ['research', 'planning', 'publishing', 'scratch']) {
       assert.equal(await readFile(join(automatic, `equipment/endroit/${id}/equipment.json`), 'utf8').then(Boolean), true)
     }
@@ -93,7 +94,12 @@ test('create supports a TTY preview and explicit optional native Equipment', asy
     assert.equal(await runCli(['create', structured, '--json'], structuredIo.io, {
       prompts: promptHarness({ failOnPrompt: true }).prompts,
     }), 0, structuredIo.stderr())
-    assert.equal(JSON.parse(structuredIo.stdout()).status, 'created')
+    const structuredResult = JSON.parse(structuredIo.stdout())
+    assert.equal(structuredResult.status, 'created')
+    assert.deepEqual(structuredResult.launch.map((entry) => Object.keys(entry).sort()), [
+      ['command', 'onboarding', 'provider'],
+      ['command', 'onboarding', 'provider'],
+    ])
     assert.doesNotMatch(structuredIo.stdout(), /\u001b\[/)
   } finally {
     await removeTree(temporary, { force: true })
@@ -105,7 +111,7 @@ test('create cancellation is friendly and leaves no destination', async () => {
   try {
     for (const scenario of [
       { name: 'declined', accepted: false },
-      { name: 'interrupted', cancelAt: 'multiselect' },
+      { name: 'interrupted', cancelAt: 'confirm' },
     ]) {
       const home = join(temporary, scenario.name)
       const io = captureTtyIo()
@@ -210,13 +216,30 @@ test('create builds a source-owned Home and tracks shared provider projections',
     ]) assert.match(tracked, new RegExp(`^${escape(path)}$`, 'm'))
     assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /^# home$/m)
     assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /^# local$/m)
+    const room = await readFile(join(home, 'rooms/home/ROOM.md'), 'utf8')
+    assert.match(room, /^## Current truth$/m)
+    assert.match(room, /^## Active retained Material$/m)
+    assert.doesNotMatch(room, /candidate notes/i)
     const agents = await readFile(join(home, 'AGENTS.md'), 'utf8')
+    const claude = await readFile(join(home, 'CLAUDE.md'), 'utf8')
     assert.match(agents, /<!-- source: HOME\.md -->/)
+    for (const contract of [agents, claude]) {
+      assert.match(contract, /Normal conversation is the default interface/)
+      assert.match(contract, /Every Meeting is ephemeral by default/)
+      assert.match(contract, /Retain, accept, deliver and archive are distinct transitions/)
+      assert.match(contract, /room list/)
+      assert.match(contract, /site list/)
+      assert.match(contract, /equipment catalog/)
+    }
     assert.match(agents, /## Endroit Floor Plan/)
     assert.match(agents, /node \.\/endroit\.mjs <namespace> <command>/)
     assert.match(agents, /## endroit\/hud:orientation/)
     assert.doesNotMatch(agents, /If no Endroit HUD was injected/)
     assert.doesNotMatch(agents, /## endroit\/onboarding:home/)
+    for (const root of ['.agents/skills', '.claude/skills']) {
+      const onboarding = await readFile(join(home, root, 'acme-endroit-onboarding/SKILL.md'), 'utf8')
+      assert.doesNotMatch(onboarding, /disable-model-invocation/)
+    }
     assert.doesNotMatch(tracked, /^\.endroit\//m)
     assert.equal((await doctorHome(home)).status, 'ready')
     await buildHome(home, { check: true })
@@ -228,6 +251,8 @@ test('create builds a source-owned Home and tracks shared provider projections',
       namespace: 'hud',
       command: 'prompt',
     })
+    assert.deepEqual(plan.skills.filter((entry) => entry.owner === 'endroit/onboarding').map((entry) => entry.projectedId), ['acme-endroit-onboarding'])
+    assert.deepEqual(plan.commands.filter((entry) => entry.owner === 'endroit/onboarding').map((entry) => entry.projectedId), ['acme-endroit-onboarding'])
     assert.ok(plan.context.floorPlanBytes > 0)
     const floorPlan = renderFloorPlan(plan)
     assert.equal(floorPlan, renderFloorPlan(plan))
@@ -449,16 +474,21 @@ test('the Home Console is a fully owned regular projection', async () => {
   }
 })
 
-test('Homes remain usable before a Desk exists', async () => {
+test('Homes remain usable before a Desk or Wake-up exists', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-team-'))
   try {
     const home = join(temporary, 'team-home')
     await mkdir(home)
-    await initHome(home, { name: 'team-home', deskStrategy: 'later', providers: ['codex'] })
+    await initHome(home, { name: 'team-home', deskStrategy: 'later', providers: ['codex', 'claude'] })
     assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /team-home/)
     assert.equal(await loadDesk(home), null)
     await buildHome(home)
-    assert.equal((await readFile(join(home, 'AGENTS.md'), 'utf8')).includes('Wake-up: not configured.'), true)
+    for (const path of ['AGENTS.md', 'CLAUDE.md']) {
+      const contract = await readFile(join(home, path), 'utf8')
+      assert.match(contract, /Wake-up: not configured\./)
+      assert.match(contract, /Every Meeting is ephemeral by default/)
+      assert.match(contract, /Normal conversation is the default interface/)
+    }
     await assert.rejects(readFile(join(home, '.codex/hooks/endroit-session-start.mjs')), (error) => error.code === 'ENOENT')
     assert.equal((await doctorHome(home)).status, 'ready')
     assert.equal((await initDesk(home, { id: 'alexis', member: 'owner', repository: 'separate' })).repository, 'separate')

@@ -17,6 +17,8 @@ tags: ["{{tag}}"]
 
 Own the durable context, decisions and outcomes for {{title}}.
 
-## Current state
+## Current truth
 
-No durable work has been recorded yet.
+No Room truth has been accepted yet.
+
+## Active retained Material

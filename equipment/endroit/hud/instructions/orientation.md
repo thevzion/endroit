@@ -10,6 +10,8 @@ Use `hud show` for a human view, `hud prompt` for the agent-facing view and
 `hud json` for tools. A HUD is a local snapshot; revalidate the relevant
 Route immediately before mutation.
 
-If Wake-up is absent or degraded, keep operating from the Floor Plan. Report
-that live orientation is unavailable; do not guess another runtime or explore
-outside the Home to compensate.
+The Floor Plan is not a complete live inventory. If Wake-up is absent or
+degraded, keep operating from it and use `room list`, `site list` and
+`equipment catalog` as local read-only inspections. Report that live
+orientation is unavailable; do not guess another runtime or explore outside
+the Home to compensate.

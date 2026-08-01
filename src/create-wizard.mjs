@@ -2,13 +2,6 @@ import { resolve } from 'node:path'
 
 export const CREATE_WORDMARK = 'endroit'
 
-const equipment = [
-  { value: 'research', label: 'Research', hint: 'reusable evidence-backed studies' },
-  { value: 'planning', label: 'Planning', hint: 'roadmaps and bounded initiatives' },
-  { value: 'publishing', label: 'Publishing', hint: 'source-owned publications and external Handles' },
-  { value: 'scratch', label: 'Scratch', hint: 'retained exploratory work' },
-]
-
 export async function runCreateWizard(options) {
   const restoreColorEnvironment = disableColorWhenRequested()
   try {
@@ -34,19 +27,7 @@ async function renderWizard(options) {
     'Sites keep their repositories and history.',
   ].join('\n'), 'What Endroit owns', common)
 
-  let selected = options.selected
-  if (!options.selectionProvided) {
-    selected = await prompts.multiselect({
-      ...common,
-      message: 'Add optional Equipment',
-      options: equipment,
-      initialValues: [],
-      required: false,
-    })
-    if (stop(selected)) return cancelled()
-  }
-
-  selected ??= []
+  const selected = options.selected ?? []
   prompts.note([
     `Home        ${resolve(options.destination)}`,
     `Desk        ${options.desk}`,
@@ -84,10 +65,9 @@ async function renderWizard(options) {
   prompts.note([
     ...result.launch.flatMap((entry) => [
       `${capitalize(entry.provider)}  ${entry.command}`,
-      `        Then invoke ${entry.onboarding}.`,
+      '        Then describe what you are working on in normal language.',
+      `        Optional onboarding shortcut: ${entry.onboarding}.`,
     ]),
-    '',
-    'Tell your agent what you are working on.',
   ].join('\n'), 'Open your Home', common)
   prompts.outro(`Ready at ${result.home}`, common)
   return { rendered: true, exitCode: 0, result }

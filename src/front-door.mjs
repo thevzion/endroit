@@ -42,8 +42,14 @@ ${runtimes}
 
 Wake-up: ${wakeUp}.
 
-If Wake-up is unavailable, this Floor Plan remains authoritative. Do not guess
-another runtime or search outside the Home to compensate.`
+The Floor Plan is the static authoritative entrypoint, not a complete live
+inventory. If Wake-up is unavailable, use these local read-only inspections:
+
+    node ./endroit.mjs room list
+    node ./endroit.mjs site list
+    node ./endroit.mjs equipment catalog
+
+Do not guess another runtime or search outside the Home to compensate.`
 }
 
 export function homeConsole() {

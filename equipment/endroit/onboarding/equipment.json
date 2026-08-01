@@ -15,6 +15,13 @@
       "description": "Configure the smallest useful Home and Desk through conversation."
     }
   ],
+  "skills": [
+    {
+      "id": "onboarding",
+      "capability": "onboard",
+      "description": "Configure this Home and your Desk through a consent-first conversation."
+    }
+  ],
   "commands": [
     {
       "id": "onboarding",

@@ -24,13 +24,13 @@ try {
 
 async function maintain(input) {
   const findings = []
-  const add = (category, code, message, path) => findings.push({
-    id: `${code}${path ? `:${path}` : ''}`,
-    category,
-    code,
-    message,
-    ...(path ? { path } : {}),
-  })
+  const findingIds = new Set()
+  const add = (category, code, message, path) => {
+    const id = `${code}${path ? `:${path}` : ''}`
+    if (findingIds.has(id)) return
+    findingIds.add(id)
+    findings.push({ id, category, code, message, ...(path ? { path } : {}) })
+  }
   const plan = input.resolvedHome
   const [roomDoctor, siteDoctor, materialInventory] = await Promise.all([
     component(input, 'rooms', ['doctor', '--json']),
@@ -44,7 +44,8 @@ async function maintain(input) {
     else add('confirmed', 'home-doctor', limit)
   }
   for (const warning of homeDoctor.warnings ?? []) {
-    add(warning.startsWith('legacy-') ? 'legacy' : 'improvements', warning.split(':')[0], warning)
+    const [code, ...message] = warning.split(':')
+    add(warning.startsWith('legacy-') ? 'legacy' : 'improvements', code, message.join(':').trim() || warning)
   }
   for (const issue of roomDoctor.issues ?? []) {
     const category = issue.code === 'room_id_duplicate' ? 'ambiguities' : issue.code.startsWith('legacy_') ? 'legacy' : 'confirmed'
@@ -55,7 +56,7 @@ async function maintain(input) {
     if (artifact.legacy) add('legacy', 'legacy-artifact', 'Material remains in a pre-0.8 read-only location.', relative(input.homeRoot, artifact.path))
     if (artifact.invalid) add('ambiguities', 'material-invalid', artifact.invalid, relative(input.homeRoot, artifact.path))
   }
-  if (!plan.desk) add('improvements', 'desk-missing', 'No Desk is configured; add one only when local continuity is needed.')
+  if (!plan.desk) add('improvements', 'desk-missing', 'No Desk is configured; continue without one or initialize or clone one when local continuity is needed.')
 
   for (const room of plan.rooms ?? []) {
     const directory = room.scope === 'home' ? join(input.homeRoot, 'rooms', room.id) : join(input.deskRoot, 'rooms', room.id)

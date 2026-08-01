@@ -105,7 +105,6 @@ async function createRoute(destination, flags, io, prompts) {
     destination,
     desk: strategy,
     selected,
-    selectionProvided: flags.with !== undefined,
     yes: booleanFlag(flags.yes),
     providers,
     foundation: bootstrapEquipmentNames(),
@@ -191,7 +190,7 @@ async function equipmentRoute(root, action, rest, flags, io) {
 function help() {
   return {
     summary: 'One Home for the agents, methods, and repositories you already use.',
-    next: ['endroit create <home> or endroit init', 'open an agent in the Home', 'invoke endroit-onboarding'],
+    next: ['endroit create <home> or endroit init', 'open an agent in the Home', 'describe what you are working on'],
     commands: [
       'create <home> [--desk tracked|separate|later]', 'init [repository] [--desk tracked|separate|later]',
       'member create|list|inspect|doctor', 'desk init|clone',
@@ -228,7 +227,11 @@ function renderHuman(value) {
     ...(value.site ? [`Embedded Site: ${value.site}`] : []),
     `Equipment: ${value.equipment.join(', ')}`,
     '',
-    ...value.launch.flatMap((entry) => [`${entry.provider}: ${entry.command}`, `Then invoke ${entry.onboarding}.`]),
+    ...value.launch.flatMap((entry) => [
+      `${entry.provider}: ${entry.command}`,
+      'Then describe what you are working on in normal language.',
+      `Optional onboarding shortcut: ${entry.onboarding}.`,
+    ]),
   ].join('\n')
   if (value?.status === 'catalogued') return value.equipment.map((entry) => `- ${entry.id}${entry.installed.length ? ` [${entry.installed.join(',')}]` : ''}: ${entry.description}`).join('\n')
   if (value?.home?.name && value?.limits) return [`Endroit doctor — ${value.status}`, `Home: ${value.home.name}`, `Desk: ${value.desk.configured ? value.desk.id : 'not configured'}`, `Members: ${value.members?.length ?? 0}`, `Equipment: ${value.equipment.length}`, `Build: ${value.build}`, ...(value.limits.length ? ['', 'Limits:', ...value.limits.map((item) => `  - ${item}`)] : []), ...(value.warnings?.length ? ['', 'Warnings:', ...value.warnings.map((item) => `  - ${item}`)] : [])].join('\n')

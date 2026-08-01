@@ -50,16 +50,20 @@ changed bytes        → pending
 ```text
 Room persists
   └─ Meeting begins with hot context
-       ├─ no durable outcome
-       ├─ retain safe Material
-       ├─ accept Material as Room truth
-       └─ deliver through a Route
-retained or accepted Material → archive explicitly when inactive
+       ├─ leave candidate ephemeral
+       ├─ retain safe Material → add relative active link
+       ├─ accept decision → update Current truth
+       └─ deliver through a revalidated local Route → truth unchanged
+retained or accepted Material → archive explicitly → remove active link
 ```
 
 Chat creation alone writes nothing. `meetings/` is reserved for explicitly
 retained records. Transcripts, hidden reasoning and credentials are never
 canonical Material.
+
+`ROOM.md` separates accepted `Current truth` from relative links under
+`Active retained Material`. Candidate notes have no persistent section or
+file.
 
 The Workplace Equipment exposes provider-targeted gestures for all four
 transitions. Endroit objects and operations remain their owners; the provider
