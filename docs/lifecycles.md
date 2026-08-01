@@ -5,6 +5,7 @@
 ```text
 standalone: create <directory> → Git → Member → tracked Desk → Equipment → build → doctor → commit
 embedded:   init [repository]  → Member → separate Desk → Site self/Route embedded:. → build → doctor
+deferred:   init --desk later  → Member → Site self → desk init → explicit Route bind → build
 ```
 
 `create` refuses an existing destination. `init` requires an existing Git
@@ -22,6 +23,9 @@ It preserves existing product files.
 Every Desk references one Home-owned human Member. The Desk ID identifies the
 workstation/context, not the person. Desk paths are never promoted to Home
 settings.
+
+An embedded Route is Desk-owned, so `init --desk later` cannot create it.
+After `desk init`, bind it explicitly with `route bind self . --id embedded`.
 
 ## Equipment
 
@@ -57,10 +61,10 @@ Chat creation alone writes nothing. `meetings/` is reserved for explicitly
 retained records. Transcripts, hidden reasoning and credentials are never
 canonical Material.
 
-The Workplace Equipment exposes provider-native gestures for all four
+The Workplace Equipment exposes provider-targeted gestures for all four
 transitions. Endroit objects and operations remain their owners; the provider
 projection only activates them. They are never silently performed by the
-Kernel.
+Core.
 
 ## Home Hygiene
 
@@ -87,6 +91,11 @@ route remove                     → metadata only
 route remove --delete            → guarded managed-checkout deletion
 site remove                      → only after all Routes are gone
 ```
+
+These operations belong to first-party `endroit/sites`; the root `site` and
+`route` commands are CLI façades over that Equipment runtime. For a submodule,
+the Home Git repository owns the Gitlink pin and `.gitmodules`, while checkout
+initialization and lifecycle remain user-owned.
 
 Managed worktree creation resolves local refs and revalidates repository,
 branch and HEAD. It never fetches or copies dirty source changes.

@@ -9,7 +9,7 @@ direction without release dates.
 - independent Sites reached through explicit Desk Routes;
 - Room-owned Material and first-party Research, Planning and Publishing
   methods;
-- Codex and Claude qualification evidence.
+- Codex and Claude first-party projections with static parity evidence.
 
 ## In progress
 
@@ -42,8 +42,9 @@ five levels:
 | L3 | entry/Wake-up restores place-owned continuity |
 | L4 | the full Workplace-first slice passes local qualification and dogfood |
 
-Codex and Claude are currently qualified at L4. A new provider advances only
-with dated evidence; Endroit does not infer support from file similarity.
+Codex and Claude are currently projection-qualified at L1. L2–L4 require
+dated smoke evidence in each real provider host; Endroit does not infer runtime
+support from file similarity.
 
 Adaptive workplaces remain an uncommitted direction. Dynamic titles,
 automatic placement and inferred structure need evidence before they become an

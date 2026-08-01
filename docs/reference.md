@@ -10,7 +10,9 @@ Workplace model. This reference describes `0.8.0-alpha.0`; the
 - Git;
 - Codex and/or Claude for first-class provider projections.
 
-## Kernel commands
+## CLI surfaces
+
+Core commands:
 
 ```text
 create <directory> [--desk tracked|separate|later] [--member <id>] [--with <ids|all|none>]
@@ -18,12 +20,20 @@ init [repository] [--desk tracked|separate|later] [--member <id>] [--with <ids|a
 member create|list|inspect|doctor
 desk init|clone
 equipment validate|add|status|sync|remove|override|promote|catalog|trust
-room create|list|inspect|doctor
-site add|list|inspect|doctor|remove
-route bind|clone|worktree|mount|unmount|list|inspect|remove
 validate
 build [--check]
 doctor
+```
+
+Bundled foundation Equipment is available through the same console:
+
+```text
+room create|list|inspect|doctor
+site add|list|inspect|doctor|remove
+route bind|clone|worktree|mount|unmount|list|inspect|remove
+artifact <command>
+hud show|prompt|json|activity
+hygiene maintain|repair
 <Equipment runtime namespace> <arguments...>
 ```
 
@@ -33,8 +43,10 @@ After bootstrap, prefer the tracked Home Console:
 node ./endroit.mjs doctor
 ```
 
-`--home <path>` selects a Home for direct CLI use. Kernel responses support
-`--json`; Equipment runtimes own their stdout, stderr and exit codes.
+`--home <path>` selects a Home for direct CLI use. Core responses support
+`--json`; Equipment runtimes own their stdout, stderr and exit codes. Root
+`room`, `site` and `route` commands are façades over their foundation
+Equipment runtimes, not duplicate Kernel implementations.
 
 ## Sources and projections
 
@@ -89,7 +101,9 @@ A Desk contains local instructions, Rooms, Equipment overrides and Routes.
 `create` defaults to a Desk tracked in the Home Git repository. `init` defaults
 to a separate nested Git repository under ignored `.desk/`. Either accepts
 `--desk tracked|separate|later`; `later` creates the Member but no Desk.
-Machine paths stay Desk-owned in every topology.
+Machine paths stay Desk-owned in every topology. For embedded `init --desk
+later`, Site `self` is declared immediately but its embedded Route is deferred;
+after `desk init`, bind it explicitly with `route bind self . --id embedded`.
 
 ## Rooms and Meetings
 
@@ -136,6 +150,10 @@ simulate an Occupant.
 
 ## Sites
 
+The first-party `endroit/sites` Equipment owns Site and Route lifecycle behind
+the root CLI façade. Core validates and resolves the resulting sources but
+does not implement these lifecycle operations.
+
 A Site is a shared sovereignty declaration:
 
 ```text
@@ -180,6 +198,10 @@ Supported modes:
 | `managed-worktree` | `checkouts/<site>/<route>/` | explicit `git worktree remove` |
 | `submodule` | user-managed submodule path | recognized, never lifecycle-managed |
 
+The Home Git repository owns a submodule's Gitlink commit pin and
+`.gitmodules` declaration. Checkout initialization and submodule lifecycle
+remain user-owned; the Route only records how the Desk addresses it.
+
 An `existing` Route may be exposed at the same root address with `route mount`.
 The result is a rebuildable symlink called a Mount, not a new Route or owner.
 `route unmount` refuses non-symlink paths and removes only the Mount. Route
@@ -220,7 +242,8 @@ orientation; its failure cannot remove the Floor Plan.
 ## Alpha boundaries
 
 - schemas and grammar may still break before 1.0;
-- Codex and Claude are the qualified projections;
+- Codex and Claude are projection-qualified first-party targets; L2–L4 live
+  runtime qualification remains unclaimed until provider-hosted smoke evidence;
 - provider status and portability levels are recorded in [providers](providers.md);
 - no daemon, semantic index, graph or persistent agent is required;
 - no automated 0.7 migration or submodule manager ships in 0.8;

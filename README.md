@@ -132,12 +132,9 @@ my-home/
 │       ├── ROOM.md
 │       └── inbox.md
 ├── equipment/
-├── sites/
-├── checkouts/        local and ignored when materialized
 ├── .desk/
-│   ├── DESK.md
-│   ├── rooms/
-│   └── routes/        local and ignored
+│   ├── desk.json
+│   └── DESK.md
 ├── endroit.mjs
 ├── AGENTS.md        generated
 ├── CLAUDE.md        generated
@@ -146,7 +143,11 @@ my-home/
 └── .endroit/        local and rebuildable
 ```
 
-The initial human-authored orientation is concentrated in five sources:
+Directories such as `sites/`, `.desk/routes/` and `checkouts/` appear only
+when their owning operations need them. `--desk later` omits `.desk/` until
+`desk init` or `desk clone`.
+
+The initial human-authored orientation is concentrated in these sources:
 
 - `endroit.json` declares the Home and providers;
 - `HOME.md` contains shared house rules;
@@ -155,8 +156,8 @@ The initial human-authored orientation is concentrated in five sources:
 - `.desk/DESK.md` carries your personal continuity.
 
 `create` and `init` also install seven inspectable foundation Equipment:
-Onboarding, HUD, Artifacts, Rooms, Sites, Workplace and Hygiene. Additional Rooms, Sites and
-optional Equipment appear only when the work earns them.
+Onboarding, HUD, Artifacts, Rooms, Sites, Workplace and Hygiene. Additional
+Rooms, Sites and optional Equipment appear only when the work earns them.
 
 ## The first experience
 
@@ -269,6 +270,10 @@ model:
 | Submodule | user-managed submodule addressed by a Route |
 | Remote-only | declared Site with no local checkout |
 
+For a submodule, the Home Git repository owns the Gitlink commit pin and its
+`.gitmodules` declaration. The user still owns checkout initialization and
+submodule lifecycle; a Route only addresses that checkout.
+
 Site declarations are shared:
 
 ```text
@@ -286,10 +291,13 @@ Route, `route mount` can create a rebuildable symlink at
 `checkouts/<site>/<route>/`; `route unmount` removes only that symlink. A Mount
 is never the identity of the Site or Route and never grants new permissions.
 
-## Core and optional Equipment
+## Core, foundation and optional Equipment
 
-The Endroit Core resolves and validates the workplace, builds projections and
-manages safe local Routes. For example:
+The Endroit Core loads and validates sources, resolves the workplace, manages
+Equipment and builds projections. The first-party `endroit/sites` foundation
+Equipment owns Site and Route lifecycle, deterministic Git inspection, clones
+and worktrees. The root `site` and `route` commands are CLI façades over that
+installed runtime. For example:
 
 ```bash
 node ./endroit.mjs site add https://github.com/acme/product.git --id product
@@ -325,10 +333,11 @@ deliver-this         act through an explicit Route
 archive-this         remove inactive Material from active context
 ```
 
-Codex and Claude receive these as generated Skills and Commands. They operate
-through provider-native tools and ordinary owned files; Endroit does not add a
-persistent agent runtime. A missing native operation returns `blocked` rather
-than simulating success.
+Codex and Claude receive these as generated first-party Skills and Commands.
+Static parity and wrapper shape are tested for both; provider-native behavior
+still requires a live provider smoke. Endroit does not add a persistent agent
+runtime, and a missing native operation returns `blocked` rather than
+simulating success.
 
 [HACP](https://github.com/control-decks/human-agent-control-protocol) is an
 independent draft semantic protocol. Endroit does not require it and never
@@ -345,7 +354,8 @@ infers a Card from ordinary conversation.
 
 ## Alpha boundaries
 
-- Codex and Claude are the first qualified provider projections.
+- Codex and Claude are the first projection-qualified targets; live runtime
+  qualification remains an explicit release gate.
 - The 0.8 workplace grammar is a breaking alpha change from 0.7.
 - Submodules are recognized through their paths; Endroit does not manage their
   lifecycle.

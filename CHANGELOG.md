@@ -71,7 +71,7 @@
 - Manage linked Git worktrees as explicit Target Bindings without deleting
   branches, forcing removal or hiding unbound worktrees.
 - Position Hairness as the local-first logistics layer around existing Agent
-  Runtimes, methods and repositories, with Codex and Claude as the qualified
+  Runtimes, methods and repositories, with Codex and Claude as first-party
   provider surfaces.
 
 ## 0.5.0-alpha.1

@@ -49,12 +49,17 @@ The Kernel owns:
 - Home, Member and Desk loading;
 - schema and source validation;
 - transactional Equipment lifecycle;
-- deterministic workplace resolution;
-- Site and Route declarations;
-- safe managed clone and worktree operations;
+- deterministic workplace resolution, including validation and indexing of
+  Site and Route sources;
 - Front Door and provider projections;
 - runtime digest trust and dispatch;
 - static inspection.
+
+Foundation Equipment owns operational surfaces. In particular,
+`endroit/sites` owns Site and Route declaration changes, deterministic Git
+inspection, managed clones and managed worktrees. The root CLI exposes `site`
+and `route` as façades that dispatch this installed Equipment runtime; those
+operations are not Kernel behavior.
 
 It does not own model inference, a persistent agent, methodology output,
 external permissions or Site-native truth.
@@ -81,6 +86,10 @@ Site identity never depends on a symlink. Route metadata never depends on the
 physical checkout surviving. For an `existing` Route, a Mount is an optional
 rebuildable symlink at the conventional checkout address; removing it never
 touches its target. A Route must be re-observed before mutation.
+
+For a submodule, the Home Git repository owns the Gitlink commit pin and
+`.gitmodules` declaration. Checkout initialization and submodule lifecycle
+remain user-owned; the Route only addresses the checkout.
 
 ## Equipment trust
 
