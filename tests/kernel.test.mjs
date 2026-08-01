@@ -206,7 +206,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
       $schema: 'https://endroit.org/schema/v7/home.json',
       name: 'home',
       emoji: '🏠',
-      runtime: '@endroit/cli@0.8.0-alpha.0',
+      runtime: '@endroit/cli@0.8.0-alpha.1',
       providers: ['codex', 'claude'],
       prefix: 'acme',
       frontDoor: { wakeUp: 'endroit/hud:prompt' },
@@ -440,7 +440,7 @@ process.stdout.write('<wake-up source="' + process.env.ENDROIT_RUNTIME_SOURCE + 
     assert.equal(npm.stdout, '<wake-up source="npm"/>\n')
     assert.deepEqual(JSON.parse(await readFile(argsPath, 'utf8')), [
       '--yes',
-      '@endroit/cli@0.8.0-alpha.0',
+      '@endroit/cli@0.8.0-alpha.1',
       'hud',
       'prompt',
     ])

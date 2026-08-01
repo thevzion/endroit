@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.0-alpha.1
+
+- Preflight every generated projection before `endroit init` mutates a
+  brownfield repository. Existing identical projections remain valid; all
+  conflicting paths are reported together and the repository stays unchanged.
+- Verify an already-published npm artifact by its bounded, normalized package
+  tree when the registry has recompressed the tarball without changing its
+  contents.
+- Make the npm registry smoke deterministic by installing the exact version in
+  an isolated prefix, verifying its package metadata and invoking its declared
+  binary directly.
+
 ## 0.8.0-alpha.0
 
 - Implement the Workplace-first paradigm and Open Workplace grammar through

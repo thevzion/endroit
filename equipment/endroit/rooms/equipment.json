@@ -1,7 +1,7 @@
 {
   "$schema": "https://endroit.org/schema/v7/equipment.json",
   "name": "endroit/rooms",
-  "version": "0.8.0-alpha.0",
+  "version": "0.8.0-alpha.1",
   "description": "Scoped shared and personal continuity for an Endroit Home.",
   "prefix": "endroit",
   "files": [

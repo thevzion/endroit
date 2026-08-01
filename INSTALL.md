@@ -37,13 +37,13 @@ ends the installation without effects.
 Use the pinned alpha package:
 
 ```bash
-npx --yes --package @endroit/cli@0.8.0-alpha.0 endroit create <directory> --desk tracked
+npx --yes --package @endroit/cli@0.8.0-alpha.1 endroit create <directory> --desk tracked
 ```
 
 or, from the existing repository:
 
 ```bash
-npx --yes --package @endroit/cli@0.8.0-alpha.0 endroit init . --desk separate
+npx --yes --package @endroit/cli@0.8.0-alpha.1 endroit init . --desk separate
 ```
 
 Change arguments only when the human approved the corresponding destination,

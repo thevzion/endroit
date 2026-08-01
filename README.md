@@ -126,7 +126,7 @@ operation.
 Create a standalone Home:
 
 ```bash
-npx --yes --package @endroit/cli@0.8.0-alpha.0 endroit create my-home
+npx --yes --package @endroit/cli@0.8.0-alpha.1 endroit create my-home
 ```
 
 `create` adds a Home-owned Member and, by default, a Desk tracked with the
@@ -137,7 +137,7 @@ Or add a Home to an existing repository:
 
 ```bash
 cd my-existing-repository
-npx --yes --package @endroit/cli@0.8.0-alpha.0 endroit init .
+npx --yes --package @endroit/cli@0.8.0-alpha.1 endroit init .
 ```
 
 `init` defaults to a separate Desk repository under ignored `.desk/`. Both

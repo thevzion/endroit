@@ -1,7 +1,7 @@
 # Endroit 0.8 reference
 
 Endroit is a local-first, headless, file-based implementation of the Open
-Workplace model. This reference describes `0.8.0-alpha.0`; the
+Workplace model. This reference describes `0.8.0-alpha.1`; the
 [migration guide](migration-0.8.md) is the only 0.7 → 0.8 vocabulary map.
 
 ## Requirements
