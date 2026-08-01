@@ -71,6 +71,31 @@ test('Equipment add, sync and remove preserve source ownership and unknown files
   }
 })
 
+test('Capability-only Equipment installs and resolves without projecting a public accessor', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-capability-only-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home)
+    const source = await writeEquipment(join(temporary, 'control-decks'), equipment({
+      name: 'control-decks/endroit-context',
+      skills: undefined,
+      commands: undefined,
+    }), { 'capabilities/review.md': 'Own the HACP Cards without exposing a provider accessor.\n' })
+
+    await addEquipment(home, [source])
+    const plan = await resolveHome(home)
+    assert.ok(plan.capabilities.some((entry) => entry.id === 'control-decks/endroit-context:review'))
+    assert.equal(plan.skills.some((entry) => entry.owner === 'control-decks/endroit-context'), false)
+    assert.equal(plan.commands.some((entry) => entry.owner === 'control-decks/endroit-context'), false)
+
+    const build = await buildHome(home)
+    assert.equal(build.outputs.some((entry) => entry.owner === 'control-decks/endroit-context'), false)
+    await buildHome(home, { check: true })
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
 test('Desk overrides publish only while their Home base is unchanged', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-override-'))
   try {

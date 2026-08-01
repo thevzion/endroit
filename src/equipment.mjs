@@ -458,7 +458,7 @@ function validateManifest(manifest) {
     const runtimeCommands = ids(manifest.runtime.commands, 'Runtime command', manifest.name, 'name')
     if (!runtimeCommands.size) throw new EndroitError('equipment_invalid', `${manifest.name} runtime must declare at least one command.`)
   }
-  if (!skills.size && !commands.size && !manifest.runtime && !manifest.instructions?.length && !manifest.artifactKinds?.length) {
+  if (!capabilities.size && !skills.size && !commands.size && !manifest.runtime && !manifest.instructions?.length && !manifest.artifactKinds?.length) {
     throw new EndroitError('equipment_invalid', `${manifest.name} exposes no material or surface.`)
   }
 }
