@@ -76,11 +76,12 @@ async function bootstrapHomeRoom(root) {
 
 export async function initializeExistingHome(destination = process.cwd(), options = {}) {
   const root = resolve(destination)
+  const deskStrategy = options.deskStrategy ?? 'separate'
   if (!await exists(join(root, '.git'))) throw new EndroitError('git_repository_required', 'endroit init requires an existing Git repository.')
   await initHome(root, {
     ...options,
     name: options.name ?? homeId(root),
-    deskStrategy: options.deskStrategy ?? 'separate',
+    deskStrategy,
     frontDoor: { wakeUp: 'endroit/hud:prompt' },
   })
   try {
@@ -90,19 +91,21 @@ export async function initializeExistingHome(destination = process.cwd(), option
       id: options.siteId ?? 'self',
       summary: 'The repository that contains this embedded Home.',
     })
-    await writeRoute(root, join(root, '.desk'), {
-      id: 'embedded',
-      site: site.id,
-      mode: 'embedded',
-      path: '.',
-    })
+    if (deskStrategy !== 'later') {
+      await writeRoute(root, join(root, '.desk'), {
+        id: 'embedded',
+        site: site.id,
+        mode: 'embedded',
+        path: '.',
+      })
+    }
     await buildHome(root)
     const doctor = await doctorHome(root)
     if (doctor.status !== 'ready') throw new EndroitError('init_qualification_failed', `Initialized Home is ${doctor.status}: ${doctor.limits.join(', ')}.`)
     return {
       status: 'initialized',
       home: root,
-      desk: options.deskStrategy ?? 'separate',
+      desk: deskStrategy,
       equipment: result.equipment,
       site: site.id,
       launch: launchInstructions(root, options.providers ?? ['codex', 'claude']),

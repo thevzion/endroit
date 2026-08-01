@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -119,6 +119,29 @@ test('Site worktree validation rejects ambiguous or unsafe creation without impl
     }, null, 2)}\n`)
     await runtimeFailure(home, ['route', 'remove', 'demo', '--id', 'forged', '--delete'], 'route_path_invalid')
     assert.equal(await exists(join(repository, 'README.md')), true)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('managed clone and worktree deletion refuse symlink escapes and preserve external targets', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, temporary } = fixture
+    const routes = [
+      await runtimeJson(home, ['route', 'clone', 'demo', '--id', 'escaped-clone']),
+      await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'escaped-worktree', '--from', 'main', '--new-branch', 'escaped-worktree']),
+    ]
+    for (const route of routes) {
+      const external = join(temporary, `external-${route.route}`)
+      await rename(route.path, external)
+      await symlink(external, route.path, 'dir')
+
+      await runtimeFailure(home, ['route', 'remove', 'demo', '--id', route.route, '--delete'], 'route_checkout_symlink')
+      assert.equal(await readFile(join(external, 'README.md'), 'utf8'), '# second\n')
+      assert.equal((await lstat(route.path)).isSymbolicLink(), true)
+      assert.equal(await exists(join(home, `.desk/routes/demo/${route.route}.json`)), true)
+    }
   } finally {
     await fixture.cleanup()
   }

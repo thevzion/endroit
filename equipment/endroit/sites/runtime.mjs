@@ -66,7 +66,7 @@ async function listSites(input) {
   return Promise.all(declarations(input).map(async (site) => {
     const routes = await routesFor(input, site.id)
     const inspected = await Promise.all(routes.map(async (route) => {
-      const evidence = await inspectRepository(route.path).catch((error) => ({ available: false, error: error.message }))
+      const evidence = await routeRepositoryPath(input, route).then(inspectRepository).catch((error) => ({ available: false, error: error.message }))
       return { ...route, mount: await inspectMount(input, route), matches: matchesSite(site, evidence), evidence }
     }))
     const registered = new Map(inspected.filter((route) => route.path).map((route) => [route.path, route.id]))
@@ -105,7 +105,7 @@ async function inspectSite(input, id) {
 async function inspectRoute(input, id, routeId) {
   const site = declaration(input, id)
   const route = await selectRoute(input, id, routeId)
-  const evidence = await inspectRepository(route.path)
+  const evidence = await inspectRepository(await routeRepositoryPath(input, route))
   assertSiteMatches(site, evidence)
   const trackedFiles = (await git(['ls-files'], route.path)).split('\n').filter(Boolean).sort()
   const files = trackedFiles.slice(0, 5000)
@@ -208,7 +208,7 @@ async function addSite(input, repository, flags) {
     const routeId = flags.route ?? 'main'
     const existing = (await routesFor(input, id)).find((route) => route.id === routeId)
     if (existing) {
-      const current = await inspectRepository(existing.path)
+      const current = await inspectRepository(await routeRepositoryPath(input, existing))
       assertSiteMatches(site, current)
       bound = existing
     } else {
@@ -286,7 +286,7 @@ async function createWorktree(input, id, flags) {
   if (flags['start-point'] && !newBranch) throw failure('site_worktree_start_point', '--start-point requires --new-branch.', 2)
   const site = declaration(input, id)
   const source = await selectRoute(input, id, flags.from, '--from')
-  const sourceEvidence = await inspectRepository(source.path)
+  const sourceEvidence = await inspectRepository(await routeRepositoryPath(input, source))
   assertSiteMatches(site, sourceEvidence)
   const branch = String(existingBranch ?? newBranch)
   await validateBranch(source.path, branch)
@@ -336,8 +336,8 @@ async function removeRoute(input, id, routeId, flags) {
   if (mount && mount.status !== 'direct') throw failure('route_mount_exists', `Route ${id}/${route.id} still has a Mount; unmount it first.`)
   if (route.mode.startsWith('managed-')) {
     if (!truthy(flags.delete)) throw failure('route_managed_delete_required', `Route ${id}/${route.id} is managed; pass --delete.`)
-    if (!await exists(route.path)) throw failure('route_broken', `Managed Route ${id}/${route.id} has no checkout.`)
-    const evidence = await inspectRepository(route.path)
+    const checkout = await validateManagedCheckout(input, route)
+    const evidence = await inspectRepository(checkout.resolvedPath)
     if (!evidence.clean) throw failure('route_dirty', `Managed Route ${id}/${route.id} has local changes.`)
     const current = evidence.worktrees.find((worktree) => worktree.path === evidence.root)
     if (route.mode === 'managed-worktree') {
@@ -346,11 +346,13 @@ async function removeRoute(input, id, routeId, flags) {
       if (current.prunable) throw failure('site_worktree_prunable', `Linked worktree ${id}/${route.id} has prunable metadata.`)
       const source = evidence.worktrees.find((entry) => entry.path !== evidence.root && entry.available && !entry.locked && !entry.prunable)?.path
       if (!source) throw failure('site_worktree_source_missing', `No usable sibling checkout can remove ${id}/${route.id}.`)
-      await git(['worktree', 'remove', '--', evidence.root], source)
+      await validateManagedCheckout(input, route, checkout)
+      await git(['worktree', 'remove', '--', checkout.declaredPath], source)
     } else {
       const dependants = evidence.worktrees.filter((worktree) => worktree.path !== evidence.root)
       if (dependants.length) throw failure('site_clone_has_worktrees', `Managed clone ${id}/${route.id} still has dependent worktrees.`)
-      await rm(route.path, { recursive: true })
+      await validateManagedCheckout(input, route, checkout)
+      await rm(checkout.declaredPath, { recursive: true })
     }
   }
   await rm(route.documentPath)
@@ -411,8 +413,8 @@ async function routesFor(input, id) {
     const documentPath = join(root, entry.name)
     const route = JSON.parse(await readFile(documentPath, 'utf8'))
     validateRoute(route, id, entry.name.slice(0, -5), input)
-    const path = isAbsolute(route.path) ? route.path : resolve(input.homeRoot, route.path)
-    values.push({ ...route, documentPath, path: await canonicalPath(path) })
+    const declaredPath = isAbsolute(route.path) ? resolve(route.path) : resolve(input.homeRoot, route.path)
+    values.push({ ...route, documentPath, declaredPath, path: await canonicalPath(declaredPath) })
   }
   return values.sort((left, right) => left.id.localeCompare(right.id))
 }
@@ -480,6 +482,31 @@ function managedPath(input, site, route) {
 
 function mountPath(input, site, route) {
   return managedPath(input, site, route)
+}
+
+async function routeRepositoryPath(input, route) {
+  return route.mode.startsWith('managed-') ? (await validateManagedCheckout(input, route)).resolvedPath : route.path
+}
+
+async function validateManagedCheckout(input, route, expected) {
+  const declaredPath = route.declaredPath ?? (isAbsolute(route.path) ? resolve(route.path) : resolve(input.homeRoot, route.path))
+  if (declaredPath !== managedPath(input, route.site, route.id)) {
+    throw failure('route_path_invalid', `Managed Route ${route.site}/${route.id} must stay below its Desk checkout path.`)
+  }
+  let info
+  try { info = await lstat(declaredPath) } catch (error) {
+    if (error.code === 'ENOENT') throw failure('route_broken', `Managed Route ${route.site}/${route.id} has no checkout.`)
+    throw error
+  }
+  if (info.isSymbolicLink()) throw failure('route_checkout_symlink', `Managed Route ${route.site}/${route.id} checkout must not be a symlink.`)
+  if (!info.isDirectory()) throw failure('route_checkout_invalid', `Managed Route ${route.site}/${route.id} checkout must be a directory.`)
+  const resolvedPath = await realpath(declaredPath)
+  if (resolvedPath !== declaredPath) throw failure('route_checkout_escape', `Managed Route ${route.site}/${route.id} checkout resolves outside its declared path.`)
+  const current = { declaredPath, resolvedPath, dev: info.dev, ino: info.ino }
+  if (expected && (current.resolvedPath !== expected.resolvedPath || current.dev !== expected.dev || current.ino !== expected.ino)) {
+    throw failure('route_checkout_changed', `Managed Route ${route.site}/${route.id} checkout changed during revalidation.`)
+  }
+  return current
 }
 
 async function inspectRepository(path) {

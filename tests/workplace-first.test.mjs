@@ -8,6 +8,7 @@ import test from 'node:test'
 import { buildHome } from '../src/build.mjs'
 import { runCli } from '../src/cli.mjs'
 import { createHome, initializeExistingHome, initHome } from '../src/create.mjs'
+import { initDesk } from '../src/desk.mjs'
 import { addEquipment } from '../src/equipment.mjs'
 import { doctorMembers } from '../src/member.mjs'
 import { removeTree } from '../src/lib/io.mjs'
@@ -45,6 +46,21 @@ test('create and init choose explicit Desk Git boundaries around Home-owned Memb
     await createHome(later, { deskStrategy: 'later' })
     await assert.rejects(readFile(join(later, '.desk/desk.json')), (error) => error.code === 'ENOENT')
     assert.equal((await resolveHome(later)).members[0].id, 'owner')
+    assert.equal((await initDesk(later, { id: 'later', member: 'owner', repository: 'tracked' })).id, 'later')
+
+    const deferred = join(temporary, 'deferred-embedded')
+    await exec('git', ['init', '--quiet', '--initial-branch=main', deferred])
+    await writeFile(join(deferred, 'README.md'), '# Existing repository\n')
+    await exec('git', ['add', 'README.md'], { cwd: deferred })
+    await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'initial'], { cwd: deferred })
+    await initializeExistingHome(deferred, { deskStrategy: 'later' })
+    await assert.rejects(readFile(join(deferred, '.desk/routes/self/embedded.json')), (error) => error.code === 'ENOENT')
+    assert.equal((await resolveHome(deferred)).sites[0].id, 'self')
+    assert.equal((await initDesk(deferred, { id: 'later', member: 'owner', repository: 'separate' })).repository, 'separate')
+    const resumed = captureIo()
+    assert.equal(await dispatchRuntime(deferred, 'site', ['route', 'bind', 'self', deferred, '--id', 'embedded', '--json'], resumed.io), 0, resumed.stderr())
+    assert.equal(JSON.parse(resumed.stdout()).mode, 'embedded')
+    assert.equal(JSON.parse(await readFile(join(deferred, '.desk/routes/self/embedded.json'), 'utf8')).path, '.')
   } finally {
     await removeTree(temporary, { force: true })
   }
