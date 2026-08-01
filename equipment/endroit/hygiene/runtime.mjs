@@ -93,6 +93,8 @@ async function maintain(input) {
 
   const legacySkills = await readdir(join(input.homeRoot, '.agents', 'skills'), { withFileTypes: true }).catch((error) => error.code === 'ENOENT' ? [] : Promise.reject(error))
   for (const entry of legacySkills.filter((item) => item.isDirectory() && /^(?:endroit-context-|endroit-routing-refresh)/.test(item.name))) {
+    const skill = await safeLstat(join(input.homeRoot, '.agents', 'skills', entry.name, 'SKILL.md'))
+    if (!skill?.isFile()) continue
     add('legacy', 'legacy-public-gesture', `${entry.name} uses the superseded pick/refresh grammar.`, `.agents/skills/${entry.name}`)
   }
 

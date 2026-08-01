@@ -189,4 +189,27 @@ test('Home Hygiene composes Doctors read-only and repairs only an exactly approv
   }
 })
 
+test('Home Hygiene ignores empty legacy projection directories but reports real Skills', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-hygiene-legacy-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home)
+    const skills = join(home, '.agents', 'skills')
+    const empty = join(skills, 'endroit-context-empty')
+    const real = join(skills, 'endroit-routing-refresh-real')
+    await mkdir(empty, { recursive: true })
+    await mkdir(real, { recursive: true })
+    await writeFile(join(real, 'SKILL.md'), '# Superseded projection\n')
+
+    const inspection = captureIo()
+    assert.equal(await dispatchRuntime(home, 'hygiene', ['maintain', '--json'], inspection.io), 0, inspection.stderr())
+    const legacy = JSON.parse(inspection.stdout()).legacyResidue.filter((finding) => finding.code === 'legacy-public-gesture')
+    assert.equal(legacy.some((finding) => finding.path === '.agents/skills/endroit-context-empty'), false)
+    assert.equal(legacy.some((finding) => finding.path === '.agents/skills/endroit-routing-refresh-real'), true)
+    assert.equal(await readFile(join(real, 'SKILL.md'), 'utf8'), '# Superseded projection\n')
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
 async function gitRoot(path) { return realpath(resolve((await exec('git', ['rev-parse', '--show-toplevel'], { cwd: path })).stdout.trim())) }
