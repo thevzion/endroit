@@ -1,15 +1,20 @@
-import { lstat, mkdir, readFile, readdir } from 'node:fs/promises'
+import { lstat, mkdir, mkdtemp, readFile, readdir, rename } from 'node:fs/promises'
 import { join, relative } from 'node:path'
 import { API, validateDocument } from './contracts.mjs'
 import { EndroitError } from './lib/errors.mjs'
-import { assertId, exists, writeFileAtomic } from './lib/io.mjs'
+import { assertId, exists, removeTree, writeFileAtomic } from './lib/io.mjs'
 
 const templatePath = new URL('../templates/MEMBER.md', import.meta.url)
 
 export async function createMember(root, id, options = {}) {
   id = assertId(id, 'Member id')
-  const directory = join(root, 'members', id)
+  const membersRoot = join(root, 'members')
+  const directory = join(membersRoot, id)
   if (await exists(directory)) throw new EndroitError('member_exists', `Member ${id} already exists.`)
+  if (await exists(membersRoot)) {
+    const info = await lstat(membersRoot)
+    if (info.isSymbolicLink() || !info.isDirectory()) throw new EndroitError('members_root_invalid', `${membersRoot} must be a regular directory.`)
+  } else await mkdir(membersRoot, { recursive: true })
   const member = {
     $schema: API.member,
     id,
@@ -20,17 +25,23 @@ export async function createMember(root, id, options = {}) {
   await validateDocument(member, 'member')
   const template = await readFile(templatePath, 'utf8')
   const values = {
-    'member.id': member.id,
-    'member.name': member.name.replaceAll('"', '\\"'),
-    'member.status': member.status,
+    'member.id': JSON.stringify(member.id),
+    'member.name': JSON.stringify(member.name),
+    'member.status': JSON.stringify(member.status),
     'member.accounts': JSON.stringify(member.accounts),
   }
   const content = template.replace(/\{\{([^{}]+)\}\}/g, (_match, key) => {
     if (!(key in values)) throw new EndroitError('member_template_invalid', `Unknown Member template value ${key}.`)
     return values[key]
   })
-  await mkdir(directory, { recursive: true })
-  await writeFileAtomic(join(directory, 'MEMBER.md'), content, 0o644)
+  const stage = await mkdtemp(join(membersRoot, '.endroit-member-'))
+  try {
+    await writeFileAtomic(join(stage, 'MEMBER.md'), content, 0o644)
+    await rename(stage, directory)
+  } catch (error) {
+    await removeTree(stage, { force: true })
+    throw error
+  }
   return { status: 'created', ...member, path: relative(root, join(directory, 'MEMBER.md')) }
 }
 

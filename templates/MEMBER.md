@@ -1,8 +1,8 @@
 ---
 $schema: "https://endroit.org/schema/member.json"
-id: "{{member.id}}"
-name: "{{member.name}}"
-status: "{{member.status}}"
+id: {{member.id}}
+name: {{member.name}}
+status: {{member.status}}
 accounts: {{member.accounts}}
 ---
 

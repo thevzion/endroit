@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { chmod, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
+import { chmod, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import test from 'node:test'
 import { buildHome } from '../src/build.mjs'
 import { runCli } from '../src/cli.mjs'
-import { createHome, initializeExistingHome } from '../src/create.mjs'
+import { createHome, initializeExistingHome, initHome } from '../src/create.mjs'
 import { addEquipment } from '../src/equipment.mjs'
 import { doctorMembers } from '../src/member.mjs'
 import { removeTree } from '../src/lib/io.mjs'
@@ -68,6 +68,21 @@ test('Member CLI validates accounts and Desk references without accepting secret
     desk.member = 'missing'
     await writeFile(deskPath, `${JSON.stringify(desk, null, 2)}\n`)
     await assert.rejects(() => resolveHome(home), (error) => error.code === 'member_missing')
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
+test('failed initialization preserves a pre-existing product members directory', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-member-rollback-'))
+  try {
+    const root = join(temporary, 'product')
+    await mkdir(join(root, 'members'), { recursive: true })
+    await writeFile(join(root, 'members/product.txt'), 'product-owned\n')
+    await assert.rejects(() => initHome(root, { deskStrategy: 'tracked' }), (error) => error.code === 'git_failed')
+    assert.equal(await readFile(join(root, 'members/product.txt'), 'utf8'), 'product-owned\n')
+    await assert.rejects(readFile(join(root, 'members/owner/MEMBER.md')), (error) => error.code === 'ENOENT')
+    await assert.rejects(readFile(join(root, 'endroit.json')), (error) => error.code === 'ENOENT')
   } finally {
     await removeTree(temporary, { force: true })
   }

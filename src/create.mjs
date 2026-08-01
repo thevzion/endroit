@@ -1,4 +1,4 @@
-import { mkdir, mkdtemp, readFile, rename, rm } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rename, rm, rmdir } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { addEquipment } from './equipment.mjs'
 import { buildHome } from './build.mjs'
@@ -124,6 +124,11 @@ export async function initHome(root = process.cwd(), options = {}) {
   const ignorePath = join(root, '.gitignore')
   const instructionPath = join(root, HOME_INSTRUCTION)
   const deskPath = join(root, '.desk')
+  const memberId = options.memberId ?? 'owner'
+  const membersPath = join(root, 'members')
+  const memberPath = join(membersPath, memberId)
+  const membersExisted = await exists(membersPath)
+  let memberCreated = false
   const ignoreExisted = await exists(ignorePath)
   const currentIgnore = ignoreExisted ? await readFile(ignorePath, 'utf8') : ''
   if (await exists(instructionPath)) throw new EndroitError('home_instruction_exists', `${instructionPath} already exists.`)
@@ -145,8 +150,8 @@ export async function initHome(root = process.cwd(), options = {}) {
     const lines = currentIgnore.split(/\r?\n/)
     const missing = required.filter((line) => !lines.includes(line))
     if (missing.length) await writeFileAtomic(ignorePath, `${currentIgnore.trimEnd()}${currentIgnore.trim() ? '\n' : ''}${missing.join('\n')}\n`, 0o644)
-    const memberId = options.memberId ?? 'owner'
     await createMember(root, memberId, { name: options.memberName, status: 'active', accounts: options.accounts ?? [] })
+    memberCreated = true
     if (deskStrategy !== 'later') await initDesk(root, {
       id: options.deskId ?? 'local',
       member: memberId,
@@ -157,7 +162,8 @@ export async function initHome(root = process.cwd(), options = {}) {
     await rm(join(root, 'endroit.json'), { force: true })
     await rm(instructionPath, { force: true })
     await removeTree(deskPath, { force: true })
-    await removeTree(join(root, 'members'), { force: true })
+    if (memberCreated) await removeTree(memberPath, { force: true })
+    if (!membersExisted) await rmdir(membersPath).catch((failure) => { if (!['ENOENT', 'ENOTEMPTY'].includes(failure.code)) throw failure })
     if (ignoreExisted) await writeFileAtomic(ignorePath, currentIgnore, 0o644)
     else await rm(ignorePath, { force: true })
     throw error

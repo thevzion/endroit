@@ -86,5 +86,6 @@ async function configureParentIgnore(root, strategy, content) {
   const deskRules = new Set(['/.desk/', '/.desk/routes/', '/.desk/sites/'])
   const lines = content.split(/\r?\n/).filter((line) => !deskRules.has(line))
   const required = strategy === 'separate' ? ['/.desk/'] : ['/.desk/routes/', '/.desk/sites/']
-  await writeFileAtomic(path, `${[...lines.filter(Boolean), ...required].join('\n')}\n`, 0o644)
+  const base = lines.join('\n').trimEnd()
+  await writeFileAtomic(path, `${base}${base ? '\n' : ''}${required.join('\n')}\n`, 0o644)
 }
