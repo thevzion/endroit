@@ -1,51 +1,59 @@
 # Endroit Roadmap
 
-Endroit is actively maintained and dogfooded. This roadmap records evidence,
-not release dates.
+Endroit is actively maintained and dogfooded. This public roadmap communicates
+direction without release dates.
 
-## Now: qualify 0.8
+## Available
 
-`0.8.0-alpha.0` resets Endroit around Home-first workplaces and separates
-shared Sites, Desk Routes and physical checkouts.
+- local-first Homes with source-owned instructions and provider projections;
+- independent Sites reached through explicit Desk Routes;
+- Room-owned Material and first-party Research, Planning and Publishing
+  methods;
+- Codex and Claude qualification evidence.
 
-Release qualification requires:
+## In progress
 
-- standalone `create` and embedded `init` Homes;
-- Codex and Claude projections on Node 22 and 24;
-- remote-only, existing, embedded, managed clone, managed worktree and
-  submodule Route evidence;
-- two Desks with distinct Routes to one Site;
-- guarded refusal of dirty or unsafe managed deletion;
-- a complete migration of the maintainer Home;
-- one retained result resumed in a later Meeting and delivered to a Site;
-- README, website and articles that describe only shipped behavior;
-- three to five cold reads and one external Home reproduction.
+The 0.8 Home-first hard reset is the current release line. Its baseline is one
+complete static journey:
 
-Cold reads validate release comprehension. They do not reopen the accepted
-Home-first ownership model without new contradictory evidence.
+```text
+create/init → enter → call/work-as/use
+            → retain → accept → work-on/deliver
+            → maintain-the-home
+```
 
-## Provider evidence
+The release adds Home-owned Members, tracked/separate/later Desk bootstrap,
+human projected gestures, whole-Home Hygiene and the existing Site/Route
+materialization contract. Local qualification, dogfood and a packed npm smoke
+test gate the alpha; cold reads and the first external Home feed the next
+alpha and gate beta.
 
-| Provider | Integration | Evidence |
-|---|---|---|
-| Codex | native projection and Wake-up bridge | qualified by package, provider and dogfood gates |
-| Claude | native projection and Wake-up bridge | qualified by package, provider and dogfood gates |
-| Other agents | ordinary files and Home Console | portable, not natively qualified |
+## Exploring
 
-## Next
+Provider portability is the next bounded initiative. Evidence is recorded at
+five levels:
 
-- read-only 0.7 placement inventory before any automated migration;
-- explainable Home Hygiene advisories;
-- adapters for additional provider projections when repeated use justifies
-  them;
-- delivery observations for non-Git Sites;
-- evaluation of flattened agent instructions versus owned Home placement.
+| Level | Meaning |
+|---|---|
+| L0 | authoritative Home files are readable |
+| L1 | static instructions and capabilities project without loss |
+| L2 | native invocation can call an Occupant and apply a Role |
+| L3 | entry/Wake-up restores place-owned continuity |
+| L4 | the full Home-first slice passes local qualification and dogfood |
 
-## Explicitly deferred
+Codex and Claude are currently qualified at L4. A new provider advances only
+with dated evidence; Endroit does not infer support from file similarity.
 
-- daemon, graph or semantic index;
-- persistent Endroit-owned agent identity;
-- automatic transcript retention;
-- submodule lifecycle manager;
-- required SaaS storage;
-- implicit acceptance, delivery or publication.
+Adaptive workplaces remain an uncommitted direction. Dynamic titles,
+automatic placement and inferred structure need evidence before they become an
+Initiative.
+
+## Later
+
+Presence may make current Occupants, activity and handoffs observable without
+turning Endroit into a persistent agent runtime. It remains explicitly after
+the static 0.8 baseline.
+
+Still excluded: automatic transcript retention, implicit acceptance or
+delivery, a daemon, a persistent agent registry, required SaaS storage and
+submodule lifecycle management.

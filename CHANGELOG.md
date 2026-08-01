@@ -10,6 +10,14 @@
   managed clone/worktree Routes.
 - Replace provider-facing Workspace, Asset, Target and Binding surfaces without
   permanent compatibility aliases. See [migration](docs/migration-0.8.md).
+- Add Home-owned Members, required Desk-to-Member references and
+  `--desk tracked|separate|later`; remove `solo|team` and `--mode`.
+- Project the complete static Home-first journey through human operational
+  gestures, with native provider delegation that fails `blocked` when absent.
+- Install whole-Home Hygiene by default for read-only categorized inspection
+  and exactly approved bounded repair.
+- Publish the prerelease to npm `next`, smoke that registry artifact, then keep
+  `latest` promotion as a separate authenticated effect.
 
 ## 0.7.0-alpha.1
 

@@ -20,15 +20,20 @@ meaning before renaming files.
 
 1. Inventory shared and Desk-owned Workspaces, Assets, Targets and Bindings.
 2. Commit the last valid 0.7 Home.
-3. Convert each durable domain to a Room with `ROOM.md` and `inbox.md`.
-4. Keep a Workstream as a nested Room only when it owns a mission, continuity,
+3. Create `members/<id>/MEMBER.md` for each human and remove `mode` from
+   `endroit.json`; 0.8 intentionally rejects Homes while `mode` remains.
+4. Add required `member` to `.desk/desk.json`. Keep or rename the Desk ID based
+   on the Desk's own identity, not the person's name.
+5. Choose the real Git boundary: tracked Desk, separate nested Desk or later.
+6. Convert each durable domain to a Room with `ROOM.md` and `inbox.md`.
+7. Keep a Workstream as a nested Room only when it owns a mission, continuity,
    decisions, Material and repeated Meetings; otherwise retain it as Material.
-5. Convert Assets to Equipment and regenerate provider projections.
-6. Create `sites/<id>/SITE.md` for every Target.
-7. Resolve every Binding to its real Git root and write a Desk Route JSON.
-8. Classify each Route as embedded, existing, managed clone, managed worktree
+8. Convert Assets to Equipment and regenerate provider projections.
+9. Create `sites/<id>/SITE.md` for every Target.
+10. Resolve every Binding to its real Git root and write a Desk Route JSON.
+11. Classify each Route as embedded, existing, managed clone, managed worktree
    or submodule. A Target without a checkout becomes remote-only.
-9. Rebuild, run Doctor and inspect every Route before retiring 0.7 sources.
+12. Rebuild, run Doctor and inspect every Route before retiring 0.7 sources.
 
 Do not import a symlink as Site identity. Do not move a checkout merely to make
 the migration look tidy. Paths are Desk state; ownership is the durable part.

@@ -7,7 +7,7 @@
 
 ```mermaid
 flowchart TD
-  sources["Home · Desk · Rooms · Equipment · Sites · Routes"] --> kernel["Endroit Kernel"]
+  sources["Home · Members · Desk · Rooms · Equipment · Sites · Routes"] --> kernel["Endroit Kernel"]
   kernel --> plan["Resolved Home + Floor Plan"]
   plan --> projections["Codex and Claude projections"]
   plan --> runtime["Approved optional Equipment runtimes"]
@@ -26,6 +26,7 @@ public Core package, graph store or required SaaS.
 ```text
 Human     direction, judgment and acceptance
 Home      shared workplace and composition
+Member    Home-owned human identity and durable collaboration context
 Desk      personal continuity and local access
 Room      durable domain and Material
 Meeting   bounded hot context
@@ -33,6 +34,8 @@ Equipment reusable way of working
 Site      external truth, history and permissions
 Route     declared local relationship to a Site
 Runtime   session, permissions and execution
+Occupant  temporary agent participating in one Meeting
+Role      temporary working lens applied to an Occupant
 ```
 
 Physical containment does not imply shared ownership. An Embedded Home and its
@@ -42,7 +45,7 @@ Site may share `.` while keeping distinct responsibilities.
 
 The Kernel owns:
 
-- Home and Desk loading;
+- Home, Member and Desk loading;
 - schema and source validation;
 - transactional Equipment lifecycle;
 - deterministic workplace resolution;

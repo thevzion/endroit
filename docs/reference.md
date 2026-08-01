@@ -13,8 +13,9 @@ is the only 0.7 → 0.8 vocabulary map.
 ## Kernel commands
 
 ```text
-create <directory> [--mode solo|team] [--with <ids|all|none>]
-init [repository] [--mode solo|team] [--with <ids|all|none>]
+create <directory> [--desk tracked|separate|later] [--member <id>] [--with <ids|all|none>]
+init [repository] [--desk tracked|separate|later] [--member <id>] [--with <ids|all|none>]
+member create|list|inspect|doctor
 desk init|clone
 equipment validate|add|status|sync|remove|override|promote|catalog|trust
 room create|list|inspect|doctor
@@ -43,6 +44,7 @@ Canonical sources:
 endroit.json
 HOME.md
 rooms/<room>/ROOM.md
+members/<member>/MEMBER.md
 equipment/<owner>/<equipment>/equipment.json
 sites/<site>/SITE.md
 .desk/desk.json
@@ -65,16 +67,28 @@ CLAUDE.md
 `.desk/sites/` contains ignored managed Git checkouts. It is materialization,
 not Route metadata.
 
-## Home and Desk
+## Home, Member and Desk
 
-`endroit.json` declares the Home name, runtime, mode, providers, optional
-prefix, Front Door and namespaced Equipment settings. `HOME.md` contains shared
-house rules.
+`endroit.json` declares the Home name, runtime, providers, optional prefix,
+Front Door and namespaced Equipment settings. `HOME.md` contains shared house
+rules. Endroit 0.8 has no `solo|team` mode; a legacy `mode` field is rejected
+with a migration error.
 
-A Desk contains one collaborator's instructions, Rooms, Equipment overrides
-and Routes. A solo Desk is part of the Home repository except for ignored
-Routes and checkouts. A team Desk may be its own nested Git repository; it
-also ignores Routes and checkouts. Machine paths stay Desk-owned.
+A Member is a human represented by Home-owned
+`members/<id>/MEMBER.md`. Frontmatter contains `id`, `name`, `status` and
+non-secret external accounts `{ service, scope, identifier, handle? }`; the
+Markdown body owns durable responsibilities and shared collaboration context.
+Credentials never belong in a Member.
+
+Every `desk.json` names both an independent Desk `id` and its required
+`member`. Agents remain temporary Occupants and may receive a Role for one
+Meeting; neither becomes a Member or a registry entry.
+
+A Desk contains local instructions, Rooms, Equipment overrides and Routes.
+`create` defaults to a Desk tracked in the Home Git repository. `init` defaults
+to a separate nested Git repository under ignored `.desk/`. Either accepts
+`--desk tracked|separate|later`; `later` creates the Member but no Desk.
+Machine paths stay Desk-owned in every topology.
 
 ## Rooms and Meetings
 
@@ -106,7 +120,18 @@ First-party runtime bytes are `bundled`; third-party bytes must be approved by
 their exact digest. Any byte change returns an approved runtime to `pending`.
 
 Skills and Commands are projections of Equipment functions. They are not the
-canonical Equipment source.
+canonical Equipment source. An accessor may declare a literal `projectedName`
+or a template containing `{route}`. The resolver expands the final name and
+rejects provider-surface collisions before build; omitted names retain the
+prefix composition fallback.
+
+The first-party Workplace Equipment projects human gestures such as
+`enter-the-home`, `enter-the-<room>-room`, `work-on-<site>`,
+`call-the-researcher`, `work-as-an-engineer`, `use-research`, `retain-this`,
+`accept-this`, `deliver-this` and `archive-this`. Entry reloads authoritative
+sources and creates no global active-Room state. Provider-native call and Role
+operations return `blocked` when the mechanism is unavailable; they never
+simulate an Occupant.
 
 ## Sites
 
@@ -178,6 +203,10 @@ orientation; its failure cannot remove the Floor Plan.
 - `endroit/rooms`: `create|list|inspect|doctor`;
 - `endroit/artifacts`: Room-owned validated results and promotion;
 - `endroit/sites`: Site, Route and deterministic Git inspection;
+- `endroit/workplace`: provider-native entry, Occupant, Role, method and
+  lifecycle gestures;
+- `endroit/hygiene`: read-only `maintain-the-home` inspection and one exactly
+  approved bounded repair;
 - `endroit/research`, `planning`, `publishing`, `scratch`: optional methods;
 - `endroit/project`: Endroit's own maintenance method.
 
@@ -185,6 +214,7 @@ orientation; its failure cannot remove the Floor Plan.
 
 - schemas and grammar may still break before 1.0;
 - Codex and Claude are the qualified projections;
+- provider status and portability levels are recorded in [providers](providers.md);
 - no daemon, semantic index, graph or persistent agent is required;
 - no automated 0.7 migration or submodule manager ships in 0.8;
 - no generated Site symlink view ships in 0.8; Routes resolve checkouts directly;

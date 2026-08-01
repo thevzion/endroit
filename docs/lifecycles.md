@@ -3,8 +3,8 @@
 ## Home bootstrap
 
 ```text
-standalone: create <directory> → initialize Git → source files → Equipment → build → doctor → initial commit
-embedded:   init [repository]  → source files → Site self → Route embedded:. → build → doctor
+standalone: create <directory> → Git → Member → tracked Desk → Equipment → build → doctor → commit
+embedded:   init [repository]  → Member → separate Desk → Site self/Route embedded:. → build → doctor
 ```
 
 `create` refuses an existing destination. `init` requires an existing Git
@@ -14,12 +14,14 @@ It preserves existing product files.
 ## Desk
 
 ```text
-solo Home → local Desk in Home Git
-team Home → no Desk required → desk init or desk clone
+--desk tracked  → Desk sources share the Home Git; Routes/checkouts stay ignored
+--desk separate → .desk is an ignored nested Git repository
+--desk later    → Member exists; desk init or desk clone later
 ```
 
-The Desk owns personal Guidance and Routes. Team Desk paths are never promoted
-to Home settings.
+Every Desk references one Home-owned human Member. The Desk ID identifies the
+workstation/context, not the person. Desk paths are never promoted to Home
+settings.
 
 ## Equipment
 
@@ -55,9 +57,20 @@ Chat creation alone writes nothing. `meetings/` is reserved for explicitly
 retained records. Transcripts, hidden reasoning and credentials are never
 canonical Material.
 
-The 0.8 Core exposes Room creation and inspection. Retention, acceptance and
-delivery remain explicit Equipment or human workflows; they are not silently
-performed by the Kernel.
+The Workplace Equipment exposes provider-native gestures for all four
+transitions. Endroit objects and operations remain their owners; the provider
+projection only activates them. They are never silently performed by the
+Kernel.
+
+## Home Hygiene
+
+```text
+maintain → read-only findings by category
+repair --finding <id> --approve <same-id> → existing operation → maintain again
+```
+
+Inspection never moves, deletes, archives, pushes or delivers. No daemon or
+periodic cleanup is created.
 
 ## Site and Route
 

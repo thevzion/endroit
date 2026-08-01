@@ -15,8 +15,9 @@ npm run dev:session -- --provider codex
 npm run dev:verify
 ```
 
-The default Home is `../endroit-development-home`. It is a team Home whose
-`endroit/main` Route points back to this Site. Use
+The default Home is `../endroit-development-home`. Its separate Desk references
+the Home-owned `owner` Member and its `endroit/main` Route points back to this
+Site. Use
 `npm run dev:home:recreate` for a clean rebuild; it refuses dirty Home or Desk
 repositories and rolls back a failed replacement. The scripts never create a
 remote, commit or push.
@@ -81,12 +82,12 @@ runtimes name their maintainer explicitly.
 ## Release
 
 The `npm release` workflow qualifies the exact public `main` commit, publishes
-the packed CLI through npm trusted publishing and assigns the `latest` tag.
-After registry verification, a maintainer with an authenticated npm session may
-also move the prerelease channel:
+the packed CLI through npm trusted publishing under `next`, then recreates and
+inspects a Home from that registry artifact. Only after this smoke test may a
+maintainer with an authenticated npm session promote the same version:
 
 ```bash
-npm dist-tag add @endroit/cli@<version> next
+npm dist-tag add @endroit/cli@<version> latest
 npm view @endroit/cli dist-tags --json
 ```
 

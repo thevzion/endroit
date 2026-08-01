@@ -2,8 +2,10 @@
 
 > Give agentic work a place to compound.
 
-Endroit is a local-first, headless framework for durable human-agent
-workplaces.
+**The place layer for agentic work.**
+
+Endroit is a lightweight, local-first framework for durable human-agent
+workplaces across sessions, tools, and repositories.
 
 It gives humans and the agents they already use a familiar place to work
 across meetings, tools and repositories—without moving the work into a
@@ -93,6 +95,10 @@ Create a standalone Home:
 npx @endroit/cli create my-home
 ```
 
+`create` adds a Home-owned Member and a Desk tracked with the Home. Use
+`--desk separate` for a private nested Desk repository or `--desk later` to
+defer the Desk.
+
 Or add a Home to an existing repository:
 
 ```bash
@@ -100,12 +106,18 @@ cd my-existing-repository
 npx @endroit/cli init
 ```
 
+`init` defaults to a separate Desk repository under ignored `.desk/`. Both
+commands accept `--desk tracked|separate|later`.
+
 The standalone bootstrap is intentionally small:
 
 ```text
 my-home/
 ├── endroit.json
 ├── HOME.md
+├── members/
+│   └── owner/
+│       └── MEMBER.md
 ├── rooms/
 │   └── home/
 │       ├── ROOM.md
@@ -125,15 +137,16 @@ my-home/
 └── .endroit/        local and rebuildable
 ```
 
-The initial human-authored orientation is concentrated in four sources:
+The initial human-authored orientation is concentrated in five sources:
 
 - `endroit.json` declares the Home and providers;
 - `HOME.md` contains shared house rules;
+- `members/owner/MEMBER.md` owns durable human identity and collaboration context;
 - `rooms/home/ROOM.md` gives the first durable domain a purpose;
 - `.desk/DESK.md` carries your personal continuity.
 
-`create` and `init` also install five inspectable foundation Equipment:
-Onboarding, HUD, Artifacts, Rooms and Sites. Additional Rooms, Sites and
+`create` and `init` also install seven inspectable foundation Equipment:
+Onboarding, HUD, Artifacts, Rooms, Sites, Workplace and Hygiene. Additional Rooms, Sites and
 optional Equipment appear only when the work earns them.
 
 ## The first experience
