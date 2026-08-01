@@ -1,0 +1,38 @@
+{
+  "$schema": "https://endroit.org/schema/v7/equipment.json",
+  "name": "endroit/hygiene",
+  "version": "0.8.0-alpha.0",
+  "description": "Read-only whole-Home health inspection and explicitly approved bounded repair.",
+  "files": ["capabilities/maintain.md", "runtime.mjs"],
+  "capabilities": [
+    {
+      "id": "maintain",
+      "path": "capabilities/maintain.md",
+      "description": "Maintain the Home by composing existing doctors and explaining bounded findings."
+    }
+  ],
+  "skills": [
+    {
+      "id": "maintain-home",
+      "capability": "maintain",
+      "description": "Use when the whole Home needs a read-only health inspection or one approved repair.",
+      "projectedName": "maintain-the-home"
+    }
+  ],
+  "commands": [
+    {
+      "id": "maintain-home",
+      "capability": "maintain",
+      "description": "Inspect and maintain the whole Home without implicit cleanup.",
+      "projectedName": "maintain-the-home"
+    }
+  ],
+  "runtime": {
+    "namespace": "hygiene",
+    "entry": "runtime.mjs",
+    "commands": [
+      { "name": "maintain", "description": "Inspect whole-Home health without mutation." },
+      { "name": "repair", "description": "Apply one selected and exactly approved bounded repair, then inspect again." }
+    ]
+  }
+}

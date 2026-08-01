@@ -52,18 +52,18 @@ export function assertId(value, label = 'id') {
 
 export function assertInside(root, candidate, label = 'path') {
   const base = resolve(root)
-  const target = resolve(candidate)
-  const rel = relative(base, target)
+  const site = resolve(candidate)
+  const rel = relative(base, site)
   if (rel === '..' || rel.startsWith(`..${sep}`)) throw new EndroitError('path_escape', `${label} escapes ${base}.`)
-  return target
+  return site
 }
 
 export async function resolvePackageFile(root, path, label = 'package path') {
   const base = await realpath(root)
-  const target = assertInside(base, resolve(base, path), label)
-  const stat = await lstat(target)
+  const site = assertInside(base, resolve(base, path), label)
+  const stat = await lstat(site)
   if (stat.isSymbolicLink()) throw new EndroitError('symlink_forbidden', `${label} must not be a symbolic link.`)
-  const resolved = await realpath(target)
+  const resolved = await realpath(site)
   assertInside(base, resolved, label)
   return resolved
 }

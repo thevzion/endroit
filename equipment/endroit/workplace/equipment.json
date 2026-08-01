@@ -1,0 +1,48 @@
+{
+  "$schema": "https://endroit.org/schema/v7/equipment.json",
+  "name": "endroit/workplace",
+  "version": "0.8.0-alpha.0",
+  "description": "Human operational gestures for entering, using and advancing work in a Home.",
+  "files": [
+    "capabilities/enter.md",
+    "capabilities/call.md",
+    "capabilities/work-as.md",
+    "capabilities/use.md",
+    "capabilities/lifecycle.md",
+    "capabilities/work-on.md"
+  ],
+  "capabilities": [
+    { "id": "enter", "path": "capabilities/enter.md", "description": "Enter the Home or one Room from authoritative sources." },
+    { "id": "call", "path": "capabilities/call.md", "description": "Call the concrete researcher occupant through provider-hosted delegation." },
+    { "id": "work-as", "path": "capabilities/work-as.md", "description": "Work through the concrete engineer role for the current Meeting." },
+    { "id": "use", "path": "capabilities/use.md", "description": "Use the first-party research method without transferring ownership to the Skill." },
+    { "id": "lifecycle", "path": "capabilities/lifecycle.md", "description": "Retain, accept, deliver or archive the current bounded result explicitly." },
+    { "id": "work-on", "path": "capabilities/work-on.md", "description": "Work on or deliver to one declared Site through a revalidated Route." }
+  ],
+  "skills": [
+    { "id": "enter-home", "capability": "enter", "description": "Enter this Home and reload its authoritative sources.", "projectedName": "enter-the-home" },
+    { "id": "enter-room", "capability": "enter", "description": "Enter one resolved Room and reload its authoritative sources.", "projectedName": "enter-the-{route}-room", "forEach": "room" },
+    { "id": "work-on-site", "capability": "work-on", "description": "Work on one declared Site through a revalidated Route.", "projectedName": "work-on-{route}", "forEach": "site" },
+    { "id": "call-researcher", "capability": "call", "description": "Call the concrete researcher occupant when the provider supports delegation.", "projectedName": "call-the-researcher" },
+    { "id": "work-as-engineer", "capability": "work-as", "description": "Work as the concrete engineer role for this Meeting.", "projectedName": "work-as-an-engineer" },
+    { "id": "use-research", "capability": "use", "description": "Use the first-party research method in the current place.", "projectedName": "use-research" },
+    { "id": "retain", "capability": "lifecycle", "description": "Retain the current result as inspectable Material.", "projectedName": "retain-this" },
+    { "id": "accept", "capability": "lifecycle", "description": "Accept the current result as owner-authorized truth.", "projectedName": "accept-this" },
+    { "id": "deliver", "capability": "lifecycle", "description": "Deliver the current result to its explicit destination.", "projectedName": "deliver-this" },
+    { "id": "deliver-site", "capability": "work-on", "description": "Deliver the current result to one declared Site.", "projectedName": "deliver-this-to-{route}", "forEach": "site" },
+    { "id": "archive", "capability": "lifecycle", "description": "Archive inactive retained or accepted Material explicitly.", "projectedName": "archive-this" }
+  ],
+  "commands": [
+    { "id": "enter-home", "capability": "enter", "description": "Enter this Home and reload its authoritative sources.", "projectedName": "enter-the-home" },
+    { "id": "enter-room", "capability": "enter", "description": "Enter one resolved Room and reload its authoritative sources.", "projectedName": "enter-the-{route}-room", "forEach": "room" },
+    { "id": "work-on-site", "capability": "work-on", "description": "Work on one declared Site through a revalidated Route.", "projectedName": "work-on-{route}", "forEach": "site" },
+    { "id": "call-researcher", "capability": "call", "description": "Call the concrete researcher occupant when the provider supports delegation.", "projectedName": "call-the-researcher" },
+    { "id": "work-as-engineer", "capability": "work-as", "description": "Work as the concrete engineer role for this Meeting.", "projectedName": "work-as-an-engineer" },
+    { "id": "use-research", "capability": "use", "description": "Use the first-party research method in the current place.", "projectedName": "use-research" },
+    { "id": "retain", "capability": "lifecycle", "description": "Retain the current result as inspectable Material.", "projectedName": "retain-this" },
+    { "id": "accept", "capability": "lifecycle", "description": "Accept the current result as owner-authorized truth.", "projectedName": "accept-this" },
+    { "id": "deliver", "capability": "lifecycle", "description": "Deliver the current result to its explicit destination.", "projectedName": "deliver-this" },
+    { "id": "deliver-site", "capability": "work-on", "description": "Deliver the current result to one declared Site.", "projectedName": "deliver-this-to-{route}", "forEach": "site" },
+    { "id": "archive", "capability": "lifecycle", "description": "Archive inactive retained or accepted Material explicitly.", "projectedName": "archive-this" }
+  ]
+}

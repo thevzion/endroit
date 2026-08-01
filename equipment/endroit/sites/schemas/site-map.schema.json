@@ -1,0 +1,11 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": ["id", "kind", "owner", "status", "created_at", "updated_at", "derived_from", "sites"],
+  "properties": {
+    "kind": { "const": "endroit/sites:site-map" },
+    "owner": { "type": "string" },
+    "status": { "enum": ["current", "stale"] },
+    "derived_from": { "type": "array", "items": { "type": "string" } }
+  }
+}

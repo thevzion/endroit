@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v7/artifact.json",
+  "type": "object",
+  "required": ["$schema", "id", "kind", "status", "owner", "created_at", "updated_at", "derived_from"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v7/artifact.json" },
+    "id": { "type": "string" },
+    "kind": { "type": "string" },
+    "owner": { "type": "string" },
+    "status": { "type": "string" },
+    "created_at": { "type": "string" },
+    "updated_at": { "type": "string" },
+    "derived_from": { "type": "array", "items": { "type": "string" } },
+    "source_digest": { "type": "string" },
+    "sites": { "type": "array", "items": { "type": "string" } }
+  }
+}

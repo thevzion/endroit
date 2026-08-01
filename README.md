@@ -1,319 +1,434 @@
-<div align="center">
+# Endroit
 
-# endroit
+> A more intuitive way to work with agents.
 
-Endroit means “place” in French.
+## New session. Same workplace.
 
-**You equipped the agent.**<br />
-**Now own the place where you work together.**
+Your way of working stays. Each agent adapts at the door.
 
-Endroit is the open-source, local-first environment where you and the agents
-you already use work from the same maps, decisions, methods and retained
-results—across sessions and independent repositories.
+**Places make intent legible. Gestures make it explicit.**
 
-**Different interfaces. Different runtimes. Same place. Same material.**
+Say what you want to work on in normal conversation:
 
-**Resume without starting over.** · **Change runtimes, keep the work.** ·
-**Keep repositories independent.**
+> Continue the Endroit 0.8 launch.
 
-[Website](https://endroit.org) · [Home-first Proposal](https://thevzion.com/home-first/) · [Technical reference](docs/reference.md)
+The provider Front Door exposes the Home Floor Plan and its routing rules. The
+agent can resolve the relevant Room or ask when the subject is ambiguous, then
+inspect retained Material, available Equipment and declared Sites.
 
-[![npm latest](https://img.shields.io/npm/v/%40endroit%2Fcli/latest?label=npm%20latest)](https://www.npmjs.com/package/@endroit/cli) [![CI](https://github.com/thevzion/endroit/actions/workflows/ci.yml/badge.svg)](https://github.com/thevzion/endroit/actions/workflows/ci.yml) [![MIT](https://img.shields.io/badge/license-MIT-d8996a.svg)](LICENSE)
+**The place layer for agentic work.**
 
-<sub>Endroit 0.7 is an alpha. Keep each Home in a dedicated Git repository and inspect executable Asset runtimes before trusting them.</sub>
+Endroit is a lightweight, local-first framework for building and operating
+file-based [Open Workplaces](https://open-workplace.org/proposal/). It is also
+a local-first, headless, file-based implementation of the Open Workplace
+model.
 
-</div>
+It gives human-agent work an owned place across sessions, tools and
+repositories without moving that work into a persistent agent, proprietary
+memory service or orchestration runtime.
 
-**Actively maintained and dogfooded.** Endroit is used to develop Endroit
-itself. The [Roadmap](ROADMAP.md) separates what works today from what is being
-qualified next.
+> **Alpha — usable, actively maintained and dogfooded.** Endroit is pre-1.0.
+> Its ownership and safety contracts are deliberate; its public grammar and
+> schemas may still change through explicit releases and migration notes.
 
-## Why a Home
+At the end of the Meeting, the result stays ephemeral unless you choose to:
 
-Plans get trapped in chats. Decisions must be explained again. Instructions
-copied between repositories drift. Useful results lose their destination.
+- **retain** it for later inspection;
+- **accept** it as current Room truth;
+- **deliver** it through a revalidated Route, with human approval and an
+  observed Site result;
+- **archive** it when it leaves active context, without deleting history.
 
-`AGENTS.md` and `CLAUDE.md` are good front doors into a repository. They become
-insufficient when that repository is also expected to own the maps, decisions,
-methods and retained work shared across sessions and other Targets. The
-storage closet can be well organized and still be the wrong owner for the
-whole workplace.
-
-```text
-Without a Home
-repositories + copied setup + provider files + continuity in chats
-
-With Endroit
-one owned Home → your existing agents, methods and repositories
-```
-
-**Home-first** is the organizing paradigm. The Home owns the durable environment, Agent Runtimes own sessions and execution, and Targets retain product truth. Endroit is one open-source implementation of that model.
-
-Plugins and MCP can give an agent access to systems. Memory can preserve
-information. Endroit addresses a different layer: it makes the environment's
-owners, routes, shared material and durable destinations explicit.
-
-**A runtime gives the agent a working directory. A Home gives the work an
-owned environment.**
-
-**[Read the Home-first Proposal →](https://thevzion.com/home-first/)**
-
-## Where Endroit fits
-
-Products can span several layers. This is a responsibility map, not a call
-stack. The examples clarify boundaries; they do not imply Endroit support or
-endorsement.
+Start a new Codex or Claude session and name the same subject. The owned
+Workplace—not the previous transcript—carries the continuity.
 
 ```text
-                                      HUMAN / TEAM
-                         intent · judgment · approval · direction
-                                            │
-                                            ▼
-┌──────────────────────────── 1. INTERACTION SURFACES ───────────────────────────┐
-│ Desktop    Codex app · Claude Desktop · Hermes Desktop                        │
-│ Editor     VS Code · Cursor · Windsurf · JetBrains                            │
-│ Terminal   Codex CLI · Claude Code · Hermes TUI · Gemini CLI · Aider          │
-│ Messaging  Web · Slack · Discord · Telegram · Linear                          │
-└────────────────────────────────────────────┬──────────────────────────────────┘
-                                             ▼
-┌──────────────────────────── 2. AGENT RUNTIME / HOST ──────────────────────────┐
-│ Codex · Claude Code · Hermes Agent · OpenCode · OpenClaw · Cline · Roo Code   │
-│ session · permissions · sandbox · execution · tool dispatch · resume          │
-└──────────────┬──────────────────────┬──────────────────────┬──────────────────┘
-               │                      │                      │
-               ▼                      ▼                      ▼
-┌─ 3. MODEL / INFERENCE ─┐ ┌── 4. HARNESS / LOOP ──┐ ┌── 5. CONTEXT / MEMORY ─┐
-│ GPT · Claude · Gemini  │ │ Codex/Claude/Hermes   │ │ chat history            │
-│ Kimi · Llama · DeepSeek│ │ internal loops        │ │ compaction summaries    │
-│ OpenAI · Anthropic     │ │ OpenAI Agents SDK     │ │ runtime memory          │
-│ Google · OpenRouter    │ │ LangGraph · AutoGen   │ │ memory files · RAG      │
-│ Ollama · vLLM          │ │ CrewAI · custom loops │ │ vector DB · context repo│
-└────────────────────────┘ └───────────┬────────────┘ └─────────────────────────┘
-                           ┌────────────┴─────────────┐
-                           ▼                          ▼
-              6. CAPABILITIES / ACCESS        7. METHODS / WORKFLOWS
-              Agent Skills                    GSD
-              plugins                         Spec Kit
-              shell · Git · browser           Superpowers
-              MCP · APIs · connectors         BMAD
-              GitHub · Slack · Notion         HACP · team playbooks
-                           \                          /
-                            \ runtime applies these /
-                             \ while working from  /
-                                      ▼
-╔═══════════════════════════════ 8. ENDROIT ═════════════════════════════════════╗
-║ owned human-agent work environment                                            ║
-║ Front Door · Floor Plan · HUD · Home/Desk · Workspaces · Maps                 ║
-║ decisions · methods/assets · Documents · Artifacts · Bindings · lineage       ║
-║ orientation · continuity · ownership · shared material · destinations         ║
-╚══════════════════════════════════════╤════════════════════════════════════════╝
-                                       │ routes to · maps · revalidates
-                                       ▼
-┌────────────────────── 9. TARGETS & EXTERNAL SYSTEMS ──────────────────────────┐
-│ repositories · worktrees · GitHub/GitLab · databases · APIs · cloud          │
-│ Jira · Notion · Slack · production systems · deployment platforms            │
-│ live truth · authorization · product history · delivery                       │
-└───────────────────────────────────────────────────────────────────────────────┘
+Provider / Harness
+model · tools · sandbox · execution · hot state
+                       ↓ temporary Occupant
+Human ↔ Endroit Home ↔ Meeting
+                       ↓ candidate
+Human transition → Room / Desk Material
+                       ↓ approved Route
+                 sovereign Site
 ```
 
-> Humans direct. Interfaces mediate. Models reason. Runtimes execute.
-> Harnesses loop. Skills equip. MCP connects. Memory recalls. Methods
-> structure. Endroit orients and retains. Targets own the truth.
+**Responsibilities, not a required stack.** Providers supply execution. The
+Workplace owns continuity. A harness runs the agent; a Workplace holds the
+work.
 
-Distribution, automation and observability are lateral planes: they can cross
-several layers without becoming Endroit's responsibility.
+## One Home. Several sessions. More to build on.
 
-## Do you need a Home?
+Claude can enter a Room, produce a candidate and leave. You can retain the
+useful result without accepting it as truth. Later, Codex enters the same owned
+Home, reads the retained Material and prepares the next candidate. It never
+needs Claude's private memory.
 
-Endroit is worth trying when several of these feel familiar:
+Home Hygiene can then report an ambiguous owner or destination without moving
+anything. An accepted result reaches a Site only through an approved,
+revalidated Route.
 
-- you re-explain the same system map or accepted decisions in later sessions;
-- the repository where a session starts is often not where the work belongs;
-- provider instructions have been copied and now drift between repositories;
-- changing Agent Runtime changes the apparent environment;
-- plenty of context is reachable, but the agent still needs help choosing the
-  relevant source;
-- useful plans, maps or results have no obvious durable destination.
+Each useful session can leave the Home better prepared for the next. Endroit
+compounds retained Material, accepted decisions, stabilized Equipment,
+verified Routes and observed Site results. It does not retain every transcript
+or output.
 
-Endroit is probably unnecessary for one short session in one repository with
-no continuity worth retaining. It may also cost more than it helps when a
-second Git repository creates more ambiguity than the work itself.
-
-If none of these signals sound familiar, keep your current setup. If several
-do, try one subject and one Target before expanding the structure.
-
-## Adopt without migrating your world
-
-**Start by mapping, not migrating.**
+## Start with conversation. Add precision when it matters.
 
 ```text
-one Home → one existing Target → one current subject
-         → one retained result → one resumed session
+Talk naturally
+      ↓
+Inspect the shared workplace
+      ↓
+Use explicit gestures when authority matters
+      ↓
+Use the CLI for deterministic operations
 ```
 
-You do not migrate repositories into Endroit. Each Target keeps its source,
-history and delivery. The Home gives the durable work between Targets an owner
-and gives each retained result a destination.
+Commands are optional. They help you steer, retain, accept and deliver without
+surrendering control of the session. A natural sentence with the same explicit
+meaning works too. An acknowledgement alone never retains, accepts, archives,
+delivers, repairs or calls another Occupant.
 
-Adoption is additive before it is transformative: the first useful outcome can
-simply be a clearer map of the environment you already maintain. If the
-structure does not earn its place, Endroit can disappear. Your Home remains
-ordinary files and Git.
+- **Enter:** recover or recenter the Home and Room.
+- **Equip:** call an Occupant, adopt a Role or activate a method.
+- **Keep:** retain, accept or archive Material.
+- **Reach:** revalidate a Site Route and deliver explicitly.
+- **Maintain:** inspect the Home read-only and approve a bounded repair.
 
-## Start with one Home
+Endroit makes placement inferable, explainable and correctable. It does not
+infer intent, personalize the model or organize work without human authority.
 
-Requires Node.js 22 or newer, Git, and the Codex or Claude CLI.
+## Start a Home
+
+Requirements: Git and Node.js 22 or newer. Endroit currently ships L1
+Projection-qualified surfaces for Codex and Claude.
+
+### Install with your agent
+
+Give Codex or Claude this instruction:
+
+```text
+Read https://endroit.org/install.md and set up Endroit here.
+Explain the plan and ask before changing anything.
+```
+
+The versioned source of that public contract is [INSTALL.md](INSTALL.md). The
+agent inspects and explains; the pinned Endroit CLI applies only the approved
+operation.
+
+> **Agent-led. CLI-backed. Human-approved.**
+>
+> The agent guides. The CLI applies. The human approves.
+
+### Use the terminal
+
+Create a standalone Home:
 
 ```bash
-npx --yes @endroit/cli@latest create my-home
-cd my-home
-codex
+npx --yes --package @endroit/cli@0.8.0-alpha.0 endroit create my-home
 ```
 
-Use `claude` instead of `codex` if you prefer. The guided setup creates an ordinary Git repository:
+`create` adds a Home-owned Member and, by default, a Desk tracked with the
+Home. Use `--desk separate` for a private nested Desk repository or
+`--desk later` to defer the Desk.
+
+Or add a Home to an existing repository:
+
+```bash
+cd my-existing-repository
+npx --yes --package @endroit/cli@0.8.0-alpha.0 endroit init .
+```
+
+`init` defaults to a separate Desk repository under ignored `.desk/`. Both
+commands accept `--desk tracked|separate|later`.
+
+Bootstrap does not move existing instructions, Skills, memory, product files
+or checkouts. Read the preview and approve only the destination and Desk
+strategy you intend.
+
+### Continue onboarding
+
+In an existing Home, ask the agent to inspect the generated Front Door and
+continue onboarding. Normal conversation remains the default interface. You
+can inspect the Home first, then use explicit workplace gestures when they
+become useful.
+
+## What `create` gives you
+
+The standalone bootstrap is intentionally small:
 
 ```text
 my-home/
-├── HOME.md             shared constitution
-├── workspaces/home/    decisions and improvements about this Home
-├── assets/             installed capabilities
-├── .desk/              personal continuity in Solo mode
-├── AGENTS.md           generated Codex view
-├── CLAUDE.md           generated Claude view
-└── endroit.mjs         inspectable Home Console
+├── endroit.json
+├── HOME.md
+├── members/
+│   └── owner/
+│       └── MEMBER.md
+├── rooms/
+│   └── home/
+│       ├── ROOM.md
+│       └── inbox.md
+├── equipment/
+├── .desk/
+│   ├── desk.json
+│   └── DESK.md
+├── endroit.mjs
+├── AGENTS.md        generated
+├── CLAUDE.md        generated
+├── .agents/         generated
+├── .claude/         generated
+└── .endroit/        local and rebuildable
 ```
 
-Open the Home and describe your work in normal language. In a later session, reopen the same Home and name the subject again; its Floor Plan and Workspaces restore the context you chose to keep.
+Directories such as `sites/`, `.desk/routes/` and `checkouts/` appear only
+when their owning operations need them. `--desk later` omits `.desk/` until
+`desk init` or `desk clone`.
 
-You do not need to reorganize existing repositories or design a methodology first. Run `$endroit-onboarding` in Codex or `/endroit-onboarding` in Claude when you want guided mapping.
+The initial human-authored orientation is concentrated in these sources:
 
-## A map before the work
+- `endroit.json` declares the Home and providers;
+- `HOME.md` contains shared house rules;
+- `members/owner/MEMBER.md` owns durable human identity and collaboration
+  context;
+- `rooms/home/ROOM.md` gives the first durable domain a purpose;
+- `.desk/DESK.md` carries personal continuity.
 
-**Every session begins with a map, not a scavenger hunt.**
+`create` and `init` install seven inspectable foundation Equipment packages:
+
+- `endroit/onboarding` — consent-first setup and explanation;
+- `endroit/hud` — live orientation over the static Floor Plan;
+- `endroit/workplace` — entry and workplace gestures;
+- `endroit/artifacts` — durable Artifact lifecycle;
+- `endroit/rooms` — Room inspection and diagnostics;
+- `endroit/sites` — Site and Route operations with destructive guards;
+- `endroit/hygiene` — read-only Home maintenance and approved repairs.
+
+Additional Rooms, Sites and optional Equipment appear only when the work earns
+them.
+
+## How the framework works
 
 ```text
-human intent → Floor Plan → HUD → relevant route → linked Documents
+owned Home, Desk, Room, Equipment and Site sources
+                         ↓
+              deterministic resolution
+                         ↓
+          provider Front Doors and projections
+                         ↓
+             optional live orientation
+                         ↓
+            humans and agents meet in a Room
+                         ↓
+        Material is retained, accepted or delivered
+                         ↓
+           the Site result is observed again
 ```
 
-The Floor Plan remains available without live services. The optional HUD adds a current local snapshot; it is not omniscient, and external truth is revalidated before mutation.
+Endroit Core loads and validates sources, resolves the Workplace, manages
+Equipment composition and builds deterministic projections. The bundled
+`endroit/sites` Equipment—not Core—owns guarded Site and Route operations,
+deterministic Git inspection, managed clones and managed worktrees. The root
+`site` and `route` commands are CLI façades over that installed runtime.
 
-Humans and agents work from the same owned sources and contracts even when they use different interfaces. Models and runtimes may change without making the environment implicit again.
+First-party Equipment adds bounded ways of working without becoming the owner
+of their results. Additional Equipment can add research, planning or
+publishing methods. Endroit is opinionated about ownership, not about the
+methodology you must use.
 
-## Built for both sides of the work
+Endroit is headless. Its canonical state is ordinary files. Generated
+`AGENTS.md`, `CLAUDE.md`, Skills and Commands are provider views built from the
+same owned Home.
 
-**Skills make agents capable. A Home makes their work coherent.**
+Endroit does not make the agent smarter. It makes the situation clearer.
 
-| Shared capability | For humans | For agents |
-| --- | --- | --- |
-| **Home and Workspaces** | Understand the environment and choose its owners | Return to a stable starting point and route intent |
-| **Floor Plan and HUD** | Inspect structure, local state and attention | Begin with a map and a bounded snapshot |
-| **Assets and Capabilities** | Choose, install and approve what the Home can do | Discover the actions available in this environment |
-| **Documents and Artifacts** | Review, version and promote durable results | Resume work and persist it at the right destination |
-| **Targets and Bindings** | Keep repositories independent and locally controlled | Identify the relevant sources and destinations |
-| **Trust, Doctor and Projections** | Inspect executable code and diagnose drift | Know the limits and use a runtime-native interface |
+## The missing vocabulary
 
-Skills and commands remain useful runtime interfaces. Endroit keeps the underlying capability contract source-owned and projects the appropriate view for each qualified runtime.
+Most agentic setups begin with useful primitives:
 
-## What you can do
+```text
+AGENTS.md
+├── shared constitution
+├── personal preferences
+├── repository map
+├── product rules
+├── current decisions
+└── working state
 
-The required first-party Assets provide Workspaces, guided Onboarding, the HUD,
-inspectable Artifacts and explicit Targets. They let you organize durable
-subjects, route work across existing repositories, keep chosen results and
-diagnose the environment without turning the Home into a monorepo or remote
-memory service.
+Skills/
+├── procedures
+├── domain knowledge
+├── methods
+├── specialized agents
+├── state
+└── outputs
+```
 
-Optional Assets add bounded kinds of work:
+Nothing here is inherently wrong. The problem appears when a small number of
+technical formats become responsible for an entire work environment.
 
-| Asset | Durable result |
-| --- | --- |
-| **Research** | Studies with findings, sources and revalidation triggers |
-| **Planning** | Workspace Roadmaps and bounded Initiatives |
-| **Publishing** | Exact Publications and observed external Handles |
-| **Scratch** | Retained exploration that has earned continuity |
+Open Workplace gives each responsibility an owner:
 
-Assets equip the Home; they do not dictate an expertise methodology. BMAD,
-Superpowers or another method can keep its own loops and files while using the
-same owners, destinations and durable results.
+```text
+Home       shared workplace and constitution
+Desk       personal preferences, continuity and local access
+Room       one durable domain and its Material
+Meeting    the work happening now
+Equipment  a reusable way of working
+Site       sovereign external truth
+Route      how this Desk reaches that Site
+```
 
-**Endroit is opinionated about where work belongs, not about how every piece
-of work must be done.**
+Technical formats tell agents what to read or execute. Open Workplace names
+who owns each responsibility before Endroit projects those formats.
 
-## Bring the agents you already use
+> `AGENTS.md` guides an agent. Skills equip it. Endroit gives the work a
+> place, an owner and a destination.
 
-Runtime compatibility has two independent axes:
+The pieces were already there. They just needed a place.
 
-- **integration:** `native` uses a qualified runtime Projection or Bridge;
-  `portable` uses the static Floor Plan, ordinary instruction files and the
-  Home Console;
-- **evidence:** `qualified` is maintained against the published gate;
-  `observed` means a real workflow succeeded without a maintained-support
-  guarantee; `candidate` has not produced that evidence yet.
+## The Workplace model
 
-| Agent Runtime | Integration | Evidence | What is known |
-| --- | --- | --- | --- |
-| Codex | `native` | `qualified` | Projection, Skills, hook and provider checks |
-| Claude | `native` | `qualified` | Projection, Skills, hook and provider checks |
-| [Hermes Agent](https://github.com/NousResearch/hermes-agent) 0.19.0 | `portable` | `observed` | A maintainer workflow used `AGENTS.md` and the Home Console on 2026-07-30 |
-| [Kimi Code](https://www.kimi.com/code/) | to classify | `candidate` | No Endroit evidence yet |
-| [OpenClaw](https://github.com/openclaw/openclaw) | to classify | `candidate` | No Endroit evidence yet |
+### Home
 
-An `observed` row is not a support promise. The Hermes observation is
-anonymized and does not make it `qualified`.
+One concrete, durable Workplace instance and trust boundary. A Home owns
+shared composition and house rules. `HOME.md` is one source inside the Home;
+it is not the whole Home.
 
-Use another runtime? Try the portable path first, report the friction, then
-open a
-[Runtime support request](https://github.com/thevzion/endroit/issues/new?template=runtime-support.yml).
-The [Roadmap](ROADMAP.md) defines the common qualification journey. Endroit
-adds the smallest native adaptation only when evidence shows the portable path
-is not enough.
+### Member and Desk
 
-## What lives where
+A Member is a Home-owned human identity and durable collaboration context. A
+Desk is that Member's place inside the Home. It owns personal preferences,
+staging and local Routes. Multiple Desks can share a Home without sharing
+machine paths or turning one person's preferences into house rules.
 
-| Place | What belongs there |
-| --- | --- |
-| **Home** | Shared rules, shared Workspaces, reusable capabilities and generated provider views |
-| **Desk** | One collaborator's personal continuity and local repository links |
-| **Workspace** | One durable subject, such as a product, research area or publication practice |
-| **Target** | An independent repository that retains its source, history and delivery |
+### Room and Meeting
 
-One Home means one coherent environment for a system of work, not one global Home for your entire life. The Home coordinates Targets without absorbing them into a monorepo.
+A Room owns one durable domain and its Material. Rooms can contain Rooms when
+a subject earns its own mission, continuity and decisions. A Meeting is the
+bounded event happening now; it owns hot context, not automatic memory.
 
-Documents preserve ordinary continuity. Artifacts are chosen results. Assets equip future work.
+### Equipment and Material
 
-**The Home keeps durable work and relationships locally addressable. Live truth, authorization and actions may remain in external systems.**
+Equipment is a reusable way of working: manual, controls, limits, optional
+runtime and provider projections. A Skill or Command may activate it, but the
+Equipment remains the method and the Room, Desk or Site owns the resulting
+work. Material is retained only through an explicit human-controlled
+transition.
 
-MCP servers and integrations provide live access and action. Endroit gives durable relationships an owned context and explicit authority; broader external references remain a direction beyond the contracts shipped today.
+### Site and Route
 
-Agent Runtimes host sessions, models and tools. Endroit does not run, schedule or replace the agent; it owns the durable environment around its work.
+A Site is a sovereign system: repository, knowledge base, publishing platform
+or other owner of external truth. A Route is a Desk-owned declaration of local
+Git access to that Site. A remote-only Site has no Route. A Route never grants
+permissions the Site has not granted.
 
-Endroit is not a software-development, research or publishing methodology. Existing methods keep their loops and native files; the Home gives the material you retain an explicit owner and destination.
+## Repositories are Sites, not symlinks
 
-In **Solo** mode, personal continuity can share the Home Git history while local Bindings remain private. In **Team** mode, the Home is shared through Git and each collaborator can initialize or clone a private Desk.
+Endroit supports several physical arrangements without changing ownership:
 
-## Endroit 0.7 today
+| Mode | Example |
+|---|---|
+| Embedded | the current repository also contains the Home |
+| Managed clone | real checkout under `checkouts/<site>/<route>/` |
+| Managed worktree | real linked worktree under `checkouts/<site>/<route>/` |
+| Existing checkout | repository kept in place, with an optional Mount under `checkouts/` |
+| Submodule | user-managed submodule addressed by a Route |
+| Remote-only | declared Site with no local checkout |
 
-The current alpha provides guided bootstrap, Workspaces, inspectable Artifacts, explicit Targets and Bindings, installable Assets, Publishing Handles, deterministic Codex and Claude views, a static Floor Plan, an optional live HUD and Doctor.
+Site declarations are shared:
 
-Generated provider files are rebuildable projections. Canonical sources remain ordinary files under your control. Digest trust detects changed runtime bytes; it is not a sandbox.
+```text
+sites/<site>/SITE.md
+```
 
-Endroit does not provide a model, scheduler, autonomous runtime, methodology, remote memory service, marketplace or live collaboration server. It does not claim measured improvements in reasoning quality, hallucinations, speed or cost.
+Local, ignored access declarations stay with the Desk:
 
-The active [Roadmap](ROADMAP.md) is evidence-driven rather than date-driven.
-Portable observations remain explicitly weaker than qualified, maintained
-runtime paths.
+```text
+.desk/routes/<site>/<route>.json
+```
 
-## Engineer-first, not engineering-only
+For an `existing` Route, `route mount` can create a rebuildable symlink at
+`checkouts/<site>/<route>/`; `route unmount` removes only that symlink. A Mount
+is never the identity of the Site or Route and never grants new permissions.
 
-Engineers are natural early adopters because they can inspect ordinary files,
-Git history, generated projections and executable runtimes. A Home can also
-coordinate a research area, publication practice, operations domain or another
-system of work.
+For a submodule, the Home Git repository owns the Gitlink commit pin and its
+`.gitmodules` declaration. Checkout initialization and submodule lifecycle
+remain user-owned.
 
-Engineers can materialize the environment. Domain experts should still own the
-rules, decisions and retained work of their domain.
+Example guarded operations:
 
-## Go deeper
+```bash
+node ./endroit.mjs site add https://github.com/acme/product.git --id product
+node ./endroit.mjs route clone product --id main
+node ./endroit.mjs route worktree product --id feature --from main --new-branch feature
+node ./endroit.mjs route bind product ../product --id existing
+node ./endroit.mjs route mount product --id existing
+node ./endroit.mjs site doctor
+```
 
-[Roadmap](ROADMAP.md) · [Technical reference](docs/reference.md) · [Architecture](docs/architecture.md) · [Lifecycles](docs/lifecycles.md) · [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md)
+## Explicit Workplace gestures
 
-MIT licensed.
+The bundled Workplace Equipment projects inspectable activation surfaces for
+the 0.8 journey:
+
+```text
+call-the-researcher   add a temporary Occupant when the provider can do so
+work-as-an-engineer  adopt a Role for one Meeting
+use-research         activate Equipment
+retain-this          keep inspectable Material
+accept-this          accept current Room truth
+deliver-this         act through an explicit, revalidated Route
+archive-this         remove inactive Material from active context
+```
+
+Codex and Claude receive generated first-party Skills and Commands. Endroit's
+package gates prove deterministic generation, static parity and wrapper shape;
+they do not prove provider-hosted execution. A missing host mechanism returns
+`blocked` rather than simulating success. See [Provider qualification](docs/providers.md).
+
+[HACP](https://github.com/control-decks/human-agent-control-protocol) is an
+independent optional draft semantic protocol. Endroit does not require it and
+never infers a Card from ordinary conversation.
+
+## What Endroit does not replace
+
+- your agent or model;
+- Codex, Claude or another runtime;
+- Git and repository-native tooling;
+- MCP servers and external permissions;
+- your preferred planning or knowledge methodology;
+- human judgment over what becomes durable or authoritative.
+
+## Alpha boundaries
+
+- Codex and Claude are L1 Projection-qualified; hosted invocation and live
+  Presence are not qualified by this release.
+- The 0.8 Workplace grammar is a breaking alpha change from 0.7.
+- Public grammar and schemas may change through explicit releases and
+  migration notes.
+- Submodules are recognized, but Endroit does not manage their lifecycle.
+- `maintain-the-home` is read-only. A bounded repair requires an exact finding
+  and matching human approval.
+- Workplace verbs are provider projections, not a hidden transactional
+  engine.
+- Non-Git Routes and delivery remain future work.
+- Open Workplace is an open proposal, not a standard or required service.
+- Endroit makes no claim about model intelligence, hallucinations, cost,
+  performance, scheduling or universal provider compatibility.
+
+The lock-in is intentionally low: the sources are files, Sites keep their own
+repositories and generated projections can be discarded and rebuilt.
+
+## Related reading
+
+- [The Workplace-first Proposal](https://open-workplace.org/proposal/)
+- [Harness engineering: leveraging Codex in an agent-first world](https://openai.com/index/harness-engineering/)
+- [Effective context engineering for AI agents](https://www.anthropic.com/engineering/effective-context-engineering-for-ai-agents)
+- [100 Tips & Tricks for building your own personal AI](https://www.reddit.com/r/ClaudeAI/comments/1thi6nh/100_tips_tricks_for_building_your_own_personal_ai/)
+
+The external examples are related signals, not endorsements of Endroit.
+
+## License
+
+See [LICENSE](LICENSE).

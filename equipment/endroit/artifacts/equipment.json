@@ -1,0 +1,45 @@
+{
+  "$schema": "https://endroit.org/schema/v7/equipment.json",
+  "name": "endroit/artifacts",
+  "version": "0.8.0-alpha.0",
+  "description": "The generic lifecycle for inspectable Room-owned Artifacts and explicit projections.",
+  "prefix": "endroit",
+  "files": [
+    "capabilities/manage.md",
+    "schemas/artifact.schema.json",
+    "runtime.mjs"
+  ],
+  "capabilities": [
+    {
+      "id": "manage",
+      "path": "capabilities/manage.md",
+      "description": "Create, inspect, validate and promote Room-owned Artifacts."
+    }
+  ],
+  "skills": [
+    {
+      "id": "artifacts",
+      "capability": "manage",
+      "description": "Use when work should become an explicit, inspectable Artifact."
+    }
+  ],
+  "commands": [
+    {
+      "id": "artifacts",
+      "capability": "manage",
+      "description": "Manage Endroit Artifacts."
+    }
+  ],
+  "runtime": {
+    "namespace": "artifact",
+    "entry": "runtime.mjs",
+    "commands": [
+      { "name": "create", "description": "Create an Artifact, optionally importing a directory." },
+      { "name": "list", "description": "List Room Artifacts, legacy roots and Site projections." },
+      { "name": "inspect", "description": "Inspect one Artifact." },
+      { "name": "validate", "description": "Validate one Artifact against its owning kind." },
+      { "name": "promote", "description": "Promote a Room Artifact to a Home Room or Site." },
+      { "name": "publish", "description": "Deprecated compatibility alias for Artifact promotion." }
+    ]
+  }
+}

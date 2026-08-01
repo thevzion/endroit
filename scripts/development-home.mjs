@@ -10,8 +10,8 @@ const exec = promisify(execFile)
 const projectRoot = await realpath(new URL('../', import.meta.url).pathname)
 const localCli = join(projectRoot, 'bin', 'endroit.mjs')
 const defaultHome = resolve(projectRoot, '..', 'endroit-development-home')
-const projectAsset = '.desk/targets/endroit/main/assets/endroit/project/asset.json'
-const devCliTarget = '../.desk/targets/endroit/main/bin/endroit.mjs'
+const projectEquipment = join(projectRoot, 'equipment', 'endroit', 'project', 'equipment.json')
+const devCliSite = pathToFileURL(localCli).href
 const projectPackage = JSON.parse(await readFile(join(projectRoot, 'package.json'), 'utf8'))
 const developmentRuntime = `${projectPackage.name}@${projectPackage.version}`
 
@@ -20,11 +20,11 @@ export async function ensureDevelopmentHome(options = {}) {
   const document = join(home, 'endroit.json')
   if (!await exists(document)) {
     if (await exists(home)) throw new Error(`${home} exists but is not an Endroit Home.`)
-    await endroit(['create', home, '--mode', 'team', '--providers', 'codex,claude', '--name', 'endroit-development-home', '--with', 'planning'])
+    await endroit(['create', home, '--desk', 'later', '--providers', 'codex,claude', '--name', 'endroit-development-home', '--with', 'planning'])
   }
 
   const config = JSON.parse(await readFile(document, 'utf8'))
-  if (config.mode !== 'team') throw new Error(`${home} must be recreated as a team Home.`)
+  if (Object.hasOwn(config, 'mode')) throw new Error(`${home} uses the superseded solo/team model and must be migrated to Member plus Desk.`)
   if (!same(config.providers, ['codex', 'claude'])) throw new Error(`${home} must enable codex and claude.`)
   if (config.runtime !== developmentRuntime) {
     config.runtime = developmentRuntime
@@ -33,40 +33,39 @@ export async function ensureDevelopmentHome(options = {}) {
 
   if (!await exists(join(home, '.desk', 'desk.json'))) {
     if (options.deskRepository) await endroit(['desk', 'clone', options.deskRepository, '--home', home])
-    else await endroit(['desk', 'init', '--id', options.deskId ?? process.env.USER ?? 'local', '--home', home])
+    else await endroit(['desk', 'init', '--id', options.deskId ?? process.env.USER ?? 'local', '--member', 'owner', '--home', home])
   }
-  if (!await exists(join(home, 'assets', 'endroit', 'planning', 'asset.json'))) {
-    await endroit(['asset', 'add', '@endroit/planning', '-y', '--home', home])
+  if (!await exists(join(home, 'equipment', 'endroit', 'planning', 'equipment.json'))) {
+    await endroit(['equipment', 'add', '@endroit/planning', '-y', '--home', home])
   }
-  const workspaces = await endroitJson(['workspace', 'list', '--home', home, '--json'])
-  if (!workspaces.workspaces.some((entry) => entry.id === 'endroit')) {
-    await endroit(['workspace', 'create', 'endroit', '--scope', 'desk', '--home', home])
+  const rooms = await endroitJson(['room', 'list', '--home', home, '--json'])
+  if (!rooms.rooms.some((entry) => entry.id === 'endroit')) {
+    await endroit(['room', 'create', 'endroit', '--scope', 'desk', '--home', home])
   }
 
-  await endroit(['asset', 'sync', '--all', '--home', home])
-  const target = await targetState(home)
-  if (!target) {
+  await endroit(['equipment', 'sync', '--all', '--home', home])
+  const site = await siteState(home)
+  if (!site) {
     await endroit([
-      'target', 'add', projectRoot,
+      'site', 'add', projectRoot,
       '--id', 'endroit',
-      '--binding', 'main',
       '--summary', 'Endroit framework under development',
       '--when', 'Developing or releasing Endroit.',
       '--tag', 'endroit',
       '--home', home,
     ])
   } else {
-    const binding = target.bindings.find((entry) => entry.id === 'main')
-    if (!binding) await endroit(['target', 'bind', 'endroit', projectRoot, '--binding', 'main', '--home', home])
-    else if (await realpath(binding.path) !== projectRoot) throw new Error(`endroit/main points to ${binding.path}, expected ${projectRoot}.`)
+    const route = site.routes.find((entry) => entry.id === 'main')
+    if (!route) await endroit(['route', 'bind', 'endroit', projectRoot, '--id', 'main', '--home', home])
+    else if (await realpath(route.path) !== projectRoot) throw new Error(`endroit/main points to ${route.path}, expected ${projectRoot}.`)
   }
 
-  if (!await exists(join(home, 'assets', 'endroit', 'project', 'asset.json'))) {
-    await endroit(['asset', 'add', projectAsset, '-y', '--home', home])
+  if (!await exists(join(home, 'equipment', 'endroit', 'project', 'equipment.json'))) {
+    await endroit(['equipment', 'add', projectEquipment, '-y', '--home', home])
   } else {
-    await endroit(['asset', 'sync', 'endroit/project', '--to', projectAsset, '--home', home])
+    await endroit(['equipment', 'sync', 'endroit/project', '--to', projectEquipment, '--home', home])
   }
-  await endroit(['asset', 'sync', '--all', '--home', home])
+  await endroit(['equipment', 'sync', '--all', '--home', home])
   if (config.frontDoor?.wakeUp !== 'endroit/hud:prompt') {
     config.frontDoor = { wakeUp: 'endroit/hud:prompt' }
     await writeFile(document, `${JSON.stringify(config, null, 2)}\n`)
@@ -75,7 +74,7 @@ export async function ensureDevelopmentHome(options = {}) {
   await endroit(['build', '--home', home])
   const doctor = await endroitJson(['doctor', '--home', home, '--json'])
   if (doctor.status !== 'ready') throw new Error(`Development Home is ${doctor.status}: ${doctor.limits.join(', ')}`)
-  return { status: 'ready', home, desk: join(home, '.desk'), target: projectRoot, doctor }
+  return { status: 'ready', home, desk: join(home, '.desk'), site: projectRoot, doctor }
 }
 
 export async function recreateDevelopmentHome(options = {}) {
@@ -178,7 +177,7 @@ async function verifyHome(home) {
   const claudeHud = (await run(process.execPath, [join(home, '.claude/hooks/endroit-session-start.mjs')], { cwd: home })).stdout.trim()
   if (!claudeHud.startsWith('<endroit-hud ') || /status="degraded"/.test(claudeHud)) throw new Error('Claude Front Door Wake-up is unavailable.')
   if (!/<kernel [^>]*source="development"/.test(codexHud) || !/<kernel [^>]*source="development"/.test(claudeHud)) {
-    throw new Error('Development Home did not use the local Endroit Target runtime.')
+    throw new Error('Development Home did not use the local Endroit Site runtime.')
   }
   return { doctor, codex: codexHud, claude: claudeHud }
 }
@@ -189,9 +188,9 @@ async function verifyDownstream(home) {
   if (doctor.status !== 'ready') throw new Error(`${home} is ${doctor.status}: ${doctor.limits.join(', ')}`)
 }
 
-async function targetState(home) {
-  const value = await endroitJson(['target', 'list', '--home', home, '--json'])
-  return value.targets.find((entry) => entry.id === 'endroit')
+async function siteState(home) {
+  const value = await endroitJson(['site', 'list', '--home', home, '--json'])
+  return value.sites.find((entry) => entry.id === 'endroit')
 }
 
 async function ensureDevelopmentLauncher(home) {
@@ -199,7 +198,7 @@ async function ensureDevelopmentLauncher(home) {
   const path = join(directory, 'dev-cli')
   await mkdir(directory, { recursive: true })
 const content = `#!/usr/bin/env node
-await import(new URL(${JSON.stringify(devCliTarget)}, import.meta.url))
+await import(${JSON.stringify(devCliSite)})
 `
   try {
     const info = await lstat(path)

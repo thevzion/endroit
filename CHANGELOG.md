@@ -1,5 +1,40 @@
 # Changelog
 
+## 0.8.0-alpha.0
+
+- Implement the Workplace-first paradigm and Open Workplace grammar through
+  Home, Desk, Room, Meeting, Equipment, Material, Site and Route.
+- Separate shared Site declarations, Desk-local Route metadata and physical
+  checkouts.
+- Add Embedded Homes through `endroit init`, remote-only Sites and guarded
+  managed clone/worktree Routes.
+- Replace provider-facing Workspace, Asset, Target and Binding surfaces without
+  permanent compatibility aliases. See [migration](docs/migration-0.8.md).
+- Add Home-owned Members, required Desk-to-Member references and
+  `--desk tracked|separate|later`; remove `solo|team` and `--mode`.
+- Project the complete static Workplace-first journey through human operational
+  gestures, with provider-hosted delegation that fails `blocked` when absent.
+- Place managed checkouts under ignored root `checkouts/` paths and expose
+  optional rebuildable Mounts for existing Routes.
+- Install whole-Home Hygiene by default for read-only categorized inspection
+  and exactly approved bounded repair.
+- Version every active 0.8 schema under immutable `/schema/v7/` identifiers,
+  ship Artifact with the package and advance Equipment runtimes to `v2alpha1`.
+- Add the agent-led, CLI-backed and human-approved installation contract.
+- Publish the prerelease to npm `next`, smoke that registry artifact, then keep
+  `latest` promotion as a separate authenticated effect.
+
+## 0.7.0-alpha.1
+
+- Define the five Home-first environment responsibilities and map them to the
+  existing Endroit grammar without changing Home, Desk or Target topology.
+- Make the interaction contract explicit: structurally inspectable,
+  conversational by default.
+- Add optional Publication responsibility, stability and dependency metadata
+  while keeping provenance and remote Handles separate.
+- Remove the remaining live Ness copy from the HUD payload and reference
+  documentation.
+
 ## 0.7.0-alpha.0
 
 - Rename Hairness to Endroit: the owned, local-first environment implementing
@@ -39,7 +74,7 @@
 - Manage linked Git worktrees as explicit Target Bindings without deleting
   branches, forcing removal or hiding unbound worktrees.
 - Position Hairness as the local-first logistics layer around existing Agent
-  Runtimes, methods and repositories, with Codex and Claude as the qualified
+  Runtimes, methods and repositories, with Codex and Claude as first-party
   provider surfaces.
 
 ## 0.5.0-alpha.1

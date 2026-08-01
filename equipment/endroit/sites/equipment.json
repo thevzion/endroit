@@ -1,0 +1,111 @@
+{
+  "$schema": "https://endroit.org/schema/v7/equipment.json",
+  "name": "endroit/sites",
+  "version": "0.8.0-alpha.0",
+  "description": "Sovereign Sites declared by a Home and reached through Desk-owned Routes.",
+  "prefix": "endroit",
+  "roomNamespace": "site-mapping",
+  "files": [
+    "capabilities/configure.md",
+    "capabilities/manage.md",
+    "capabilities/map.md",
+    "references/gsd-attribution.md",
+    "schemas/home-settings.schema.json",
+    "schemas/desk-settings.schema.json",
+    "schemas/site-map.schema.json",
+    "templates/site-map/artifact.md",
+    "templates/site-map/EVIDENCE.json",
+    "templates/site-map/STACK.md",
+    "templates/site-map/INTEGRATIONS.md",
+    "templates/site-map/ARCHITECTURE.md",
+    "templates/site-map/STRUCTURE.md",
+    "templates/site-map/CONVENTIONS.md",
+    "templates/site-map/TESTING.md",
+    "templates/site-map/CONCERNS.md",
+    "runtime.mjs"
+  ],
+  "capabilities": [
+    {
+      "id": "configure",
+      "path": "capabilities/configure.md",
+      "description": "Discover useful repositories and configure shared Sites plus personal Routes."
+    },
+    {
+      "id": "manage",
+      "path": "capabilities/manage.md",
+      "description": "Declare Sites and manage local Routes without conflating either with a checkout."
+    },
+    {
+      "id": "map",
+      "path": "capabilities/map.md",
+      "description": "Create an evidence-backed structural map without writing into the Site."
+    }
+  ],
+  "references": [
+    {
+      "id": "gsd-attribution",
+      "path": "references/gsd-attribution.md",
+      "description": "Attribution for the Site Map method adapted from GSD Core."
+    }
+  ],
+  "skills": [
+    {
+      "id": "site-manage",
+      "capability": "manage",
+      "description": "Use when a repository must be declared, bound, given a managed worktree or inspected as an Endroit Site."
+    },
+    {
+      "id": "site-map",
+      "capability": "map",
+      "description": "Use when a Site needs an inspectable, evidence-backed structural map in the Desk."
+    }
+  ],
+  "commands": [
+    {
+      "id": "site-manage",
+      "capability": "manage",
+      "description": "Manage Endroit Sites and local Routes."
+    },
+    {
+      "id": "site-map",
+      "capability": "map",
+      "description": "Map a Site into a Desk Artifact."
+    }
+  ],
+  "artifactKinds": [
+    {
+      "id": "site-map",
+      "schema": "schemas/site-map.schema.json",
+      "template": "templates/site-map/artifact.md",
+      "owners": ["desk", "home"],
+      "states": ["current", "stale"],
+      "requiredFiles": [
+        "templates/site-map/EVIDENCE.json",
+        "templates/site-map/STACK.md",
+        "templates/site-map/INTEGRATIONS.md",
+        "templates/site-map/ARCHITECTURE.md",
+        "templates/site-map/STRUCTURE.md",
+        "templates/site-map/CONVENTIONS.md",
+        "templates/site-map/TESTING.md",
+        "templates/site-map/CONCERNS.md"
+      ]
+    }
+  ],
+  "settings": {
+    "home": "schemas/home-settings.schema.json",
+    "desk": "schemas/desk-settings.schema.json"
+  },
+  "setup": ["configure"],
+  "runtime": {
+    "namespace": "site",
+    "entry": "runtime.mjs",
+    "commands": [
+      { "name": "list", "description": "List declared Sites and their Routes." },
+      { "name": "doctor", "description": "Check Site identities and Routes." },
+      { "name": "add", "description": "Declare a shared Site." },
+      { "name": "remove", "description": "Remove a Site declaration." },
+      { "name": "inspect", "description": "Inspect a Site declaration." },
+      { "name": "route", "description": "Bind, clone, mount, inspect or remove a Desk-owned Route." }
+    ]
+  }
+}

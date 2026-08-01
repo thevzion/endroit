@@ -1,15 +1,16 @@
 {
   "name": "@endroit/cli",
-  "version": "0.7.0-alpha.0",
-  "description": "The open-source, local-first environment for durable human-agent work.",
+  "version": "0.8.0-alpha.0",
+  "description": "A lightweight, local-first framework for building and operating file-based Open Workplaces.",
   "keywords": [
     "ai-agents",
-    "agentic-assets",
-    "ai-harness",
-    "provider-agnostic",
-    "developer-tools",
+    "agentic",
+    "workplace-first",
+    "human-agent-collaboration",
+    "local-first",
     "codex",
-    "claude-code"
+    "claude-code",
+    "cli"
   ],
   "private": false,
   "license": "MIT",
@@ -23,7 +24,7 @@
   },
   "publishConfig": {
     "access": "public",
-    "tag": "latest"
+    "tag": "next"
   },
   "type": "module",
   "bin": {
@@ -35,18 +36,22 @@
   "files": [
     "bin/",
     "docs/reference.md",
-    "assets/endroit/onboarding/",
-    "assets/endroit/planning/",
-    "assets/endroit/publishing/",
-    "assets/endroit/research/",
-    "assets/endroit/hud/",
-    "assets/endroit/artifacts/",
-    "assets/endroit/targets/",
-    "assets/endroit/workspaces/",
-    "assets/endroit/scratch/",
+    "docs/providers.md",
+    "equipment/endroit/onboarding/",
+    "equipment/endroit/planning/",
+    "equipment/endroit/publishing/",
+    "equipment/endroit/research/",
+    "equipment/endroit/hud/",
+    "equipment/endroit/artifacts/",
+    "equipment/endroit/sites/",
+    "equipment/endroit/rooms/",
+    "equipment/endroit/scratch/",
+    "equipment/endroit/workplace/",
+    "equipment/endroit/hygiene/",
     "templates/",
-    "schemas/v6/",
+    "schemas/v7/",
     "src/",
+    "INSTALL.md",
     "LICENSE",
     "README.md"
   ],
@@ -64,7 +69,7 @@
     "dev:home:recreate": "node scripts/development-home.mjs recreate",
     "dev:session": "node scripts/development-home.mjs session",
     "dev:verify": "node scripts/development-home.mjs verify",
-    "launch:render": "node scripts/render-launch-assets.mjs",
+    "launch:render": "node scripts/render-launch-equipment.mjs",
     "release:pack": "node scripts/release-packages.mjs",
     "release:dry-run": "node scripts/release-publish.mjs --dry-run"
   },

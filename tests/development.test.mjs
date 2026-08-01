@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { lstat, mkdtemp, readFile, readlink, rm, writeFile } from 'node:fs/promises'
+import { lstat, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -20,10 +20,12 @@ test('the repository recipe creates and safely recreates its Development Home', 
     assert.equal(created.status, 'ready')
     const document = JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8'))
     const projectPackage = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
-    assert.equal(document.mode, 'team')
+    assert.equal(Object.hasOwn(document, 'mode'), false)
+    assert.equal(JSON.parse(await readFile(join(home, '.desk/desk.json'), 'utf8')).member, 'owner')
     assert.deepEqual(document.providers, ['codex', 'claude'])
-    assert.deepEqual(document.settings['endroit/targets'].targets[0].when, ['Developing or releasing Endroit.'])
-    assert.deepEqual(document.settings['endroit/targets'].targets[0].tags, ['endroit'])
+    const site = await readFile(join(home, 'sites/endroit/SITE.md'), 'utf8')
+    assert.match(site, /when: \["Developing or releasing Endroit\."\]/)
+    assert.match(site, /tags: \["endroit"\]/)
     document.runtime = '@endroit/cli@0.0.0'
     await writeFile(join(home, 'endroit.json'), `${JSON.stringify(document, null, 2)}\n`)
     assert.equal((await ensureDevelopmentHome({ home, deskId: 'alexis' })).status, 'ready')
@@ -31,25 +33,25 @@ test('the repository recipe creates and safely recreates its Development Home', 
       JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')).runtime,
       `${projectPackage.name}@${projectPackage.version}`,
     )
-    assert.match(await readFile(join(home, '.endroit/dev-cli'), 'utf8'), /\.\.\/\.desk\/targets\/endroit\/main\/bin\/endroit\.mjs/)
+    assert.match(await readFile(join(home, '.endroit/dev-cli'), 'utf8'), /bin\/endroit\.mjs/)
     const directHud = JSON.parse((await exec(process.execPath, [join(home, 'endroit.mjs'), 'hud', 'json'], { cwd: home })).stdout)
     assert.equal(directHud.kernel.source, 'development')
     assert.equal(directHud.kernel.invoke, 'node ./endroit.mjs')
     assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /endroit-development-home/)
     assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /alexis/)
-    assert.match(await readFile(join(home, 'assets/endroit/project/asset.json'), 'utf8'), /"endroit\/project:plan"|"id": "plan"/)
+    assert.match(await readFile(join(home, 'equipment/endroit/project/equipment.json'), 'utf8'), /"endroit\/project:plan"|"id": "plan"/)
     assert.match(await readFile(join(home, '.codex/hooks/endroit-session-start.mjs'), 'utf8'), /hookSpecificOutput/)
-    const plan = await endroitJson(home, ['artifact', 'create', 'endroit/planning:initiative', 'self-hosted', '--workspace', 'desk/endroit', '--json'])
+    const plan = await endroitJson(home, ['artifact', 'create', 'endroit/planning:initiative', 'self-hosted', '--room', 'desk/endroit', '--json'])
     assert.match(await readFile(join(home, plan.path, 'artifact.md'), 'utf8'), /status: "draft"/)
     const published = await endroitJson(home, ['artifact', 'publish', plan.path, '--to', 'home', '--json'])
-    assert.match(await readFile(join(home, published.path, 'artifact.md'), 'utf8'), /owner: "workspace:home\/home"/)
-    assert.match(await readFile(join(home, plan.path, 'artifact.md'), 'utf8'), /owner: "workspace:desk\/endroit"/)
+    assert.match(await readFile(join(home, published.path, 'artifact.md'), 'utf8'), /owner: "room:home\/home"/)
+    assert.match(await readFile(join(home, plan.path, 'artifact.md'), 'utf8'), /owner: "room:desk\/endroit"/)
 
     await commit(home, 'home')
     await commit(join(home, '.desk'), 'desk')
     const deskHead = await git(join(home, '.desk'), ['rev-parse', 'HEAD'])
     const deskDocument = await readFile(join(home, '.desk/desk.json'), 'utf8')
-    const binding = await readlink(join(home, '.desk/targets/endroit/main'))
+    const route = await readFile(join(home, '.desk/routes/endroit/main.json'), 'utf8')
 
     await writeFile(join(home, 'dirty.md'), 'dirty\n')
     await assert.rejects(() => recreateDevelopmentHome({ home }), /Development Home must be clean/)
@@ -59,7 +61,7 @@ test('the repository recipe creates and safely recreates its Development Home', 
     assert.equal(recreated.status, 'recreated')
     assert.equal(await readFile(join(home, '.desk/desk.json'), 'utf8'), deskDocument)
     assert.equal(await git(join(home, '.desk'), ['rev-parse', 'HEAD']), deskHead)
-    assert.equal(await readlink(join(home, '.desk/targets/endroit/main')), binding)
+    assert.equal(await readFile(join(home, '.desk/routes/endroit/main.json'), 'utf8'), route)
     assert.equal(JSON.parse(await readFile(join(home, '.endroit/recreate.json'), 'utf8')).backup, recreated.backup)
   } finally {
     await removeTree(temporary, { force: true })

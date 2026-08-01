@@ -1,9 +1,9 @@
 import { mkdir, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 
-export async function writeAsset(root, manifest = asset(), files = {}) {
+export async function writeEquipment(root, manifest = equipment(), files = {}) {
   await mkdir(root, { recursive: true })
-  const path = join(root, 'asset.json')
+  const path = join(root, 'equipment.json')
   await writeFile(path, `${JSON.stringify(manifest, null, 2)}\n`)
   for (const [name, content] of Object.entries(files)) {
     const destination = join(root, name)
@@ -13,9 +13,9 @@ export async function writeAsset(root, manifest = asset(), files = {}) {
   return path
 }
 
-export function asset(overrides = {}) {
+export function equipment(overrides = {}) {
   return {
-    $schema: 'https://endroit.org/schema/asset.json',
+    $schema: 'https://endroit.org/schema/v7/equipment.json',
     name: 'fixture/review',
     version: '1.0.0',
     description: 'Review agentic material.',

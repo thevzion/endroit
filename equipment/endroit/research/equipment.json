@@ -1,0 +1,49 @@
+{
+  "$schema": "https://endroit.org/schema/v7/equipment.json",
+  "name": "endroit/research",
+  "version": "0.8.0-alpha.0",
+  "description": "Reusable evidence-backed research continuity owned by one Room.",
+  "prefix": "research",
+  "roomNamespace": "researching",
+  "files": [
+    "capabilities/study.md",
+    "capabilities/revalidate.md",
+    "templates/study.md"
+  ],
+  "capabilities": [
+    {
+      "id": "study",
+      "path": "capabilities/study.md",
+      "description": "Create or continue one bounded evidence-backed Study."
+    },
+    {
+      "id": "revalidate",
+      "path": "capabilities/revalidate.md",
+      "description": "Refresh volatile evidence in an existing Study."
+    }
+  ],
+  "skills": [
+    {
+      "id": "study",
+      "capability": "study",
+      "description": "Use when a bounded research question should become reusable Room evidence."
+    },
+    {
+      "id": "revalidate",
+      "capability": "revalidate",
+      "description": "Use when volatile evidence in an existing Study must be revalidated."
+    }
+  ],
+  "commands": [
+    {
+      "id": "study",
+      "capability": "study",
+      "description": "Create or continue a research Study."
+    },
+    {
+      "id": "revalidate",
+      "capability": "revalidate",
+      "description": "Revalidate an existing research Study."
+    }
+  ]
+}

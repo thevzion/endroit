@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process'
 import { realpath } from 'node:fs/promises'
 import { join } from 'node:path'
-import { allInstalledAssets, assetDigest, installedAssetDigest, resolveAsset } from './assets.mjs'
+import { allInstalledEquipment, equipmentDigest, installedEquipmentDigest, resolveEquipment } from './equipment.mjs'
 import { API, validateDocument } from './contracts.mjs'
 import { loadDesk } from './desk.mjs'
 import { EndroitError } from './lib/errors.mjs'
@@ -11,7 +11,7 @@ import { resolveHome } from './resolved.mjs'
 export async function runtimeTrust(root, selector, options = {}) {
   const plan = await resolveHome(root)
   const runtime = selectRuntime(plan, selector)
-  const installed = plan.assets.find((entry) => entry.id === runtime.owner)
+  const installed = plan.equipment.find((entry) => entry.id === runtime.owner)
   const digest = await runtimeDigest(plan, runtime.owner)
   const path = join(root, '.endroit', 'approvals.json')
   const approvals = await readJson(path, { version: 1, runtimes: {} })
@@ -49,9 +49,9 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
   if (!runtime) throw new EndroitError('usage', `Unknown command ${namespace}.`, { exitCode: 2 })
   const trust = await runtimeTrustState(root, runtime.owner, plan)
   if (trust.trust === 'pending') {
-    throw new EndroitError('runtime_trust_required', `${runtime.owner} runtime ${trust.digest} requires local approval. Review it, then run endroit asset trust ${runtime.owner} --digest ${trust.digest}.`, {
+    throw new EndroitError('runtime_trust_required', `${runtime.owner} runtime ${trust.digest} requires local approval. Review it, then run endroit equipment trust ${runtime.owner} --digest ${trust.digest}.`, {
       exitCode: 6,
-      details: { asset: runtime.owner, digest: trust.digest, entry: runtime.entry, namespace },
+      details: { equipment: runtime.owner, digest: trust.digest, entry: runtime.entry, namespace },
     })
   }
   const entry = await resolvePackageFile(runtime.root, runtime.entry, `${runtime.owner} runtime`)
@@ -76,7 +76,7 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
     argv,
     homeRoot,
     deskRoot,
-    assetRoot: runtime.root,
+    equipmentRoot: runtime.root,
     resolvedHome: plan,
     kernel: {
       runtime: plan.home.runtime,
@@ -88,6 +88,9 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
       kind: invocationKind,
       ...(invocationProvider ? { provider: invocationProvider } : {}),
     },
+    ...(runtime.owner === 'endroit/hygiene' ? {
+      inspection: { homeDoctor: await (await import('./doctor.mjs')).doctorHome(root) },
+    } : {}),
   }
   await validateDocument(input, 'runtime')
   return run(entry, input, io)
@@ -112,17 +115,17 @@ async function run(entry, input, io) {
 }
 
 async function runtimeDigest(plan, owner) {
-  const entry = plan.assets.find((asset) => asset.id === owner)
-  const values = await allInstalledAssets(plan.root)
-  const source = values.find((asset) => asset.id === owner && asset.scope === entry.scope)
-  return installedAssetDigest(source)
+  const entry = plan.equipment.find((equipment) => equipment.id === owner)
+  const values = await allInstalledEquipment(plan.root)
+  const source = values.find((equipment) => equipment.id === owner && equipment.scope === entry.scope)
+  return installedEquipmentDigest(source)
 }
 
 async function exactFirstParty(root, runtime, digest) {
   if (!runtime.owner.startsWith('endroit/')) return false
   try {
-    const builtin = await resolveAsset(root, `@${runtime.owner}`)
-    return builtin.firstParty && assetDigest(builtin) === digest
+    const builtin = await resolveEquipment(root, `@${runtime.owner}`)
+    return builtin.firstParty && equipmentDigest(builtin) === digest
   } catch {
     return false
   }
@@ -130,7 +133,7 @@ async function exactFirstParty(root, runtime, digest) {
 
 function selectRuntime(plan, selector) {
   const matches = plan.runtimes.filter((entry) => entry.owner === selector || entry.owner.split('/').at(-1) === selector || entry.namespace === selector)
-  if (!matches.length) throw new EndroitError('runtime_missing', `${selector} does not identify an active Asset runtime.`)
-  if (matches.length > 1) throw new EndroitError('runtime_ambiguous', `${selector} matches multiple Asset runtimes.`)
+  if (!matches.length) throw new EndroitError('runtime_missing', `${selector} does not identify an active Equipment runtime.`)
+  if (matches.length > 1) throw new EndroitError('runtime_ambiguous', `${selector} matches multiple Equipment runtimes.`)
   return matches[0]
 }

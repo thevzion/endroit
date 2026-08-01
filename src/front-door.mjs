@@ -9,35 +9,47 @@ export function renderFloorPlan(plan) {
 
 <!-- generated from the Resolved Home; rebuild instead of editing -->
 
-- Home: \`${plan.home.name}\` (\`${plan.home.mode}\`)
+- Home: \`${plan.home.name}\`
+- Members: ${plan.members.map((member) => `\`${member.id}\``).join(', ')}
 - Providers: ${plan.home.providers.map((provider) => `\`${provider}\``).join(', ')}
-- Home sources: \`endroit.json\`, \`HOME.md\`, \`assets/\`, \`workspaces/\`
-- Desk sources: \`.desk/DESK.md\`, \`.desk/assets/\`, \`.desk/workspaces/\`, \`.desk/targets/\`
+- Home sources: \`endroit.json\`, \`HOME.md\`, \`members/\`, \`equipment/\`, \`rooms/\`
+- Desk sources: \`.desk/DESK.md\`, \`.desk/equipment/\`, \`.desk/rooms/\`, \`.desk/routes/\`
+- Local Site checkouts and Mounts: \`checkouts/\` (ignored)
 - Local rebuildable state: \`.endroit/\`
 
-The Home owns its constitution, shared Workspaces and projections. The Desk
-owns collaborator-local Workspaces. Targets own product sources. Artifacts live
-inside their owning Workspace; legacy Artifact roots are read-only. Generated
+The Home owns its constitution, shared Rooms and projections. The Desk
+owns collaborator-local Rooms. Sites own product sources. Artifacts live
+inside their owning Room; legacy Artifact roots are read-only. Generated
 provider files and external systems are never canonical.
 
-Use the tracked Home Console for every Kernel or Asset route:
+Use the tracked Home Console for every Kernel or Equipment route:
 
     node ./endroit.mjs <namespace> <command> [...arguments]
 
 Kernel routes:
 
+- \`member create|list|inspect|doctor\`
 - \`desk init|clone\`
-- \`asset validate|add|status|sync|remove|override|promote|catalog|trust\`
+- \`equipment validate|add|status|sync|remove|override|promote|catalog|trust\`
+- \`room create|list|inspect|doctor\`
+- \`site add|list|inspect|doctor|remove\`
+- \`route bind|clone|worktree|mount|unmount|list|inspect|remove\`
 - \`validate\`, \`build\`, \`doctor\`
 
-Asset runtime namespaces:
+Equipment runtime namespaces:
 
 ${runtimes}
 
 Wake-up: ${wakeUp}.
 
-If Wake-up is unavailable, this Floor Plan remains authoritative. Do not guess
-another runtime or search outside the Home to compensate.`
+The Floor Plan is the static authoritative entrypoint, not a complete live
+inventory. If Wake-up is unavailable, use these local read-only inspections:
+
+    node ./endroit.mjs room list
+    node ./endroit.mjs site list
+    node ./endroit.mjs equipment catalog
+
+Do not guess another runtime or search outside the Home to compensate.`
 }
 
 export function homeConsole() {

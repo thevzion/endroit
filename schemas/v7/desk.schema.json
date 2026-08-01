@@ -1,0 +1,23 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v7/desk.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "id", "member"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v7/desk.json" },
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "member": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "settings": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$" },
+      "additionalProperties": { "type": "object" }
+    }
+  }
+}

@@ -9,11 +9,11 @@ const decoder = new TextDecoder('utf-8', { fatal: true })
 const templates = {
   home: {
     path: fileURLToPath(new URL('../templates/HOME.md', import.meta.url)),
-    variables: ['home.name', 'home.mode'],
+    variables: ['home.name'],
   },
   desk: {
     path: fileURLToPath(new URL('../templates/DESK.md', import.meta.url)),
-    variables: ['desk.id', 'home.name'],
+    variables: ['desk.id', 'desk.member', 'home.name'],
   },
 }
 

@@ -1,32 +1,6 @@
 import { resolve } from 'node:path'
 
-export const CREATE_WORDMARK = [
-  ' _           _',
-  '| |__   __ _(_)_ __ _ __   ___  ___ ___',
-  "| '_ \\ / _` | | '__| '_ \\ / _ \\/ __/ __|",
-  '| | | | (_| | | |  | | | |  __/\\__ \\__ \\',
-  '|_| |_|\\__,_|_|_|  |_| |_|\\___||___/___/',
-].join('\n')
-
-const modes = [
-  {
-    value: 'solo',
-    label: 'Solo',
-    hint: 'Home and personal Desk share Git; Target Bindings stay local',
-  },
-  {
-    value: 'team',
-    label: 'Team',
-    hint: 'the Home is shared; each collaborator keeps a private Desk',
-  },
-]
-
-const assets = [
-  { value: 'research', label: 'Research', hint: 'reusable evidence-backed studies' },
-  { value: 'planning', label: 'Planning', hint: 'roadmaps and bounded initiatives' },
-  { value: 'publishing', label: 'Publishing', hint: 'source-owned publications and external Handles' },
-  { value: 'scratch', label: 'Scratch', hint: 'retained exploratory work' },
-]
+export const CREATE_WORDMARK = 'endroit'
 
 export async function runCreateWizard(options) {
   const restoreColorEnvironment = disableColorWhenRequested()
@@ -48,38 +22,15 @@ async function renderWizard(options) {
 
   prompts.intro(`${CREATE_WORDMARK}\n\nOwn the place where your agents work.`, common)
   prompts.note([
-    'A Home owns shared rules and Workspaces.',
+    'A Home owns shared rules and Rooms.',
     'Your Desk keeps personal continuity.',
-    'Targets keep their repositories and history.',
+    'Sites keep their repositories and history.',
   ].join('\n'), 'What Endroit owns', common)
 
-  let mode = options.mode
-  if (!mode) {
-    mode = await prompts.select({
-      ...common,
-      message: 'How will this Home be used?',
-      options: modes,
-      initialValue: 'solo',
-    })
-    if (stop(mode)) return cancelled()
-  }
-
-  let selected = options.selected
-  if (!options.selectionProvided) {
-    selected = await prompts.multiselect({
-      ...common,
-      message: 'Add optional capabilities',
-      options: assets,
-      initialValues: [],
-      required: false,
-    })
-    if (stop(selected)) return cancelled()
-  }
-
-  selected ??= []
+  const selected = options.selected ?? []
   prompts.note([
     `Home        ${resolve(options.destination)}`,
-    `Mode        ${mode}`,
+    `Desk        ${options.desk}`,
     `Providers   ${options.providers.join(', ')}`,
     `Foundation  ${options.foundation.join(', ')}`,
     `Optional    ${selected.length ? selected.join(', ') : 'None'}`,
@@ -104,7 +55,7 @@ async function renderWizard(options) {
   progress.start('Creating and validating the Home')
   let result
   try {
-    result = await options.create({ mode, selected })
+    result = await options.create({ selected })
     progress.stop('Home created and verified')
   } catch (error) {
     progress.error('Home creation failed')
@@ -114,10 +65,9 @@ async function renderWizard(options) {
   prompts.note([
     ...result.launch.flatMap((entry) => [
       `${capitalize(entry.provider)}  ${entry.command}`,
-      `        Then invoke ${entry.onboarding}.`,
+      '        Then describe what you are working on in normal language.',
+      `        Optional onboarding shortcut: ${entry.onboarding}.`,
     ]),
-    '',
-    'Tell your agent what you are working on.',
   ].join('\n'), 'Open your Home', common)
   prompts.outro(`Ready at ${result.home}`, common)
   return { rendered: true, exitCode: 0, result }

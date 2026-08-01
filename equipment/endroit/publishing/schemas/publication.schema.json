@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "id",
+    "kind",
+    "owner",
+    "status",
+    "created_at",
+    "updated_at",
+    "derived_from",
+    "format",
+    "title",
+    "audience",
+    "language",
+    "channel"
+  ],
+  "properties": {
+    "kind": { "const": "endroit/publishing:publication" },
+    "owner": { "type": "string" },
+    "status": {
+      "enum": ["outline", "draft", "ready", "published", "superseded"]
+    },
+    "format": { "type": "string" },
+    "title": { "type": "string" },
+    "audience": { "type": "string" },
+    "language": { "type": "string" },
+    "channel": { "type": "string" },
+    "responsibility": { "type": "string" },
+    "stability": {
+      "enum": ["living", "release-aligned", "dated", "historical"]
+    },
+    "canonical_dependencies": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "related_publications": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "update_triggers": {
+      "type": "array",
+      "items": { "type": "string" }
+    },
+    "superseded_by": {
+      "type": ["string", "null"]
+    },
+    "derived_from": { "type": "array", "items": { "type": "string" } }
+  }
+}

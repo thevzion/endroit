@@ -1,6 +1,6 @@
 import { lstat, readFile } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import { applyTransaction } from './assets.mjs'
+import { applyTransaction } from './equipment.mjs'
 import { homeConsole, renderFloorPlan, sessionWrapper } from './front-door.mjs'
 import { git } from './git.mjs'
 import { EndroitError } from './lib/errors.mjs'
@@ -94,7 +94,7 @@ function mergeSurface(surfaces, item, kind) {
     scope: item.scope,
     projectedId: item.projectedId,
     capability: item.capability,
-    binding: item.binding,
+    route: item.route,
   }
   surface[kind] = item
   surfaces.set(key, surface)
@@ -108,7 +108,7 @@ async function renderAgentContract(plan) {
   ]
   for (const instruction of plan.instructions.filter((entry) => entry.scope === 'home')) {
     const content = await readFile(await resolvePackageFile(instruction.root, instruction.path, `${instruction.owner} Instruction`), 'utf8')
-    entries.push(`## ${instruction.owner}:${instruction.localId}\n\n<!-- source: assets/${instruction.owner}/${instruction.path} -->\n\n${content.trim()}`)
+    entries.push(`## ${instruction.owner}:${instruction.localId}\n\n<!-- source: equipment/${instruction.owner}/${instruction.path} -->\n\n${content.trim()}`)
   }
   return `${entries.join('\n\n')}\n`
 }
@@ -189,7 +189,7 @@ async function reconcileDeskExcludes(root, plan, outputs, check) {
   const current = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? '' : Promise.reject(error))
   const region = /# endroit:desk-projections begin\n[\s\S]*?# endroit:desk-projections end\n?/g
   const base = current.replace(region, '')
-  const paths = plan.home.mode === 'team' && plan.desk
+  const paths = plan.desk?.repository === 'separate'
     ? outputs.filter((entry) => entry.scope === 'desk').map((entry) => `/${entry.path}`).sort()
     : []
   const block = paths.length ? `# endroit:desk-projections begin\n${paths.join('\n')}\n# endroit:desk-projections end\n` : ''

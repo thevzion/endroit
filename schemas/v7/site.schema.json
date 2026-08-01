@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v7/site.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "id", "kind", "status"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v7/site.json" },
+    "id": { "$ref": "#/$defs/id" },
+    "kind": { "const": "site" },
+    "status": { "enum": ["active", "archived"] },
+    "repository": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "emoji": { "type": "string", "minLength": 1, "maxLength": 16 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "when": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" }
+  }
+}
