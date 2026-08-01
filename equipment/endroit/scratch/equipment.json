@@ -1,7 +1,7 @@
 {
   "$schema": "https://endroit.org/schema/v7/equipment.json",
   "name": "endroit/scratch",
-  "version": "0.8.0-alpha.0",
+  "version": "0.8.0-alpha.1",
   "description": "Optional lightweight working memory for uncertain or non-trivial work.",
   "prefix": "endroit",
   "roomNamespace": "exploring",

@@ -50,7 +50,7 @@ the migration look tidy. Paths are Desk state; ownership is the durable part.
 For a repository that should also contain its Home, run:
 
 ```bash
-npx --yes --package @endroit/cli@0.8.0-alpha.0 endroit init .
+npx --yes --package @endroit/cli@0.8.0-alpha.1 endroit init .
 ```
 
 This creates Site `self` and Route `embedded` at `.`. The Home owns only its
@@ -59,6 +59,6 @@ Git history.
 
 ## No automatic migrator
 
-`0.8.0-alpha.0` ships this written procedure first. An automated migration pass
+`0.8.0-alpha.1` ships this written procedure first. An automated migration pass
 would need read-only inventory, explainable placement and explicit approval;
 it is not included in this release.

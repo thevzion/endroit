@@ -1,7 +1,7 @@
 {
   "$schema": "https://endroit.org/schema/v7/equipment.json",
   "name": "endroit/hygiene",
-  "version": "0.8.0-alpha.0",
+  "version": "0.8.0-alpha.1",
   "description": "Read-only whole-Home health inspection and explicitly approved bounded repair.",
   "files": ["capabilities/maintain.md", "runtime.mjs"],
   "capabilities": [

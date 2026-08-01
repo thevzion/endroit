@@ -96,7 +96,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     await dispatchRuntime(home, 'hud', ['prompt'], prompt.io)
     assert.match(prompt.stdout(), /^<endroit-hud version="2" status="ready" generated-at="[^"]+" event="command">/)
     assert.match(prompt.stdout(), new RegExp(`<home name="home" emoji="🏠" root="${escapeRegex(model.home.root)}" providers="codex,claude" members="owner"/>`))
-    assert.match(prompt.stdout(), /<kernel runtime="@endroit\/cli@0\.8\.0-alpha\.0" source="npm" invoke="node \.\/endroit\.mjs"\/>/)
+    assert.match(prompt.stdout(), /<kernel runtime="@endroit\/cli@0\.8\.0-alpha\.1" source="npm" invoke="node \.\/endroit\.mjs"\/>/)
     assert.match(prompt.stdout(), /<item id="demo" emoji="🎛️" state="active" access="model,user" summary="Demo Room\." tags="demo" when="Working on the demo\." ref="room:desk\/demo"/)
     assert.match(prompt.stdout(), /<runtimes namespaces="artifact,hud,hygiene,room,site"\/>/)
     assert.match(prompt.stdout(), /<instruction owner="endroit\/desk" id="desk" source="DESK\.md">/)
@@ -120,7 +120,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
 
     const human = captureIo()
     await dispatchRuntime(home, 'hud', ['show'], human.io)
-    assert.equal(human.stdout().split('\n')[0], 'ENDROIT    home · codex+claude · @endroit/cli@0.8.0-alpha.0 · npm · ready')
+    assert.equal(human.stdout().split('\n')[0], 'ENDROIT    home · codex+claude · @endroit/cli@0.8.0-alpha.1 · npm · ready')
   } finally {
     await removeTree(temporary, { force: true })
   }
