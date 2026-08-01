@@ -64,19 +64,20 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.equal(model.kernel.invoke, 'node ./endroit.mjs')
     assert.deepEqual(model.desk.preferences, { addressAs: 'Alexis', responseLanguage: 'fr' })
     assert.equal(model.projections.every((entry) => entry.status === 'fresh'), true)
-    assert.deepEqual(model.surfaces.equipment.map((entry) => entry.id), ['endroit/artifacts', 'endroit/hud', 'endroit/onboarding', 'endroit/rooms', 'endroit/sites'])
-    assert.deepEqual(model.surfaces.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'room', 'site'])
+    assert.deepEqual(model.surfaces.equipment.map((entry) => entry.id), ['endroit/artifacts', 'endroit/hud', 'endroit/hygiene', 'endroit/onboarding', 'endroit/rooms', 'endroit/sites', 'endroit/workplace'])
+    assert.deepEqual(model.surfaces.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'hygiene', 'room', 'site'])
     assert.deepEqual(
       model.trust.runtimes.map((entry) => [entry.owner, entry.trust]),
       [
         ['endroit/artifacts', 'bundled'],
         ['endroit/hud', 'bundled'],
+        ['endroit/hygiene', 'bundled'],
         ['endroit/rooms', 'bundled'],
         ['endroit/sites', 'bundled'],
       ],
     )
     assert.deepEqual({ bundled: model.trust.bundled, approved: model.trust.approved, pending: model.trust.pending }, {
-      bundled: 4,
+      bundled: 5,
       approved: 0,
       pending: 0,
     })
@@ -94,7 +95,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     const prompt = captureIo()
     await dispatchRuntime(home, 'hud', ['prompt'], prompt.io)
     assert.match(prompt.stdout(), /^<endroit-hud version="2" status="ready" generated-at="[^"]+" event="command">/)
-    assert.match(prompt.stdout(), new RegExp(`<home name="home" emoji="🏠" mode="solo" root="${escapeRegex(model.home.root)}" providers="codex,claude"/>`))
+    assert.match(prompt.stdout(), new RegExp(`<home name="home" emoji="🏠" root="${escapeRegex(model.home.root)}" providers="codex,claude" members="owner"/>`))
     assert.match(prompt.stdout(), /<kernel runtime="@endroit\/cli@0\.8\.0-alpha\.0" source="npm" invoke="node \.\/endroit\.mjs"\/>/)
     assert.match(prompt.stdout(), /<item id="demo" emoji="🎛️" state="active" access="model,user" summary="Demo Room\." tags="demo" when="Working on the demo\." ref="room:desk\/demo"/)
     assert.match(prompt.stdout(), /<runtime namespace="site" commands="list,doctor,add,remove,inspect,route"\/>/)
@@ -119,7 +120,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
 
     const human = captureIo()
     await dispatchRuntime(home, 'hud', ['show'], human.io)
-    assert.equal(human.stdout().split('\n')[0], 'ENDROIT    home · solo · codex+claude · @endroit/cli@0.8.0-alpha.0 · npm · ready')
+    assert.equal(human.stdout().split('\n')[0], 'ENDROIT    home · codex+claude · @endroit/cli@0.8.0-alpha.0 · npm · ready')
   } finally {
     await removeTree(temporary, { force: true })
   }
@@ -205,7 +206,7 @@ test('Room runtime enforces scoped identity and Doctor remains read-only', async
     assert.deepEqual(await tree(join(home, 'rooms')), before)
 
     const team = join(temporary, 'team')
-    await createHome(team, { mode: 'team' })
+    await createHome(team, { deskStrategy: 'later' })
     const missingDesk = captureIo()
     assert.equal(await dispatchRuntime(team, 'room', ['create', 'private', '--scope', 'desk'], missingDesk.io), 4)
     assert.match(missingDesk.stderr(), /configured Desk/)

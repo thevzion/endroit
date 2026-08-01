@@ -27,18 +27,16 @@ test('create supports a TTY preview and explicit optional native Equipment', asy
     const home = join(temporary, 'home')
     const io = captureTtyIo()
     const ui = promptHarness({
-      mode: 'team',
       selected: ['research', 'publishing'],
       accepted: true,
     })
     assert.equal(await runCli(['create', home], io.io, { prompts: ui.prompts }), 0, io.stderr())
     assert.deepEqual(ui.calls.filter(({ type }) => ['select', 'multiselect', 'confirm'].includes(type)).map(({ type }) => type), [
-      'select',
       'multiselect',
       'confirm',
     ])
     assert.ok(CREATE_WORDMARK.split('\n').every((line) => line.length < 64))
-    assert.equal(JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')).mode, 'team')
+    assert.equal(Object.hasOwn(JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')), 'mode'), false)
     assert.equal(await readFile(join(home, 'rooms/home/ROOM.md'), 'utf8').then((value) => value.includes('room:home/home')), true)
     assert.equal(await readFile(join(home, 'equipment/endroit/research/equipment.json'), 'utf8').then(Boolean), true)
     assert.equal(await readFile(join(home, 'equipment/endroit/publishing/equipment.json'), 'utf8').then(Boolean), true)
@@ -67,7 +65,7 @@ test('create supports a TTY preview and explicit optional native Equipment', asy
     try {
       assert.equal(await runCli([
         'create', flagged,
-        '--mode', 'team',
+        '--desk', 'later',
         '--with', 'scratch',
         '--yes',
       ], flaggedIo.io, { prompts: flaggedUi.prompts }), 0, flaggedIo.stderr())
@@ -86,7 +84,8 @@ test('create supports a TTY preview and explicit optional native Equipment', asy
       noColor: false,
       forceColor: '0',
     })
-    assert.equal(JSON.parse(await readFile(join(flagged, 'endroit.json'), 'utf8')).mode, 'team')
+    assert.equal(await readFile(join(flagged, 'members/owner/MEMBER.md'), 'utf8').then(Boolean), true)
+    await assert.rejects(readFile(join(flagged, '.desk/desk.json')), (error) => error.code === 'ENOENT')
     assert.equal(await readFile(join(flagged, 'equipment/endroit/scratch/equipment.json'), 'utf8').then(Boolean), true)
 
     const structured = join(temporary, 'structured')
@@ -106,7 +105,7 @@ test('create cancellation is friendly and leaves no destination', async () => {
   try {
     for (const scenario of [
       { name: 'declined', accepted: false },
-      { name: 'interrupted', cancelAt: 'select' },
+      { name: 'interrupted', cancelAt: 'multiselect' },
     ]) {
       const home = join(temporary, scenario.name)
       const io = captureTtyIo()
@@ -160,7 +159,7 @@ test('init embeds a Home in an existing repository without merging Site and Home
 })
 
 test('create builds a source-owned Home and tracks shared provider projections', async () => {
-  assert.deepEqual(await compileSchemas(), ['home', 'desk', 'equipment', 'site', 'route', 'runtime'])
+  assert.deepEqual(await compileSchemas(), ['home', 'desk', 'member', 'equipment', 'site', 'route', 'runtime'])
   await assert.rejects(
     () => validateDocument({ $schema: 'https://example.invalid/schema/home.json' }, 'home'),
     (error) => error.code === 'schema_version_mismatch' && /Endroit 0\.8 requires https:\/\/endroit\.org\/schema\/home\.json/.test(error.message),
@@ -178,7 +177,6 @@ test('create builds a source-owned Home and tracks shared provider projections',
       name: 'home',
       emoji: '🏠',
       runtime: '@endroit/cli@0.8.0-alpha.0',
-      mode: 'solo',
       providers: ['codex', 'claude'],
       prefix: 'acme',
       frontDoor: { wakeUp: 'endroit/hud:prompt' },
@@ -192,6 +190,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
     const tracked = (await exec('git', ['ls-files'], { cwd: home })).stdout
     for (const path of [
       'HOME.md',
+      'members/owner/MEMBER.md',
       '.desk/DESK.md',
       'AGENTS.md',
       'CLAUDE.md',
@@ -206,7 +205,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
       'equipment/endroit/hud/runtime.mjs',
     ]) assert.match(tracked, new RegExp(`^${escape(path)}$`, 'm'))
     assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /^# home$/m)
-    assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /^# local's Desk$/m)
+    assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /^# local$/m)
     const agents = await readFile(join(home, 'AGENTS.md'), 'utf8')
     assert.match(agents, /<!-- source: HOME\.md -->/)
     assert.match(agents, /## Endroit Floor Plan/)
@@ -218,7 +217,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
     assert.equal((await doctorHome(home)).status, 'ready')
     await buildHome(home, { check: true })
     const plan = await resolveHome(home)
-    assert.deepEqual(plan.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'room', 'site'])
+    assert.deepEqual(plan.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'hygiene', 'room', 'site'])
     assert.deepEqual(plan.frontDoor, {
       route: 'endroit/hud:prompt',
       owner: 'endroit/hud',
@@ -446,26 +445,26 @@ test('the Home Console is a fully owned regular projection', async () => {
   }
 })
 
-test('team Homes remain usable before a private Desk exists', async () => {
+test('Homes remain usable before a Desk exists', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-team-'))
   try {
     const home = join(temporary, 'team-home')
     await mkdir(home)
-    await initHome(home, { name: 'team-home', mode: 'team', providers: ['codex'] })
+    await initHome(home, { name: 'team-home', deskStrategy: 'later', providers: ['codex'] })
     assert.match(await readFile(join(home, 'HOME.md'), 'utf8'), /team-home/)
     assert.equal(await loadDesk(home), null)
     await buildHome(home)
     assert.equal((await readFile(join(home, 'AGENTS.md'), 'utf8')).includes('Wake-up: not configured.'), true)
     await assert.rejects(readFile(join(home, '.codex/hooks/endroit-session-start.mjs')), (error) => error.code === 'ENOENT')
     assert.equal((await doctorHome(home)).status, 'ready')
-    assert.equal((await initDesk(home, { id: 'alexis', git: true })).repository, true)
+    assert.equal((await initDesk(home, { id: 'alexis', member: 'owner', repository: 'separate' })).repository, 'separate')
     assert.match(await readFile(join(home, '.desk/DESK.md'), 'utf8'), /alexis/)
 
     await exec('git', ['-C', join(home, '.desk'), 'add', '--all'])
     await exec('git', ['-C', join(home, '.desk'), '-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'desk'])
     const second = join(temporary, 'second-home')
     await mkdir(second)
-    await initHome(second, { name: 'second-home', mode: 'team', providers: ['codex'] })
+    await initHome(second, { name: 'second-home', deskStrategy: 'later', providers: ['codex'] })
     await cloneDesk(second, join(home, '.desk'))
     assert.equal((await loadDesk(second)).id, 'alexis')
   } finally {
@@ -519,10 +518,10 @@ test('canonical Home and Desk instructions are required, source-owned and fully 
 
     const emptyDesk = join(temporary, 'empty-desk')
     await mkdir(emptyDesk)
-    await initHome(emptyDesk, { mode: 'team' })
+    await initHome(emptyDesk, { deskStrategy: 'later' })
     const deskRepository = join(temporary, 'desk-repository')
     await exec('git', ['init', '--quiet', '--initial-branch=main', deskRepository])
-    await writeFile(join(deskRepository, 'desk.json'), '{"$schema":"https://endroit.org/schema/desk.json","id":"alexis"}\n')
+    await writeFile(join(deskRepository, 'desk.json'), '{"$schema":"https://endroit.org/schema/desk.json","id":"alexis","member":"owner"}\n')
     await exec('git', ['add', 'desk.json'], { cwd: deskRepository })
     await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'desk'], { cwd: deskRepository })
     await assert.rejects(() => cloneDesk(emptyDesk, deskRepository), (error) => error.code === 'desk_instruction_missing')
@@ -562,12 +561,12 @@ test('doctor reports a missing runtime as a limit instead of crashing', async ()
   }
 })
 
-test('team Desk projections remain local while Desk sources stay in the nested repository', async () => {
+test('separate Desk projections remain local while Desk sources stay in the nested repository', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-team-projection-'))
   try {
     const home = join(temporary, 'home')
-    await createHome(home, { mode: 'team', providers: ['codex'] })
-    await initDesk(home, { id: 'alexis', git: true })
+    await createHome(home, { deskStrategy: 'later', providers: ['codex'] })
+    await initDesk(home, { id: 'alexis', member: 'owner', repository: 'separate' })
     const source = await writeEquipment(join(temporary, 'personal'), equipment({
       name: 'alexis/review',
       files: ['capabilities/review.md', 'instructions/personal.md'],

@@ -9,9 +9,10 @@ export function renderFloorPlan(plan) {
 
 <!-- generated from the Resolved Home; rebuild instead of editing -->
 
-- Home: \`${plan.home.name}\` (\`${plan.home.mode}\`)
+- Home: \`${plan.home.name}\`
+- Members: ${plan.members.map((member) => `\`${member.id}\``).join(', ')}
 - Providers: ${plan.home.providers.map((provider) => `\`${provider}\``).join(', ')}
-- Home sources: \`endroit.json\`, \`HOME.md\`, \`equipment/\`, \`rooms/\`
+- Home sources: \`endroit.json\`, \`HOME.md\`, \`members/\`, \`equipment/\`, \`rooms/\`
 - Desk sources: \`.desk/DESK.md\`, \`.desk/equipment/\`, \`.desk/rooms/\`, \`.desk/routes/\`
 - Local Site checkouts: \`.desk/sites/\` (ignored)
 - Local rebuildable state: \`.endroit/\`
@@ -27,6 +28,7 @@ Use the tracked Home Console for every Kernel or Equipment route:
 
 Kernel routes:
 
+- \`member create|list|inspect|doctor\`
 - \`desk init|clone\`
 - \`equipment validate|add|status|sync|remove|override|promote|catalog|trust\`
 - \`room create|list|inspect|doctor\`

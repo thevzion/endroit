@@ -25,7 +25,11 @@ export async function findHome(start = process.env.ENDROIT_HOME_PATH ?? process.
 
 export async function loadHome(root) {
   root ??= await findHome()
-  const home = await validateDocument(await readJson(join(root, 'endroit.json')), 'home')
+  const document = await readJson(join(root, 'endroit.json'))
+  if (Object.hasOwn(document, 'mode')) {
+    throw new EndroitError('legacy_mode_unsupported', 'Endroit 0.8 removed mode: solo|team. Remove mode and configure the Desk with --desk tracked|separate|later.', { exitCode: 3 })
+  }
+  const home = await validateDocument(document, 'home')
   home.settings ??= {}
   return home
 }
@@ -51,7 +55,6 @@ export function homeDocument(options = {}) {
     name: assertId(options.name ?? homeId(options.destination ?? process.cwd()), 'Home name'),
     ...(options.emoji ? { emoji: options.emoji } : {}),
     runtime: RUNTIME,
-    mode: options.mode ?? 'solo',
     providers: [...new Set(options.providers ?? ['codex', 'claude'])],
     ...(options.prefix ? { prefix: assertId(options.prefix, 'Home prefix') } : {}),
     ...(options.frontDoor ? { frontDoor: options.frontDoor } : {}),

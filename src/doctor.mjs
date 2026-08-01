@@ -7,6 +7,7 @@ import { loadHome } from './home.mjs'
 import { EndroitError } from './lib/errors.mjs'
 import { resolveHome } from './resolved.mjs'
 import { runtimeTrustState } from './runtime.mjs'
+import { doctorMembers } from './member.mjs'
 
 export async function doctorHome(root) {
   let plan
@@ -14,11 +15,13 @@ export async function doctorHome(root) {
     plan = await resolveHome(root)
   } catch (error) {
     if (!(error instanceof EndroitError)) throw error
-    const [home, desk] = await Promise.all([loadHome(root), loadDesk(root)])
+    const home = await loadHome(root)
+    const desk = await loadDesk(root).catch(() => null)
     return {
       status: 'partial',
-      home: { name: home.name, mode: home.mode, runtime: home.runtime, providers: home.providers },
+      home: { name: home.name, runtime: home.runtime, providers: home.providers },
       desk: desk ? { id: desk.id, configured: true } : { configured: false },
+      members: [],
       equipment: [],
       runtimes: [],
       context: null,
@@ -29,11 +32,13 @@ export async function doctorHome(root) {
     }
   }
   const desk = await loadDesk(root)
+  const memberReport = await doctorMembers(root)
   const statuses = [
     ...await statusEquipment(root, undefined, { scope: 'home' }),
     ...await statusEquipment(root, undefined, { scope: 'desk' }),
   ]
   const limits = statuses.filter((entry) => entry.state !== 'clean').map((entry) => `equipment-${entry.state}:${entry.name}`)
+  limits.push(...memberReport.issues.map((issue) => `${issue.code}${issue.member ? `:${issue.member}` : ''}`))
   const roomIssues = await inspectRooms(root, plan)
   limits.push(...roomIssues.limits)
   const runtimes = []
@@ -58,8 +63,9 @@ export async function doctorHome(root) {
   }
   return {
     status: limits.length ? 'partial' : 'ready',
-    home: { name: plan.home.name, mode: plan.home.mode, runtime: plan.home.runtime, providers: plan.home.providers },
+    home: { name: plan.home.name, runtime: plan.home.runtime, providers: plan.home.providers },
     desk: desk ? { id: desk.id, configured: true } : { configured: false },
+    members: memberReport.members,
     equipment: plan.equipment.map((entry) => ({ id: entry.id, scope: entry.scope, version: entry.version, overridden: entry.overridden, roomNamespace: entry.roomNamespace })),
     runtimes,
     context: plan.context,
@@ -67,7 +73,7 @@ export async function doctorHome(root) {
     build,
     limits,
     warnings: [
-      ...(!desk && plan.home.mode === 'team' ? ['desk-missing: invoke endroit-onboarding to clone, initialize or skip a private Desk.'] : []),
+      ...(!desk ? ['desk-missing: initialize or clone a Desk when local continuity is needed.'] : []),
       ...(!plan.frontDoor ? ['front-door-static-only: no Wake-up route is configured.'] : []),
       ...roomIssues.warnings,
     ],

@@ -14,7 +14,12 @@ try {
   await createHome(home)
   await addEquipment(home, ['@endroit/scratch'])
   await buildHome(home)
-  for (const id of ['endroit-home', 'endroit-onboarding', 'endroit-artifacts', 'endroit-site-manage', 'endroit-site-map', 'endroit-scratch']) {
+  for (const id of [
+    'endroit-home', 'endroit-onboarding', 'endroit-artifacts', 'endroit-site-manage',
+    'endroit-site-map', 'endroit-scratch', 'enter-the-home', 'enter-the-home-room',
+    'call-the-researcher', 'work-as-an-engineer', 'use-research', 'retain-this',
+    'accept-this', 'deliver-this', 'archive-this', 'maintain-the-home',
+  ]) {
     const codex = await readFile(join(home, '.agents/skills', id, 'SKILL.md'), 'utf8')
     const claude = await readFile(join(home, '.claude/skills', id, 'SKILL.md'), 'utf8')
     assert.equal(codex.replaceAll(`$${id}`, id).replaceAll('.agents', '.provider'), claude.replaceAll(`/${id}`, id).replaceAll('.claude', '.provider'))

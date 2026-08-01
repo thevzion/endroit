@@ -2,18 +2,19 @@
 
 Configure the smallest useful Home and Desk through conversation.
 
-1. Explain the authority boundary: the Home owns shared rules and Rooms,
-   the Desk owns personal Rooms, Sites own product sources and external
-   systems are projections linked by Handles.
+1. Explain the authority boundary: the Home owns Members, shared rules and
+   Rooms; the Desk owns personal Rooms and local access; Sites own product
+   sources; external systems are projections linked by Handles.
 2. Use the generated Floor Plan and its tracked `node ./endroit.mjs` Console.
    The Home remains operable when Wake-up is absent or degraded.
 3. Run `node ./endroit.mjs validate --json`. If the configured `hud` namespace
    is available, `node ./endroit.mjs hud json` may add live local evidence.
    Distinguish shared Home settings from personal Desk settings.
-4. In a team Home without a Desk, offer exactly three paths: initialize a
-   private Desk repository, clone an existing private Desk repository, or
-   continue temporarily without one. Never persist a machine path in
-   `desk.json`.
+4. Confirm that `desk.json.member` resolves to a Home-owned human Member. When
+   no Desk exists, offer exactly three paths: initialize a tracked or separate
+   Desk, clone an existing Desk repository, or continue temporarily without
+   one. Never persist a machine path, credential or agent identity in a Member
+   or `desk.json`.
 5. Ask how the collaborator wants to be addressed and which response language
    to use. Store accepted personal values only in namespaced Desk settings.
 6. Read the `setup` Capability references returned by `validate --json`.

@@ -2,19 +2,6 @@ import { resolve } from 'node:path'
 
 export const CREATE_WORDMARK = 'endroit'
 
-const modes = [
-  {
-    value: 'solo',
-    label: 'Solo',
-    hint: 'Home and personal Desk share Git; Site Routes stay local',
-  },
-  {
-    value: 'team',
-    label: 'Team',
-    hint: 'the Home is shared; each collaborator keeps a private Desk',
-  },
-]
-
 const equipment = [
   { value: 'research', label: 'Research', hint: 'reusable evidence-backed studies' },
   { value: 'planning', label: 'Planning', hint: 'roadmaps and bounded initiatives' },
@@ -47,17 +34,6 @@ async function renderWizard(options) {
     'Sites keep their repositories and history.',
   ].join('\n'), 'What Endroit owns', common)
 
-  let mode = options.mode
-  if (!mode) {
-    mode = await prompts.select({
-      ...common,
-      message: 'How will this Home be used?',
-      options: modes,
-      initialValue: 'solo',
-    })
-    if (stop(mode)) return cancelled()
-  }
-
   let selected = options.selected
   if (!options.selectionProvided) {
     selected = await prompts.multiselect({
@@ -73,7 +49,7 @@ async function renderWizard(options) {
   selected ??= []
   prompts.note([
     `Home        ${resolve(options.destination)}`,
-    `Mode        ${mode}`,
+    `Desk        ${options.desk}`,
     `Providers   ${options.providers.join(', ')}`,
     `Foundation  ${options.foundation.join(', ')}`,
     `Optional    ${selected.length ? selected.join(', ') : 'None'}`,
@@ -98,7 +74,7 @@ async function renderWizard(options) {
   progress.start('Creating and validating the Home')
   let result
   try {
-    result = await options.create({ mode, selected })
+    result = await options.create({ selected })
     progress.stop('Home created and verified')
   } catch (error) {
     progress.error('Home creation failed')

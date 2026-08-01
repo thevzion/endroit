@@ -182,7 +182,7 @@ test('Sites can stay remote-only while different Desks own independent Routes', 
   const first = join(temporary, 'first')
   const second = join(temporary, 'second')
   try {
-    await createHome(home, { mode: 'team' })
+    await createHome(home, { deskStrategy: 'later' })
     await gitInit(first)
     await writeFile(join(first, 'README.md'), '# first\n')
     await commit(first, 'first')
@@ -194,12 +194,12 @@ test('Sites can stay remote-only while different Desks own independent Routes', 
 
     await runtimeJson(home, ['add', 'https://github.com/example/product.git', '--id', 'product'])
     assert.equal((await runtimeJson(home, ['list'])).sites[0].state, 'declared')
-    await initDesk(home, { id: 'one', git: false })
+    await initDesk(home, { id: 'one', member: 'owner', repository: 'tracked' })
     await runtimeJson(home, ['route', 'bind', 'product', first, '--id', 'local'])
     const firstDesk = join(temporary, 'desk-one')
     await rename(join(home, '.desk'), firstDesk)
 
-    await initDesk(home, { id: 'two', git: false })
+    await initDesk(home, { id: 'two', member: 'owner', repository: 'tracked' })
     await runtimeJson(home, ['route', 'bind', 'product', second, '--id', 'local'])
     assert.equal(JSON.parse(await readFile(join(firstDesk, 'routes/product/local.json'), 'utf8')).path, await realpath(first))
     assert.equal(JSON.parse(await readFile(join(home, '.desk/routes/product/local.json'), 'utf8')).path, await realpath(second))

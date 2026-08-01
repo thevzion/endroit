@@ -20,11 +20,11 @@ export async function ensureDevelopmentHome(options = {}) {
   const document = join(home, 'endroit.json')
   if (!await exists(document)) {
     if (await exists(home)) throw new Error(`${home} exists but is not an Endroit Home.`)
-    await endroit(['create', home, '--mode', 'team', '--providers', 'codex,claude', '--name', 'endroit-development-home', '--with', 'planning'])
+    await endroit(['create', home, '--desk', 'later', '--providers', 'codex,claude', '--name', 'endroit-development-home', '--with', 'planning'])
   }
 
   const config = JSON.parse(await readFile(document, 'utf8'))
-  if (config.mode !== 'team') throw new Error(`${home} must be recreated as a team Home.`)
+  if (Object.hasOwn(config, 'mode')) throw new Error(`${home} uses the superseded solo/team model and must be migrated to Member plus Desk.`)
   if (!same(config.providers, ['codex', 'claude'])) throw new Error(`${home} must enable codex and claude.`)
   if (config.runtime !== developmentRuntime) {
     config.runtime = developmentRuntime
@@ -33,7 +33,7 @@ export async function ensureDevelopmentHome(options = {}) {
 
   if (!await exists(join(home, '.desk', 'desk.json'))) {
     if (options.deskRepository) await endroit(['desk', 'clone', options.deskRepository, '--home', home])
-    else await endroit(['desk', 'init', '--id', options.deskId ?? process.env.USER ?? 'local', '--home', home])
+    else await endroit(['desk', 'init', '--id', options.deskId ?? process.env.USER ?? 'local', '--member', 'owner', '--home', home])
   }
   if (!await exists(join(home, 'equipment', 'endroit', 'planning', 'equipment.json'))) {
     await endroit(['equipment', 'add', '@endroit/planning', '-y', '--home', home])

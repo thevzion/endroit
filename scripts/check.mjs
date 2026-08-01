@@ -18,18 +18,23 @@ async function files(directory) {
   return values
 }
 
-assert.deepEqual(await compileSchemas(), ['home', 'desk', 'equipment', 'site', 'route', 'runtime'])
-for (const name of ['onboarding', 'hud', 'artifacts', 'sites', 'rooms', 'research', 'planning', 'publishing', 'scratch', 'project']) {
+assert.deepEqual(await compileSchemas(), ['home', 'desk', 'member', 'equipment', 'site', 'route', 'runtime'])
+for (const name of ['onboarding', 'hud', 'artifacts', 'sites', 'rooms', 'workplace', 'hygiene', 'research', 'planning', 'publishing', 'scratch', 'project']) {
   await validateDocument(JSON.parse(await readFile(join(root, 'equipment', 'endroit', name, 'equipment.json'), 'utf8')), 'equipment')
 }
 await validateDocument({
   $schema: 'https://endroit.org/schema/home.json',
   name: 'check',
   runtime: '@endroit/cli@0.8.0-alpha.0',
-  mode: 'solo',
   providers: ['codex'],
   frontDoor: { wakeUp: 'endroit/hud:prompt' },
 }, 'home')
+const packageDocument = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
+assert.equal(packageDocument.publishConfig.tag, 'next')
+assert.match(await readFile(join(root, 'scripts/release-packages.mjs'), 'utf8'), /tag: 'next'/)
+const releaseWorkflow = await readFile(join(root, '.github/workflows/release.yml'), 'utf8')
+assert.match(releaseWorkflow, /RELEASE_ARTIFACT: endroit-0\.8-release-candidate/)
+assert.match(releaseWorkflow, /smoke-next:/)
 const all = await files(root)
 assert.equal(all.some((path) => path.endsWith('endroit.lock.json')), false)
 for (const path of all.filter((path) => path.endsWith('.mjs'))) execFileSync(process.execPath, ['--check', path], { stdio: 'pipe' })

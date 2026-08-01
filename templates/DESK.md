@@ -1,6 +1,6 @@
-# {{desk.id}}'s Desk
+# {{desk.id}}
 
-This Desk belongs to `{{desk.id}}` inside the `{{home.name}}` Home.
+This Desk belongs to Member `{{desk.member}}` inside the `{{home.name}}` Home.
 
 - Use it for personal continuity, preferences, drafts and local Routes.
 - Specialize the collaboration without contradicting `HOME.md`.

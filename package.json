@@ -1,7 +1,7 @@
 {
   "name": "@endroit/cli",
   "version": "0.8.0-alpha.0",
-  "description": "Create and manage local-first human-agent workplaces with Endroit.",
+  "description": "A lightweight, local-first framework for durable human-agent workplaces across sessions, tools, and repositories.",
   "keywords": [
     "ai-agents",
     "agentic",
@@ -24,7 +24,7 @@
   },
   "publishConfig": {
     "access": "public",
-    "tag": "latest"
+    "tag": "next"
   },
   "type": "module",
   "bin": {
@@ -36,6 +36,7 @@
   "files": [
     "bin/",
     "docs/reference.md",
+    "docs/providers.md",
     "equipment/endroit/onboarding/",
     "equipment/endroit/planning/",
     "equipment/endroit/publishing/",
@@ -45,6 +46,8 @@
     "equipment/endroit/sites/",
     "equipment/endroit/rooms/",
     "equipment/endroit/scratch/",
+    "equipment/endroit/workplace/",
+    "equipment/endroit/hygiene/",
     "templates/",
     "schemas/v7/",
     "src/",

@@ -1,12 +1,12 @@
 # {{home.name}}
 
-This is a {{home.mode}} Endroit Home: a provider-agnostic environment shared
-by humans and agents.
+This is an Endroit Home: a provider-agnostic environment shared by humans and
+agents.
 
 ## Ownership
 
-- The Home owns shared Rooms, Equipment, governed Artifacts and provider
-  projections.
+- The Home owns Members, shared Rooms, Equipment, governed Artifacts and
+  provider projections.
 - A collaborator's Desk owns personal continuity and may specialize this
   constitution without contradicting it.
 - Sites remain sovereign systems. Product changes belong to the relevant Site,

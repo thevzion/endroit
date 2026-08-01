@@ -33,7 +33,7 @@ try {
   assert.match(claude, /^<endroit-hud /)
   assert.match(claude, /<kernel [^>]*source="development"/)
   const status = JSON.parse((await exec(process.execPath, [...consoleArgs, 'equipment', 'status', '--json'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
-  const coreEquipment = ['endroit/artifacts', 'endroit/hud', 'endroit/onboarding', 'endroit/rooms', 'endroit/scratch', 'endroit/sites']
+  const coreEquipment = ['endroit/artifacts', 'endroit/hud', 'endroit/hygiene', 'endroit/onboarding', 'endroit/rooms', 'endroit/scratch', 'endroit/sites', 'endroit/workplace']
   assert.deepEqual(status.map((entry) => entry.name), coreEquipment)
   assert.ok(status.every((entry) => entry.state === 'clean'))
   const sync = JSON.parse((await exec(process.execPath, [...consoleArgs, 'equipment', 'sync', 'endroit/scratch', '--check', '--json'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
@@ -42,6 +42,9 @@ try {
   const doctor = JSON.parse(stdout)
   assert.equal(doctor.status, 'ready')
   assert.deepEqual(doctor.equipment.map((entry) => entry.id), coreEquipment)
+  const hygiene = JSON.parse((await exec(process.execPath, [...consoleArgs, 'hygiene', 'maintain', '--json'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
+  assert.equal(hygiene.readOnly, true)
+  assert.equal(hygiene.status, 'healthy')
   const rooms = JSON.parse((await exec(process.execPath, [...consoleArgs, 'room', 'list', '--json'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
   assert.deepEqual(rooms.rooms.map(({ ref }) => ref), ['room:home/home'])
   const sites = JSON.parse((await exec(process.execPath, [...consoleArgs, 'site', 'list', '--json'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)

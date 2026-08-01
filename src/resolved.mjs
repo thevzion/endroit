@@ -2,21 +2,27 @@ import Ajv2020 from 'ajv/dist/2020.js'
 import { readFile, readdir } from 'node:fs/promises'
 import { basename, join, relative } from 'node:path'
 import { allInstalledEquipment, catalogEquipment } from './equipment.mjs'
-import { loadDesk } from './desk.mjs'
+import { deskGitBoundary, loadDesk } from './desk.mjs'
 import { renderFloorPlan } from './front-door.mjs'
 import { loadHome } from './home.mjs'
 import { DESK_INSTRUCTION, HOME_INSTRUCTION, readInstructionFile } from './instructions.mjs'
 import { EndroitError } from './lib/errors.mjs'
 import { resolvePackageFile } from './lib/io.mjs'
 import { loadSites } from './sites.mjs'
+import { listMembers } from './member.mjs'
 
 export async function resolveHome(root) {
-  const [home, desk, installed, catalog] = await Promise.all([
+  const [home, loadedDesk, members, installed, catalog] = await Promise.all([
     loadHome(root),
     loadDesk(root),
+    listMembers(root),
     allInstalledEquipment(root),
     catalogEquipment(root),
   ])
+  const invalidMember = members.find((member) => member.invalid)
+  if (invalidMember) throw new EndroitError('member_invalid', `${invalidMember.id} is invalid: ${invalidMember.invalid}`)
+  if (!members.length) throw new EndroitError('member_missing', 'A Home requires at least one Member source.')
+  const desk = loadedDesk ? { ...loadedDesk, repository: await deskGitBoundary(root) } : null
   await readInstructionFile(join(root, HOME_INSTRUCTION), 'home_instruction')
   if (desk) await readInstructionFile(join(root, '.desk', DESK_INSTRUCTION), 'desk_instruction')
   const invalid = installed.find((entry) => entry.invalid)
@@ -41,6 +47,7 @@ export async function resolveHome(root) {
     root,
     home,
     desk,
+    members,
     homeInstruction: {
       id: 'home',
       owner: 'endroit/home',
@@ -151,6 +158,7 @@ export function publicPlan(plan) {
   return {
     home: plan.home,
     desk: plan.desk,
+    members: plan.members,
     homeInstruction: withoutRoot(plan.homeInstruction),
     deskInstruction: plan.deskInstruction ? withoutRoot(plan.deskInstruction) : null,
     equipment: plan.equipment.map(withoutRoot),
@@ -185,7 +193,13 @@ function material(entry, item) {
 
 function accessor(home, entry, item, invocation, route) {
   const equipmentPrefix = entry.manifest.prefix ?? basename(entry.id)
-  const projectedId = [home.prefix, equipmentPrefix, item.id, route && slug(route.id)].filter(Boolean).join('-')
+  if (item.projectedName?.includes('{route}') && !route) {
+    throw new EndroitError('projected_name_route_missing', `${entry.id}:${item.id} uses {route} without forEach.`)
+  }
+  const projectedId = item.projectedName
+    ? (route ? item.projectedName.replaceAll('{route}', slug(route.id)) : item.projectedName)
+    : [home.prefix, equipmentPrefix, item.id, route && slug(route.id)].filter(Boolean).join('-')
+  if (/[{}]/.test(projectedId)) throw new EndroitError('projected_name_invalid', `${entry.id}:${item.id} contains an unsupported projectedName placeholder.`)
   return {
     ...item,
     id: canonical(entry.id, item.id),

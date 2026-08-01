@@ -7,12 +7,13 @@ export const API = Object.freeze({
   home: 'https://endroit.org/schema/home.json',
   equipment: 'https://endroit.org/schema/equipment.json',
   desk: 'https://endroit.org/schema/desk.json',
+  member: 'https://endroit.org/schema/member.json',
   site: 'https://endroit.org/schema/site.json',
   route: 'https://endroit.org/schema/route.json',
   runtime: 'endroit.org/runtime/v1alpha1',
 })
 
-const schemaFiles = ['home.schema.json', 'desk.schema.json', 'equipment.schema.json', 'site.schema.json', 'route.schema.json', 'runtime.schema.json']
+const schemaFiles = ['home.schema.json', 'desk.schema.json', 'member.schema.json', 'equipment.schema.json', 'site.schema.json', 'route.schema.json', 'runtime.schema.json']
 let validatorsPromise
 
 async function validators() {

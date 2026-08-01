@@ -170,6 +170,12 @@
           "id": { "$ref": "#/$defs/id" },
           "capability": { "$ref": "#/$defs/id" },
           "description": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "projectedName": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 240,
+            "pattern": "^[a-z0-9][a-z0-9._{}-]*$"
+          },
           "forEach": { "enum": ["room", "meeting", "site"] }
         }
       }

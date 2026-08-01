@@ -3,10 +3,14 @@
   "$id": "https://endroit.org/schema/desk.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "id"],
+  "required": ["$schema", "id", "member"],
   "properties": {
     "$schema": { "const": "https://endroit.org/schema/desk.json" },
     "id": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
+    },
+    "member": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$"
     },

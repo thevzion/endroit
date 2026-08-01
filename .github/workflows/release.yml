@@ -14,7 +14,7 @@ concurrency:
 
 env:
   NPM_VERSION: 11.5.1
-  RELEASE_ARTIFACT: endroit-0.7-release-candidate
+  RELEASE_ARTIFACT: endroit-0.8-release-candidate
 
 jobs:
   qualify:
@@ -105,3 +105,31 @@ jobs:
           path: ${{ runner.temp }}/npm-release
       - name: Revalidate the qualified artifact and registry
         run: node scripts/release-publish.mjs "$RUNNER_TEMP/npm-release/manifest.json"
+
+  smoke-next:
+    name: smoke npm next
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Recreate and inspect a Home from npm next
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          tagged=""
+          for attempt in $(seq 1 36); do
+            tagged="$(npm view @endroit/cli dist-tags.next --json 2>/dev/null | tr -d '\"' || true)"
+            test "$tagged" = "$version" && break
+            sleep 5
+          done
+          test "$tagged" = "$version"
+          smoke_root="$RUNNER_TEMP/endroit-next-smoke"
+          npx --yes --package "@endroit/cli@$version" endroit create "$smoke_root" --desk tracked --no-interactive --yes
+          cd "$smoke_root"
+          node ./endroit.mjs doctor --json | node -e "let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{if(JSON.parse(s).status!=='ready')process.exit(1)})"
+          node ./endroit.mjs hygiene maintain --json | node -e "let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{if(JSON.parse(s).readOnly!==true)process.exit(1)})"

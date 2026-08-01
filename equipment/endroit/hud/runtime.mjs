@@ -299,8 +299,8 @@ async function hud(input) {
   trust.pending = trust.runtimes.filter((entry) => entry.trust === 'pending').length
 
   const attention = []
-  if (!deskRoot && plan.home.mode === 'team') {
-    attention.push(item('advisory', 'desk', 'desk-missing', 'No private Desk is configured; onboarding can initialize, clone or skip one.'))
+  if (!deskRoot) {
+    attention.push(item('advisory', 'desk', 'desk-missing', 'No Desk is configured; initialize or clone one when local continuity is needed.'))
   }
   if (!homeGit.available) attention.push(item('warning', 'home', 'home-git-unavailable', homeGit.error))
   else if (!homeGit.clean) attention.push(item('advisory', 'home', 'home-dirty', `Home has ${homeGit.changes} change(s).`))
@@ -347,14 +347,14 @@ async function hud(input) {
     home: {
       name: plan.home.name,
       emoji: plan.home.emoji ?? null,
-      mode: plan.home.mode,
       root: homeRoot,
       providers: plan.home.providers,
       git: homeGit,
     },
     kernel: input.kernel,
-    collaborator: plan.desk ? { id: plan.desk.id, ...preferences } : null,
-    desk: plan.desk ? { configured: true, id: plan.desk.id, root: deskRoot, preferences, git: deskGit } : { configured: false },
+    members: plan.members,
+    collaborator: plan.desk ? { id: plan.desk.member, ...preferences } : null,
+    desk: plan.desk ? { configured: true, id: plan.desk.id, member: plan.desk.member, repository: plan.desk.repository, root: deskRoot, preferences, git: deskGit } : { configured: false },
     projections,
     surfaces: {
       equipment: plan.equipment.map((equipment) => ({
@@ -756,11 +756,11 @@ function human(model, full) {
   const homeGit = gitSummary(model.home.git)
   const deskGit = model.desk.configured ? gitSummary(model.desk.git) : 'missing'
   const lines = [
-    `ENDROIT    ${model.home.name} · ${model.home.mode} · ${model.home.providers.join('+')} · ${model.kernel.runtime} · ${model.kernel.source} · ${model.status}`,
+    `ENDROIT    ${model.home.name} · ${model.home.providers.join('+')} · ${model.kernel.runtime} · ${model.kernel.source} · ${model.status}`,
     `ROOT        ${model.home.root}`,
     `KERNEL      ${model.kernel.invoke}`,
     `HOME GIT    ${homeGit}`,
-    `DESK        ${model.desk.configured ? `${model.desk.id} · ${model.desk.root} · ${deskGit}` : 'missing'} · recent:${model.recentDesk.length}`,
+    `DESK        ${model.desk.configured ? `${model.desk.id} · member:${model.desk.member} · ${model.desk.repository} · ${model.desk.root} · ${deskGit}` : 'missing'} · recent:${model.recentDesk.length}`,
     `ITEMS       ${model.items.rooms.length} rooms · ${model.items.meetings.length} meetings · ${model.items.sites.length} sites · ${model.items.capabilities.length} capabilities`,
     `SURFACES    ${model.surfaces.equipment.length} equipment · ${model.surfaces.catalog.filter((entry) => !entry.installed.length).length} native available · ${model.surfaces.runtimes.map((entry) => entry.namespace).join(',')}`,
     `ARTIFACTS   ${model.artifacts.count} · ${Object.entries(model.artifacts.counts).map(([key, value]) => `${key}:${value}`).join(' ') || 'none'}`,
@@ -796,13 +796,13 @@ async function xml(model, input) {
   const deskInstructions = await resolvedDeskInstructions(input.resolvedHome)
   const lines = [
     `<endroit-hud version="2" status="${model.status}" generated-at="${model.generatedAt}" event="${escape(model.event)}">`,
-    `  <home name="${escape(model.home.name)}"${model.home.emoji ? ` emoji="${escape(model.home.emoji)}"` : ''} mode="${model.home.mode}" root="${escape(model.home.root)}" providers="${model.home.providers.join(',')}"/>`,
+    `  <home name="${escape(model.home.name)}"${model.home.emoji ? ` emoji="${escape(model.home.emoji)}"` : ''} root="${escape(model.home.root)}" providers="${model.home.providers.join(',')}" members="${escape(model.members.map((member) => member.id).join(','))}"/>`,
     `  <kernel runtime="${escape(model.kernel.runtime)}" source="${model.kernel.source}" invoke="${escape(model.kernel.invoke)}"/>`,
   ]
   if (model.collaborator) {
     lines.push(`  <collaborator id="${escape(model.collaborator.id)}"${model.collaborator.addressAs ? ` address-as="${escape(model.collaborator.addressAs)}"` : ''}${model.collaborator.responseLanguage ? ` response-language="${escape(model.collaborator.responseLanguage)}"` : ''}/>`)
   }
-  lines.push(`  <desk configured="${model.desk.configured}"${model.desk.configured ? ` id="${escape(model.desk.id)}" root="${escape(model.desk.root)}"` : ''}/>`)
+  lines.push(`  <desk configured="${model.desk.configured}"${model.desk.configured ? ` id="${escape(model.desk.id)}" member="${escape(model.desk.member)}" repository="${model.desk.repository}" root="${escape(model.desk.root)}"` : ''}/>`)
   lines.push(`  ${gitXml('home-git', model.home.git)}`)
   if (model.desk.configured) lines.push(model.desk.git?.root === model.home.git?.root ? '  <desk-git same-as="home-git"/>' : `  ${gitXml('desk-git', model.desk.git)}`)
   lines.push('  <routing priority="explicit-human,unique-semantic-match,ask-if-ambiguous">The Wake-up does not know the user message. Use these items to infer later; do not resolve a route now.</routing>')

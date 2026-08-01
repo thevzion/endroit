@@ -9,9 +9,10 @@ import { homeDocument, homeId } from './home.mjs'
 import { HOME_INSTRUCTION, renderInstructionTemplate } from './instructions.mjs'
 import { EndroitError } from './lib/errors.mjs'
 import { exists, removeTree, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
+import { createMember } from './member.mjs'
 import { writeRoute, writeSite } from './sites.mjs'
 
-export const bootstrapEquipment = ['@endroit/onboarding', '@endroit/hud', '@endroit/artifacts', '@endroit/sites', '@endroit/rooms']
+export const bootstrapEquipment = ['@endroit/onboarding', '@endroit/hud', '@endroit/artifacts', '@endroit/sites', '@endroit/rooms', '@endroit/workplace', '@endroit/hygiene']
 
 export async function createHome(destination, options = {}) {
   const site = resolve(destination)
@@ -23,6 +24,7 @@ export async function createHome(destination, options = {}) {
     await initHome(stage, {
       ...options,
       name: options.name ?? homeId(site),
+      deskStrategy: options.deskStrategy ?? 'tracked',
       frontDoor: { wakeUp: 'endroit/hud:prompt' },
     })
     const result = await addEquipment(stage, [...bootstrapEquipment, ...(options.equipment ?? [])])
@@ -37,7 +39,7 @@ export async function createHome(destination, options = {}) {
     return {
       status: 'created',
       home: site,
-      mode: options.mode ?? 'solo',
+      desk: options.deskStrategy ?? 'tracked',
       equipment: result.equipment,
       launch: launchInstructions(site, options.providers ?? ['codex', 'claude']),
     }
@@ -78,6 +80,7 @@ export async function initializeExistingHome(destination = process.cwd(), option
   await initHome(root, {
     ...options,
     name: options.name ?? homeId(root),
+    deskStrategy: options.deskStrategy ?? 'separate',
     frontDoor: { wakeUp: 'endroit/hud:prompt' },
   })
   try {
@@ -99,7 +102,7 @@ export async function initializeExistingHome(destination = process.cwd(), option
     return {
       status: 'initialized',
       home: root,
-      mode: options.mode ?? 'solo',
+      desk: options.deskStrategy ?? 'separate',
       equipment: result.equipment,
       site: site.id,
       launch: launchInstructions(root, options.providers ?? ['codex', 'claude']),
@@ -111,9 +114,13 @@ export async function initializeExistingHome(destination = process.cwd(), option
 
 export async function initHome(root = process.cwd(), options = {}) {
   root = resolve(root)
+  if (Object.hasOwn(options, 'mode')) throw new EndroitError('legacy_mode_unsupported', 'Endroit 0.8 removed mode: solo|team. Use deskStrategy tracked|separate|later.', { exitCode: 3 })
   await mkdir(root, { recursive: true })
   if (await exists(join(root, 'endroit.json'))) throw new EndroitError('home_exists', `${root} already contains endroit.json.`)
-  const mode = options.mode ?? 'solo'
+  const deskStrategy = options.deskStrategy ?? 'later'
+  if (!['tracked', 'separate', 'later'].includes(deskStrategy)) {
+    throw new EndroitError('desk_strategy_invalid', 'Desk strategy must be tracked, separate or later.', { exitCode: 2 })
+  }
   const ignorePath = join(root, '.gitignore')
   const instructionPath = join(root, HOME_INSTRUCTION)
   const deskPath = join(root, '.desk')
@@ -127,25 +134,30 @@ export async function initHome(root = process.cwd(), options = {}) {
       name: options.name,
       emoji: options.emoji,
       providers: options.providers,
-      mode,
       prefix: options.prefix,
       frontDoor: options.frontDoor,
     })
     await writeJsonAtomic(join(root, 'endroit.json'), home, 0o644)
     await writeFileAtomic(instructionPath, await renderInstructionTemplate('home', {
       'home.name': home.name,
-      'home.mode': home.mode,
     }), 0o644)
-    const required = ['/.endroit/', mode === 'team' ? '/.desk/' : '/.desk/routes/', ...(mode === 'solo' ? ['/.desk/sites/'] : []), '/.DS_Store']
+    const required = ['/.endroit/', ...(deskStrategy === 'separate' || deskStrategy === 'later' ? ['/.desk/'] : ['/.desk/routes/', '/.desk/sites/']), '/.DS_Store']
     const lines = currentIgnore.split(/\r?\n/)
     const missing = required.filter((line) => !lines.includes(line))
     if (missing.length) await writeFileAtomic(ignorePath, `${currentIgnore.trimEnd()}${currentIgnore.trim() ? '\n' : ''}${missing.join('\n')}\n`, 0o644)
-    if (mode === 'solo') await initDesk(root, { id: options.deskId ?? 'local', git: false })
-    return { status: 'initialized', home: root, mode, providers: home.providers, equipment: [] }
+    const memberId = options.memberId ?? 'owner'
+    await createMember(root, memberId, { name: options.memberName, status: 'active', accounts: options.accounts ?? [] })
+    if (deskStrategy !== 'later') await initDesk(root, {
+      id: options.deskId ?? 'local',
+      member: memberId,
+      repository: deskStrategy,
+    })
+    return { status: 'initialized', home: root, desk: deskStrategy, member: memberId, providers: home.providers, equipment: [] }
   } catch (error) {
     await rm(join(root, 'endroit.json'), { force: true })
     await rm(instructionPath, { force: true })
     await removeTree(deskPath, { force: true })
+    await removeTree(join(root, 'members'), { force: true })
     if (ignoreExisted) await writeFileAtomic(ignorePath, currentIgnore, 0o644)
     else await rm(ignorePath, { force: true })
     throw error

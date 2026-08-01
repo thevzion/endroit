@@ -189,7 +189,7 @@ async function reconcileDeskExcludes(root, plan, outputs, check) {
   const current = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? '' : Promise.reject(error))
   const region = /# endroit:desk-projections begin\n[\s\S]*?# endroit:desk-projections end\n?/g
   const base = current.replace(region, '')
-  const paths = plan.home.mode === 'team' && plan.desk
+  const paths = plan.desk?.repository === 'separate'
     ? outputs.filter((entry) => entry.scope === 'desk').map((entry) => `/${entry.path}`).sort()
     : []
   const block = paths.length ? `# endroit:desk-projections begin\n${paths.join('\n')}\n# endroit:desk-projections end\n` : ''

@@ -88,6 +88,9 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
       kind: invocationKind,
       ...(invocationProvider ? { provider: invocationProvider } : {}),
     },
+    ...(runtime.owner === 'endroit/hygiene' ? {
+      inspection: { homeDoctor: await (await import('./doctor.mjs')).doctorHome(root) },
+    } : {}),
   }
   await validateDocument(input, 'runtime')
   return run(entry, input, io)
