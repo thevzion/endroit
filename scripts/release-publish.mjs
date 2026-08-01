@@ -4,6 +4,8 @@ import { readFile } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
+import { comparePackedTrees } from './lib/pack.mjs'
+
 const exec = promisify(execFile)
 const projectRoot = new URL('../', import.meta.url).pathname
 const dryRun = process.argv.includes('--dry-run')
@@ -28,10 +30,10 @@ for (const entry of manifest.packages) {
   const sha256 = createHash('sha256').update(await readFile(tarball)).digest('hex')
   if (sha256 !== entry.sha256) throw new Error(`${entry.filename} does not match its qualified SHA-256.`)
 
-  const remote = await remoteIntegrity(entry)
+  const remote = await remoteDistribution(entry)
   if (remote) {
-    if (remote !== entry.integrity) throw new Error(`${entry.name}@${entry.version} exists with different integrity.`)
-    await verifyRegistry(entry, manifest.tag)
+    await verifyPackedDistribution(entry, tarball, remote)
+    await verifyRegistry(entry, manifest.tag, tarball)
     process.stdout.write(`verified ${entry.name}@${entry.version}; publication skipped\n`)
     continue
   }
@@ -40,7 +42,7 @@ for (const entry of manifest.packages) {
   args.push(dryRun ? '--dry-run' : '--provenance')
   await exec('npm', args, { cwd: projectRoot, maxBuffer: 20 * 1024 * 1024 })
   process.stdout.write(`${dryRun ? 'qualified' : 'published'} ${entry.name}@${entry.version}\n`)
-  if (!dryRun) await verifyRegistry(entry, manifest.tag)
+  if (!dryRun) await verifyRegistry(entry, manifest.tag, tarball)
 }
 
 async function verifySchemas(schemas) {
@@ -77,9 +79,9 @@ async function verifyPublicSchema(entry) {
   if (JSON.parse(content).$id !== entry.url) throw new Error(`${entry.url} has a mismatched $id.`)
 }
 
-async function remoteIntegrity(entry) {
+async function remoteDistribution(entry) {
   try {
-    const { stdout } = await exec('npm', ['view', `${entry.name}@${entry.version}`, 'dist.integrity', '--json'], { cwd: projectRoot })
+    const { stdout } = await exec('npm', ['view', `${entry.name}@${entry.version}`, 'dist', '--json'], { cwd: projectRoot })
     return JSON.parse(stdout)
   } catch (error) {
     if (error.stderr?.includes('E404')) return null
@@ -87,14 +89,28 @@ async function remoteIntegrity(entry) {
   }
 }
 
-async function verifyRegistry(entry, tag) {
+async function verifyPackedDistribution(entry, tarball, distribution) {
+  if (distribution.integrity === entry.integrity) return
+  const url = new URL(distribution.tarball)
+  if (url.protocol !== 'https:' || url.hostname !== 'registry.npmjs.org') {
+    throw new Error(`${entry.name}@${entry.version} uses an unexpected registry tarball URL.`)
+  }
+  const response = await fetch(url, { redirect: 'follow' })
+  if (response.status !== 200) throw new Error(`${url} returned HTTP ${response.status}.`)
+  const local = await readFile(tarball)
+  const remote = Buffer.from(await response.arrayBuffer())
+  if (!comparePackedTrees(local, remote)) throw new Error(`${entry.name}@${entry.version} exists with a different package tree.`)
+}
+
+async function verifyRegistry(entry, tag, tarball) {
   for (let attempt = 0; attempt < 36; attempt += 1) {
-    const integrity = await remoteIntegrity(entry)
+    const distribution = await remoteDistribution(entry)
     const tagged = await exec('npm', ['view', entry.name, `dist-tags.${tag}`, '--json'], { cwd: projectRoot })
       .then(({ stdout }) => JSON.parse(stdout), () => null)
-    const attestations = await exec('npm', ['view', `${entry.name}@${entry.version}`, 'dist.attestations', '--json'], { cwd: projectRoot })
-      .then(({ stdout }) => JSON.parse(stdout), () => null)
-    if (integrity === entry.integrity && tagged === entry.version && attestations) return
+    if (distribution && tagged === entry.version && distribution.attestations) {
+      await verifyPackedDistribution(entry, tarball, distribution)
+      return
+    }
     await new Promise((resolvePromise) => setTimeout(resolvePromise, 5000))
   }
   throw new Error(`Registry verification failed for ${entry.name}@${entry.version}.`)
