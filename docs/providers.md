@@ -18,8 +18,8 @@ provider-hosted delegation or completed the full workplace journey.
 ## Status vocabulary
 
 - **Static-compatible**: a runtime can read the authoritative files or a
-  generated static projection. This says nothing about native invocation or
-  continuity.
+  generated static projection. This says nothing about provider-hosted
+  invocation or continuity.
 - **Projection-qualified**: Endroit deterministically generates and packages
   the first-party projection, and its static contract passes parity tests.
   This is an L1 claim, not runtime qualification.
@@ -28,12 +28,12 @@ provider-hosted delegation or completed the full workplace journey.
 - **Qualified**: the provider passes the complete current release journey and
   is maintained as a first-party projection.
 
-When a required native mechanism is unavailable, a projected operation returns
+When a required host mechanism is unavailable, a projected operation returns
 `blocked` and names the missing capability. It never simulates a spawn or
 upgrades Static-compatible evidence to Qualified.
 
 L2–L4 remain unclaimed. Advancing Codex or Claude requires a dated smoke in the
 real provider host, from the packed candidate, covering entry/Wake-up and the
 `call`/`work-as`/`use` journey through retain, accept, deliver and Hygiene. The
-evidence must distinguish successful native behavior from an expected
+evidence must distinguish successful provider-hosted behavior from an expected
 `blocked` result.

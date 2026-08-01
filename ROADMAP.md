@@ -38,7 +38,7 @@ five levels:
 |---|---|
 | L0 | authoritative Home files are readable |
 | L1 | static instructions and capabilities project without loss |
-| L2 | native invocation can call an Occupant and apply a Role |
+| L2 | provider-hosted invocation can call an Occupant and apply a Role |
 | L3 | entry/Wake-up restores place-owned continuity |
 | L4 | the full Workplace-first slice passes local qualification and dogfood |
 
