@@ -128,8 +128,15 @@ jobs:
             sleep 5
           done
           test "$tagged" = "$version"
+          smoke_cli="$RUNNER_TEMP/endroit-smoke-cli"
           smoke_root="$RUNNER_TEMP/endroit-next-smoke"
-          npm exec --yes --package="@endroit/cli@$version" -- endroit create "$smoke_root" --desk tracked --no-interactive --yes
+          npm install --prefix "$smoke_cli" --ignore-scripts --no-audit --no-fund "@endroit/cli@$version"
+          installed="$smoke_cli/node_modules/@endroit/cli"
+          installed_version="$(node -e 'console.log(require(process.argv[1]).version)' "$installed/package.json")"
+          test "$installed_version" = "$version"
+          bin_entry="$(node -e 'const p=require(process.argv[1]); if(typeof p.bin?.endroit!=="string") process.exit(1); console.log(p.bin.endroit)' "$installed/package.json")"
+          test -f "$installed/$bin_entry"
+          node "$installed/$bin_entry" create "$smoke_root" --desk tracked --no-interactive --yes
           cd "$smoke_root"
           node ./endroit.mjs doctor --json | node -e "let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{if(JSON.parse(s).status!=='ready')process.exit(1)})"
           node ./endroit.mjs hygiene maintain --json | node -e "let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{if(JSON.parse(s).readOnly!==true)process.exit(1)})"
