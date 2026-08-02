@@ -2,6 +2,8 @@
 
 > A more intuitive way to work with agents.
 
+> **Your agents are temporary. Your work should compound.**
+
 ## New session. Same workplace.
 
 Your way of working stays. Each agent adapts at the door.
@@ -92,6 +94,8 @@ delivers, repairs or calls another Occupant.
 
 - **Enter:** recover or recenter the Home and Room.
 - **Equip:** call an Occupant, adopt a Role or activate a method.
+- **Advance:** place, delegate and verify an actionable result across its
+  owning Room and sovereign Sites.
 - **Keep:** retain, accept or archive Material.
 - **Reach:** revalidate a Site Route and deliver explicitly.
 - **Maintain:** inspect the Home read-only and approve a bounded repair.
@@ -99,23 +103,55 @@ delivers, repairs or calls another Occupant.
 Endroit makes placement inferable, explainable and correctable. It does not
 infer intent, personalize the model or organize work without human authority.
 
-## Start a Home
+## Bring what you already have
+
+Consider a product split across an application repository, a documentation
+repository and a personal folder of agent instructions. The useful pieces are
+already there, but a new session has to rediscover which source owns what and
+where a result may go.
+
+Give an agent the portable [ADOPT.md](ADOPT.md) adoption guide. It first asks
+which local roots it may inspect, takes a shallow read-only inventory and
+presents plausible Workplace boundaries. For a multi-repository environment,
+the usual recommendation is one standalone Home with the existing repositories
+left in place as sovereign Sites:
+
+```text
+Before                              After adoption
+app repo ─┐                         standalone Home
+docs repo ├─ implicit relationships   ├─ Room: product
+methods ──┘                           ├─ Equipment: existing methods
+                                     ├─ Site + Route: app repo
+                                     └─ Site + Route: docs repo
+```
+
+Choosing a candidate authorizes deeper analysis, not mutation. The agent then
+shows a provenance-backed map and expected diff. Only **Apply this map**
+authorizes the existing Endroit CLI operations. Nothing in the Site repositories
+is moved merely to make the Workplace tidy.
+
+This is general adoption of an existing environment. It is different from the
+version-specific [0.7 → 0.8 migration](docs/migration-0.8.md).
+
+## Adopt or start a Home
 
 Requirements: Git and Node.js 22 or newer. Endroit currently ships L1
 Projection-qualified surfaces for Codex and Claude.
 
-### Install with your agent
+### Install the current published release
 
-Give Codex or Claude this instruction:
+Give Codex or Claude the observed `0.8.0-alpha.1` installation contract:
 
 ```text
 Read https://endroit.org/install.md and set up Endroit here.
 Explain the plan and ask before changing anything.
 ```
 
-The versioned source of that public contract is [INSTALL.md](INSTALL.md). The
-agent inspects and explains; the pinned Endroit CLI applies only the approved
-operation.
+The published source of that contract is [INSTALL.md](INSTALL.md). The local
+[ADOPT.md](ADOPT.md) adoption guide and [WORKPLACE.md](WORKPLACE.md) Profile are
+release candidates for a future version; they are not included in the
+published `0.8.0-alpha.1` package. The agent inspects and explains; the pinned
+Endroit CLI applies only the approved operation.
 
 > **Agent-led. CLI-backed. Human-approved.**
 >
@@ -239,6 +275,18 @@ methodology you must use.
 Endroit is headless. Its canonical state is ordinary files. Generated
 `AGENTS.md`, `CLAUDE.md`, Skills and Commands are provider views built from the
 same owned Home.
+
+The static files, resolver, Floor Plan and projections are the foundation. The
+HUD and other Equipment runtimes are optional capabilities; no daemon or
+orchestration runtime is required for the Workplace to remain legible.
+
+[WORKPLACE.md](WORKPLACE.md) is the local self-contained `endroit/0.8` alpha
+Profile candidate for the `open-workplace/0.1` protocol. The existing
+`endroit/workplace` Equipment injects the candidate into generated Codex and
+Claude Front Doors in this working tree. It tells a temporary Agent how to
+enter, resolve ownership, work through Workplace objects and preserve explicit
+lifecycle boundaries. It is deliberately separate from adoption and is not in
+the published `0.8.0-alpha.1` package.
 
 Endroit does not make the agent smarter. It makes the situation clearer.
 
@@ -376,6 +424,7 @@ the 0.8 journey:
 call-the-researcher   add a temporary Occupant when the provider can do so
 work-as-an-engineer  adopt a Role for one Meeting
 use-research         activate Equipment
+advance-this         place, delegate and verify the current actionable result
 retain-this          keep inspectable Material
 accept-this          accept current Room truth
 deliver-this         act through an explicit, revalidated Route
@@ -390,6 +439,10 @@ they do not prove provider-hosted execution. A missing host mechanism returns
 [HACP](https://github.com/control-decks/human-agent-control-protocol) is an
 independent optional draft semantic protocol. Endroit does not require it and
 never infers a Card from ordinary conversation.
+
+Provider Plan modes, subagent APIs, HACP, MAIN-SESSION, White Card, Grill Me,
+Think It Through, GSD and Impeccable remain external capabilities or harness
+features. Endroit can carry their results without absorbing their controls.
 
 ## What Endroit does not replace
 

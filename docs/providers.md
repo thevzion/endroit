@@ -13,7 +13,9 @@ status applies only to the evidence named here.
 Codex and Claude projections. The Node 22/24, package and Development Home
 gates prove deterministic generation and execute wrapper scripts outside the
 provider hosts. They do not prove that a provider accepted its hook, performed
-provider-hosted delegation or completed the full workplace journey.
+provider-hosted delegation or completed the full workplace journey. This
+includes the static `advance-this` Skill/Command projection, not a claim that a
+host actually spawned subagents.
 
 ## Status vocabulary
 
@@ -31,6 +33,10 @@ provider-hosted delegation or completed the full workplace journey.
 When a required host mechanism is unavailable, a projected operation returns
 `blocked` and names the missing capability. It never simulates a spawn or
 upgrades Static-compatible evidence to Qualified.
+
+Plan modes, subagent APIs, control protocols and workflow harnesses remain
+provider or third-party responsibilities. `advance-this` propagates their
+already-authorized scope when present; Endroit does not implement them.
 
 L2–L4 remain unclaimed. Advancing Codex or Claude requires a dated smoke in the
 real provider host, from the packed candidate, covering entry/Wake-up and the

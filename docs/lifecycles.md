@@ -1,5 +1,27 @@
 # Lifecycles
 
+## Workplace adoption
+
+The portable source for this pre-Home process is [ADOPT.md](../ADOPT.md).
+
+```text
+approved starting directory
+  ├─ find endroit.json in current directory or parents → enter Front Door
+  └─ no Home
+       ├─ Start fresh → proposed create
+       └─ Bring what you have
+            → approve roots
+            → shallow read-only inventory
+            → compare candidates
+            → select candidate (analysis only)
+            → provenance-backed map
+            → "Apply this map"
+            → existing CLI operations → build → doctor → fresh session
+```
+
+Recognition and application are separate authority boundaries. Adoption never
+moves existing Site sources or checkouts merely to match the proposed map.
+
 ## Home bootstrap
 
 ```text
@@ -69,6 +91,20 @@ The Workplace Equipment exposes provider-targeted gestures for all four
 transitions. Endroit objects and operations remain their owners; the provider
 projection only activates them. They are never silently performed by the
 Core.
+
+## Advancing work
+
+```text
+actionable result or plan → resolve owners and Routes
+                          → revalidate before mutation
+                          → delegate independent boundaries when available
+                          → integrate → verify → report
+```
+
+`advance-this` is an optional provider projection of the same behavior normal
+conversation can request. It does not imply a lifecycle transition, commit,
+push or delivery. Durable multi-Site continuity composes optional Planning
+Equipment only with human authority.
 
 ## Home Hygiene
 

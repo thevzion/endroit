@@ -8,9 +8,12 @@
 
 ```mermaid
 flowchart TD
+  adopt["ADOPT.md · local pre-Home adoption candidate"] --> sources
   sources["Home · Members · Desk · Rooms · Equipment · Sites · Routes"] --> kernel["Endroit Kernel"]
   kernel --> plan["Resolved Home + Floor Plan"]
   plan --> projections["Codex and Claude projections"]
+  upstream["open-workplace/0.1 · protocol"] --> protocol["WORKPLACE.md · endroit/0.8 local profile candidate"]
+  protocol --> projections
   plan --> runtime["Approved optional Equipment runtimes"]
   desk["Desk Routes"] --> sites["Sovereign Sites"]
   projections --> meeting["Human-agent Meeting"]
@@ -21,6 +24,18 @@ flowchart TD
 
 `@endroit/cli` is the only package. There is no daemon, registry service,
 public Core package, graph store or required SaaS.
+
+`ADOPT.md` operates before a Home exists. It is a portable human-agent process,
+not a scanner or Kernel command: explicit roots, read-only recognition,
+candidate selection, deeper analysis, a separately approved map, then existing
+CLI operations.
+
+`WORKPLACE.md` is the self-contained local `endroit/0.8` Profile candidate
+targeting the `open-workplace/0.1` protocol for an existing Home. It is owned as an
+Instruction by `endroit/workplace`, so the existing build mechanism injects it
+once into each generated `AGENTS.md` and `CLAUDE.md`. No Kernel branch,
+parallel injection system or provider-specific copy implements this behavior.
+It is not included in the published `0.8.0-alpha.1` package.
 
 Git owns the 0.8 contract sources under `schemas/v7/`; the npm package carries
 the same files for offline validation; `endroit.org/schema/v7/` gives them
@@ -108,3 +123,8 @@ Normal conversation is the default interface. The Front Door situates the
 agent; Room ownership narrows relevant context; Equipment supplies optional
 methods; Routes identify valid destinations. The human decides what is
 retained, accepted, archived or delivered.
+
+The static foundation is sufficient: owned Markdown and JSON sources,
+deterministic resolution, the Floor Plan and rebuildable provider projections.
+HUD, Site tooling and other runtimes add operations but never become required
+for the Workplace to describe itself.

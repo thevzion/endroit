@@ -1,14 +1,38 @@
 # Endroit 0.8 reference
 
 Endroit is a local-first, headless, file-based implementation of the Open
-Workplace model. This reference describes `0.8.0-alpha.1`; the
-[migration guide](migration-0.8.md) is the only 0.7 → 0.8 vocabulary map.
+Workplace model. This reference describes published `0.8.0-alpha.1` behavior
+and labels unreleased working-tree candidates explicitly; the [migration
+guide](migration-0.8.md) is the only 0.7 → 0.8 vocabulary map.
 
 ## Requirements
 
 - Node.js 22 or newer;
 - Git;
 - Codex and/or Claude for L1 Projection-qualified provider surfaces.
+
+## Workplace profile
+
+The local [WORKPLACE.md](../WORKPLACE.md) release candidate is the
+self-contained `endroit/0.8` alpha Profile of `open-workplace/0.1` for an existing Home:
+Workplace-centered continuity, temporary Occupants, owned objects, Front Door
+entry, sovereign Sites, explicit lifecycle transitions and a static file-based
+foundation. `endroit/workplace` injects its canonical Instruction once into
+both generated provider contracts in this working tree. It is not included in
+the published `0.8.0-alpha.1` package.
+
+## Adoption guide
+
+The local [ADOPT.md](../ADOPT.md) release candidate is the portable pre-Home
+entrypoint. It is not included in the published `0.8.0-alpha.1` package.
+It first detects an existing Home from an explicitly selected directory and
+its parents. Otherwise it guides **Start fresh** or **Bring what you have**.
+
+Brownfield recognition is agent-led and read-only: approved roots, shallow
+inventory, multiple candidates, one evidence-backed recommendation, candidate
+selection for deeper analysis, then a separately approved **Apply this map**.
+It adds no `adopt` command, automatic scanner, runtime or schema. [INSTALL.md](../INSTALL.md)
+is the deterministic CLI appendix.
 
 ## CLI surfaces
 
@@ -143,10 +167,15 @@ prefix composition fallback.
 The first-party Workplace Equipment projects human gestures such as
 `enter-the-home`, `enter-the-<room>-room`, `work-on-<site>`,
 `call-the-researcher`, `work-as-an-engineer`, `use-research`, `retain-this`,
-`accept-this`, `deliver-this` and `archive-this`. Entry reloads authoritative
+`advance-this`, `accept-this`, `deliver-this` and `archive-this`. Entry reloads authoritative
 sources and creates no global active-Room state. Provider-hosted call and Role
 operations return `blocked` when the mechanism is unavailable; they never
 simulate an Occupant.
+
+`advance-this` consumes the current actionable result, resolves its Room,
+Sites, Routes and owners, delegates independent boundaries when the provider
+supports it, then integrates and verifies. It never infers continuity or a
+retain, accept, deliver, commit or push transition.
 
 ## Versioned contracts
 
@@ -249,13 +278,13 @@ orientation; its failure cannot remove the Floor Plan.
 
 ## First-party Equipment
 
-- `endroit/onboarding`: consent-first Home and Desk setup;
+- `endroit/onboarding`: consent-first fresh and existing-environment adoption;
 - `endroit/hud`: `show|prompt|json|activity` live orientation;
 - `endroit/rooms`: `create|list|inspect|doctor`;
 - `endroit/artifacts`: Room-owned validated results and promotion;
 - `endroit/sites`: Site, Route and deterministic Git inspection;
-- `endroit/workplace`: provider-projected entry, Occupant, Role, method and
-  lifecycle gestures;
+- `endroit/workplace`: provider-projected entry, Occupant, Role, method,
+  advance and lifecycle gestures;
 - `endroit/hygiene`: read-only `maintain-the-home` inspection and one exactly
   approved bounded repair;
 - `endroit/research`, `planning`, `publishing`, `scratch`: optional methods;
@@ -268,7 +297,8 @@ orientation; its failure cannot remove the Floor Plan.
   runtime qualification remains unclaimed until provider-hosted smoke evidence;
 - provider status and portability levels are recorded in [providers](providers.md);
 - no daemon, semantic index, graph or persistent agent is required;
-- no automated 0.7 migration or submodule manager ships in 0.8;
+- no automatic environment scanner, automated 0.7 migration or submodule
+  manager ships in 0.8;
 - Mounts are optional explicit views for `existing` Routes; Routes always
   resolve their source checkout directly;
 - Endroit never infers remote success or upgrades model intelligence.

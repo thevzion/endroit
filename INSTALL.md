@@ -2,6 +2,18 @@
 
 Endroit is installed **agent-led, CLI-backed and human-approved**.
 
+This is the deterministic CLI appendix to the
+[ADOPT.md](https://endroit.org/adopt.md) adoption guide. Use that guide first
+when the human has existing repositories, instructions or methods to
+recognize. The [Endroit Workplace
+Profile](https://endroit.org/WORKPLACE.md) defines the semantic contract used
+after entry. This file applies only after a Home destination and operation have
+been selected.
+
+The commands below install the observed `@endroit/cli@0.8.0-alpha.1` release.
+`ADOPT.md` and `WORKPLACE.md` are local release-candidate documents and are not
+included in that published package.
+
 If you are an agent reading this file, guide the human through the following
 contract. The CLI applies the changes; you do not reorganize their files
 yourself.
@@ -17,6 +29,9 @@ destination and determine which operation fits:
 
 Do not move or rewrite existing `AGENTS.md`, `CLAUDE.md`, Skills, memory,
 source files or checkouts during bootstrap.
+
+If either canonical instruction filename already exists at the destination,
+stop on the CLI collision. Do not merge, overwrite or rename it implicitly.
 
 ## 2. Present the exact plan
 

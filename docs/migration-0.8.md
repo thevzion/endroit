@@ -4,6 +4,10 @@ Endroit 0.8 is an intentional alpha break. There are no permanent command or
 schema aliases. Migrate in Git, keep the last valid 0.7 commit and preserve
 meaning before renaming files.
 
+This guide upgrades an Endroit 0.7 Home. It is not the general adoption path
+for an existing non-Endroit environment; use the portable
+[ADOPT.md](../ADOPT.md) guide for that.
+
 All active 0.8 documents use `https://endroit.org/schema/v7/<type>.json`.
 Historical unversioned schema URLs remain 0.7 contracts and never redirect to
 v7. Runtime Equipment moves from `endroit.org/runtime/v1alpha1` to
