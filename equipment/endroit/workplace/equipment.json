@@ -4,18 +4,28 @@
   "version": "0.8.0-alpha.1",
   "description": "Human operational gestures for entering, using and advancing work in a Home.",
   "files": [
+    "instructions/profile.md",
     "capabilities/enter.md",
     "capabilities/call.md",
     "capabilities/work-as.md",
     "capabilities/use.md",
+    "capabilities/advance.md",
     "capabilities/lifecycle.md",
     "capabilities/work-on.md"
+  ],
+  "instructions": [
+    {
+      "id": "profile",
+      "path": "instructions/profile.md",
+      "description": "The Endroit Profile for human-agent behavior inside a declared Home."
+    }
   ],
   "capabilities": [
     { "id": "enter", "path": "capabilities/enter.md", "description": "Enter the Home or one Room from authoritative sources." },
     { "id": "call", "path": "capabilities/call.md", "description": "Call the concrete researcher occupant through provider-hosted delegation." },
     { "id": "work-as", "path": "capabilities/work-as.md", "description": "Work through the concrete engineer role for the current Meeting." },
     { "id": "use", "path": "capabilities/use.md", "description": "Use the first-party research method without transferring ownership to the Skill." },
+    { "id": "advance", "path": "capabilities/advance.md", "description": "Advance an actionable result across its owned places and sovereign Sites." },
     { "id": "lifecycle", "path": "capabilities/lifecycle.md", "description": "Retain, accept, deliver or archive the current bounded result explicitly." },
     { "id": "work-on", "path": "capabilities/work-on.md", "description": "Work on or deliver to one declared Site through a revalidated Route." }
   ],
@@ -26,6 +36,7 @@
     { "id": "call-researcher", "capability": "call", "description": "Call the concrete researcher occupant when the provider supports delegation.", "projectedName": "call-the-researcher" },
     { "id": "work-as-engineer", "capability": "work-as", "description": "Work as the concrete engineer role for this Meeting.", "projectedName": "work-as-an-engineer" },
     { "id": "use-research", "capability": "use", "description": "Use the first-party research method in the current place.", "projectedName": "use-research" },
+    { "id": "advance", "capability": "advance", "description": "Advance the current actionable result through its owned places and Sites.", "projectedName": "advance-this" },
     { "id": "retain", "capability": "lifecycle", "description": "Retain the current result as inspectable Material.", "projectedName": "retain-this" },
     { "id": "accept", "capability": "lifecycle", "description": "Accept the current result as owner-authorized truth.", "projectedName": "accept-this" },
     { "id": "deliver", "capability": "lifecycle", "description": "Deliver the current result to its explicit destination.", "projectedName": "deliver-this" },
@@ -39,6 +50,7 @@
     { "id": "call-researcher", "capability": "call", "description": "Call the concrete researcher occupant when the provider supports delegation.", "projectedName": "call-the-researcher" },
     { "id": "work-as-engineer", "capability": "work-as", "description": "Work as the concrete engineer role for this Meeting.", "projectedName": "work-as-an-engineer" },
     { "id": "use-research", "capability": "use", "description": "Use the first-party research method in the current place.", "projectedName": "use-research" },
+    { "id": "advance", "capability": "advance", "description": "Advance the current actionable result through its owned places and Sites.", "projectedName": "advance-this" },
     { "id": "retain", "capability": "lifecycle", "description": "Retain the current result as inspectable Material.", "projectedName": "retain-this" },
     { "id": "accept", "capability": "lifecycle", "description": "Accept the current result as owner-authorized truth.", "projectedName": "accept-this" },
     { "id": "deliver", "capability": "lifecycle", "description": "Deliver the current result to its explicit destination.", "projectedName": "deliver-this" },
