@@ -35,12 +35,19 @@ targeting the `open-workplace/0.1` protocol for an existing Home. It is owned as
 Instruction by `endroit/workplace`, so the existing build mechanism injects it
 once into each generated `AGENTS.md` and `CLAUDE.md`. No Kernel branch,
 parallel injection system or provider-specific copy implements this behavior.
-It is not included in the published `0.8.0-alpha.1` package.
+It is included in the local `0.8.0-alpha.2` package candidate; publication is a
+separate observed effect.
 
 Git owns the 0.8 contract sources under `schemas/v7/`; the npm package carries
 the same files for offline validation; `endroit.org/schema/v7/` gives them
 stable public addresses. Runtime dispatch uses
 `endroit.org/runtime/v2alpha1`. The CLI never downloads a schema to operate.
+
+The experimental `endroit/work` Equipment owns Work Resolution. Kernel-owned
+Artifact discovery supplies the same bounded inventory to the generic Artifact
+and Work runtimes; the Equipment validates and resolves `WORK.json`. This adds
+no graph store, daemon, scheduler or agent registry. The public Work schema is
+a byte-identical projection of the Equipment source.
 
 ## Ownership
 

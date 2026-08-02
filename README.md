@@ -1,8 +1,14 @@
 # Endroit
 
-> A more intuitive way to work with agents.
+> WORKPLACE-FIRST SOFTWARE ENGINEERING
 
-> **Your agents are temporary. Your work should compound.**
+## From intent to verified effect.
+
+Everyone is building better agents. We gave the work a place.
+
+**Resolved for agents. Readable by humans. Versioned with Git.**
+
+> Know what is true. See what is missing. Prove what moves.
 
 ## New session. Same workplace.
 
@@ -103,6 +109,28 @@ delivers, repairs or calls another Occupant.
 Endroit makes placement inferable, explainable and correctable. It does not
 infer intent, personalize the model or organize work without human authority.
 
+## Resolve the work, not the agent
+
+The experimental `endroit/work` Equipment turns selected Room-owned work into
+an inspectable contract. `WORK.json` keeps objective, sources, claims,
+obligations, contradictions, bounded Assignments, verification, observed
+result and human review distinct. The runtime reports the last resolved
+frontier and the exact missing contracts:
+
+```text
+event → object → contract → placement → execution-ready → closure-ready
+```
+
+```bash
+node ./endroit.mjs artifact create item public-proof --room desk/endroit
+node ./endroit.mjs work resolve public-proof
+node ./endroit.mjs work review public-proof
+```
+
+`execution-ready` never means authorized. Work Resolution does not retain an
+agent identity, run a Site preview, change Artifact lifecycle or infer commit,
+delivery or publication consent. See [Work Resolution](docs/work-resolution.md).
+
 ## Bring what you already have
 
 Consider a product split across an application repository, a documentation
@@ -138,20 +166,21 @@ version-specific [0.7 → 0.8 migration](docs/migration-0.8.md).
 Requirements: Git and Node.js 22 or newer. Endroit currently ships L1
 Projection-qualified surfaces for Codex and Claude.
 
-### Install the current published release
+### Install the alpha.2 candidate after publication
 
-Give Codex or Claude the observed `0.8.0-alpha.1` installation contract:
+The repository prepares the `0.8.0-alpha.2` installation contract below. Do
+not treat it as available until the npm artifact is observed; the last
+observed registry release remains `0.8.0-alpha.1`.
 
 ```text
 Read https://endroit.org/install.md and set up Endroit here.
 Explain the plan and ask before changing anything.
 ```
 
-The published source of that contract is [INSTALL.md](INSTALL.md). The local
-[ADOPT.md](ADOPT.md) adoption guide and [WORKPLACE.md](WORKPLACE.md) Profile are
-release candidates for a future version; they are not included in the
-published `0.8.0-alpha.1` package. The agent inspects and explains; the pinned
-Endroit CLI applies only the approved operation.
+The candidate sources are [INSTALL.md](INSTALL.md), [ADOPT.md](ADOPT.md) and
+[WORKPLACE.md](WORKPLACE.md). They are included in the local package candidate;
+publication remains a separate observed effect. The agent inspects and
+explains; the pinned Endroit CLI applies only the approved operation.
 
 > **Agent-led. CLI-backed. Human-approved.**
 >
@@ -162,7 +191,7 @@ Endroit CLI applies only the approved operation.
 Create a standalone Home:
 
 ```bash
-npx --yes --package @endroit/cli@0.8.0-alpha.1 endroit create my-home
+npx --yes --package @endroit/cli@0.8.0-alpha.2 endroit create my-home
 ```
 
 `create` adds a Home-owned Member and, by default, a Desk tracked with the
@@ -173,7 +202,7 @@ Or add a Home to an existing repository:
 
 ```bash
 cd my-existing-repository
-npx --yes --package @endroit/cli@0.8.0-alpha.1 endroit init .
+npx --yes --package @endroit/cli@0.8.0-alpha.2 endroit init .
 ```
 
 `init` defaults to a separate Desk repository under ignored `.desk/`. Both
@@ -230,12 +259,13 @@ The initial human-authored orientation is concentrated in these sources:
 - `rooms/home/ROOM.md` gives the first durable domain a purpose;
 - `.desk/DESK.md` carries personal continuity.
 
-`create` and `init` install seven inspectable foundation Equipment packages:
+`create` and `init` install eight inspectable foundation Equipment packages:
 
 - `endroit/onboarding` — consent-first setup and explanation;
 - `endroit/hud` — live orientation over the static Floor Plan;
 - `endroit/workplace` — entry and workplace gestures;
 - `endroit/artifacts` — durable Artifact lifecycle;
+- `endroit/work` — experimental Work Resolution and bounded review;
 - `endroit/rooms` — Room inspection and diagnostics;
 - `endroit/sites` — Site and Route operations with destructive guards;
 - `endroit/hygiene` — read-only Home maintenance and approved repairs.
@@ -280,13 +310,13 @@ The static files, resolver, Floor Plan and projections are the foundation. The
 HUD and other Equipment runtimes are optional capabilities; no daemon or
 orchestration runtime is required for the Workplace to remain legible.
 
-[WORKPLACE.md](WORKPLACE.md) is the local self-contained `endroit/0.8` alpha
-Profile candidate for the `open-workplace/0.1` protocol. The existing
+[WORKPLACE.md](WORKPLACE.md) is the self-contained `endroit/0.8` alpha Profile
+for the `open-workplace/0.1` protocol. The existing
 `endroit/workplace` Equipment injects the candidate into generated Codex and
 Claude Front Doors in this working tree. It tells a temporary Agent how to
 enter, resolve ownership, work through Workplace objects and preserve explicit
-lifecycle boundaries. It is deliberately separate from adoption and is not in
-the published `0.8.0-alpha.1` package.
+lifecycle boundaries. It is deliberately separate from adoption and is
+included in the local `0.8.0-alpha.2` package candidate.
 
 Endroit does not make the agent smarter. It makes the situation clearer.
 

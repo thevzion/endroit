@@ -5,9 +5,9 @@
 - **Canonical profile address:** `endroit/0.8`
 - **Publisher:** The VZion
 - **Target protocol:** `open-workplace/0.1`
-- **Status:** local alpha release candidate
-- **Release availability:** not included in the published
-  `@endroit/cli@0.8.0-alpha.1` package
+- **Status:** alpha release candidate
+- **Release availability:** included in the local
+  `@endroit/cli@0.8.0-alpha.2` candidate; publication is not inferred
 
 This self-contained Endroit Profile specializes the Open Workplace protocol for an
 Endroit Home. It defines the representation, discovery, resolution and
@@ -150,6 +150,20 @@ Normal conversation is the interface. A provider feature, Skill or Command may
 make one action easier, but it does not replace the Open Workplace protocol,
 this Profile or human authority.
 
+### Work Resolution extension
+
+The experimental `endroit/work` Equipment gives selected Room-owned work a
+machine-readable `WORK.json` contract. It records objective, type, expected
+effect, sources, claims, obligations, contradictions, Assignments,
+verification, observed result and human review. The runtime calculates an
+inspectable frontier from `event` through `closure-ready` and returns exact
+missing contracts without producing a trust score.
+
+`execution-ready` and `closure-ready` describe the Work Item, not external
+authority. They never authorize a Site mutation, lifecycle transition,
+commit, delivery or publication. Open Workplace `0.1` does not require this
+extension; other implementations may resolve work differently.
+
 ## Material lifecycle
 
 Each execution result begins as an ephemeral candidate in the current Meeting
@@ -248,6 +262,8 @@ Endroit extensions are explicitly implementation-owned:
 - **Floor Plan and HUD** provide static and optional live orientation;
 - **Equipment runtimes and projected accessors** expose reusable operations;
 - **Artifact kinds** validate selected Material forms;
+- **Work Resolution** validates proof-carrying Work Items and their explicit
+  review without storing an agent identity or transcript;
 - **Route modes, managed checkouts and Mounts** materialize local Site access;
 - **`.endroit/` state and provider hooks** are local rebuildable machinery.
 

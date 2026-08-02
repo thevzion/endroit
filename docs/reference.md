@@ -1,8 +1,8 @@
 # Endroit 0.8 reference
 
 Endroit is a local-first, headless, file-based implementation of the Open
-Workplace model. This reference describes published `0.8.0-alpha.1` behavior
-and labels unreleased working-tree candidates explicitly; the [migration
+Workplace model. This reference describes the local `0.8.0-alpha.2` candidate
+and labels its unobserved publication explicitly; the [migration
 guide](migration-0.8.md) is the only 0.7 → 0.8 vocabulary map.
 
 ## Requirements
@@ -13,18 +13,18 @@ guide](migration-0.8.md) is the only 0.7 → 0.8 vocabulary map.
 
 ## Workplace profile
 
-The local [WORKPLACE.md](../WORKPLACE.md) release candidate is the
+The [WORKPLACE.md](../WORKPLACE.md) release candidate is the
 self-contained `endroit/0.8` alpha Profile of `open-workplace/0.1` for an existing Home:
 Workplace-centered continuity, temporary Occupants, owned objects, Front Door
 entry, sovereign Sites, explicit lifecycle transitions and a static file-based
 foundation. `endroit/workplace` injects its canonical Instruction once into
-both generated provider contracts in this working tree. It is not included in
-the published `0.8.0-alpha.1` package.
+both generated provider contracts and is included in the local
+`0.8.0-alpha.2` package candidate.
 
 ## Adoption guide
 
-The local [ADOPT.md](../ADOPT.md) release candidate is the portable pre-Home
-entrypoint. It is not included in the published `0.8.0-alpha.1` package.
+The [ADOPT.md](../ADOPT.md) release candidate is the portable pre-Home
+entrypoint included in the local `0.8.0-alpha.2` package candidate.
 It first detects an existing Home from an explicitly selected directory and
 its parents. Otherwise it guides **Start fresh** or **Bring what you have**.
 
@@ -285,6 +285,8 @@ orientation; its failure cannot remove the Floor Plan.
 - `endroit/sites`: Site, Route and deterministic Git inspection;
 - `endroit/workplace`: provider-projected entry, Occupant, Role, method,
   advance and lifecycle gestures;
+- `endroit/work`: `inspect|resolve|review|record-review` for proof-carrying,
+  Room-owned Work Items;
 - `endroit/hygiene`: read-only `maintain-the-home` inspection and one exactly
   approved bounded repair;
 - `endroit/research`, `planning`, `publishing`, `scratch`: optional methods;
@@ -294,9 +296,11 @@ orientation; its failure cannot remove the Floor Plan.
 
 - schemas and grammar may still break before 1.0;
 - Codex and Claude are L1 Projection-qualified first-party targets; L2–L4 live
-  runtime qualification remains unclaimed until provider-hosted smoke evidence;
+runtime qualification remains unclaimed until provider-hosted smoke evidence;
 - provider status and portability levels are recorded in [providers](providers.md);
 - no daemon, semantic index, graph or persistent agent is required;
+- Work Resolution remains an experimental Endroit extension; see
+  [Work Resolution](work-resolution.md);
 - no automatic environment scanner, automated 0.7 migration or submodule
   manager ships in 0.8;
 - Mounts are optional explicit views for `existing` Routes; Routes always

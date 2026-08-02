@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.0-alpha.2
+
+- Add experimental `endroit/work:item` Artifacts with a public, versioned
+  `WORK.json` contract for sources, claims, obligations, contradictions,
+  Assignments, verification, observed results and human review.
+- Add the deterministic Work Resolution Frontier and
+  `work inspect|resolve|review|record-review` runtime without inferring
+  lifecycle or external authority.
+- Project `resolve-work` and `click-and-review` to Codex and Claude from one
+  Equipment-owned source.
+- Include the Endroit 0.8 Workplace Profile and brownfield adoption guide in
+  the local package candidate.
+- Prepare a source-pinned documentation projection while keeping canonical
+  product truth in the Endroit repository.
+
 ## 0.8.0-alpha.1
 
 - Preflight every generated projection before `endroit init` mutates a
