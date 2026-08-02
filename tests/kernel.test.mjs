@@ -206,7 +206,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
       $schema: 'https://endroit.org/schema/v7/home.json',
       name: 'home',
       emoji: '🏠',
-      runtime: '@endroit/cli@0.8.0-alpha.1',
+      runtime: '@endroit/cli@0.8.0-alpha.2',
       providers: ['codex', 'claude'],
       prefix: 'acme',
       frontDoor: { wakeUp: 'endroit/hud:prompt' },
@@ -264,7 +264,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
     assert.equal((await doctorHome(home)).status, 'ready')
     await buildHome(home, { check: true })
     const plan = await resolveHome(home)
-    assert.deepEqual(plan.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'hygiene', 'room', 'site'])
+    assert.deepEqual(plan.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'hygiene', 'room', 'site', 'work'])
     assert.deepEqual(plan.frontDoor, {
       route: 'endroit/hud:prompt',
       owner: 'endroit/hud',
@@ -440,7 +440,7 @@ process.stdout.write('<wake-up source="' + process.env.ENDROIT_RUNTIME_SOURCE + 
     assert.equal(npm.stdout, '<wake-up source="npm"/>\n')
     assert.deepEqual(JSON.parse(await readFile(argsPath, 'utf8')), [
       '--yes',
-      '@endroit/cli@0.8.0-alpha.1',
+      '@endroit/cli@0.8.0-alpha.2',
       'hud',
       'prompt',
     ])

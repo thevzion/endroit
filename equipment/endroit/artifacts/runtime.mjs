@@ -126,61 +126,7 @@ function extraFields(entries) {
 }
 
 async function listArtifacts(input) {
-  const roots = []
-  for (const room of input.resolvedHome.rooms ?? []) {
-    roots.push({
-      scope: room.scope,
-      room,
-      path: dirname(join(input.homeRoot, room.path)),
-      legacy: false,
-    })
-  }
-  roots.push(
-    { scope: 'home', path: join(input.homeRoot, 'artifacts'), legacy: true },
-    ...(input.deskRoot ? [{ scope: 'desk', path: join(input.deskRoot, 'artifacts'), legacy: true }] : []),
-  )
-  for (const site of input.resolvedHome.sites ?? []) {
-    for (const route of await routes(input, site.id)) {
-      for (const kind of input.resolvedHome.artifactKinds.filter((entry) => entry.owners.includes('site') && entry.sitePath)) {
-        roots.push({
-          scope: `site:${site.id}`,
-          route: route.id,
-          site: site.id,
-          path: join(route.path, kind.sitePath),
-          legacy: false,
-        })
-      }
-    }
-  }
-  const found = []
-  const seen = new Set()
-  for (const root of roots) {
-    for (const path of await findNamed(root.path, 'artifact.md')) {
-      const key = await realpath(path).catch(() => path)
-      if (seen.has(key)) continue
-      seen.add(key)
-      const directory = await realpath(dirname(path)).catch(() => dirname(path))
-      try {
-        const parsed = parseArtifact(await readFile(path, 'utf8'))
-        const metadata = normalizeMetadata(parsed.metadata)
-        const kind = selectKind(input.resolvedHome, metadata.kind)
-        const room = root.room ?? roomFromOwner(metadata.owner, input.resolvedHome.rooms)
-        found.push({
-          ...metadata,
-          scope: root.scope,
-          ...(room ? { room: room.id } : {}),
-          ...(root.site ? { site: root.site } : {}),
-          ...(root.route ? { route: root.route } : {}),
-          ref: room ? artifactRef(room, kind, metadata.id) : legacyRef(metadata, root),
-          path: directory,
-          legacy: root.legacy || isLegacyMetadata(parsed.metadata),
-        })
-      } catch (error) {
-        found.push({ scope: root.scope, path: directory, legacy: root.legacy, invalid: error.message })
-      }
-    }
-  }
-  return found.sort((left, right) => `${left.kind}:${left.id}:${left.scope}`.localeCompare(`${right.kind}:${right.id}:${right.scope}`))
+  return input.artifacts ?? []
 }
 
 async function inspectArtifact(input, selector) {
@@ -334,10 +280,6 @@ function artifactRef(room, kind, id) {
   return `artifact:${room.scope}/${room.id}/${kind.roomNamespace}/${kind.localId}/${id}`
 }
 
-function legacyRef(metadata, root) {
-  return `artifact:${root.scope}/${metadata.kind}/${metadata.id}@${metadata.created_at}`
-}
-
 function parseDestination(value) {
   const normalized = String(value).replace(/^room:/, '')
   const [scope, ...segments] = normalized.split('/')
@@ -363,10 +305,6 @@ function normalizeMetadata(raw) {
     updated_at: raw.updated_at ?? createdAt,
     derived_from: values(raw.derived_from ?? raw.derivedFrom),
   }
-}
-
-function isLegacyMetadata(raw) {
-  return raw.state !== undefined || raw.createdAt !== undefined || raw.derivedFrom !== undefined
 }
 
 async function installRequiredFiles(stage, kind) {
@@ -471,20 +409,6 @@ function parseArtifact(content) {
     try { metadata[key] = JSON.parse(value) } catch { metadata[key] = value }
   }
   return { metadata, body: match[2] }
-}
-
-async function findNamed(root, name) {
-  const found = []
-  async function visit(directory) {
-    for (const entry of await safeReadDir(directory)) {
-      const path = join(directory, entry.name)
-      if (entry.isSymbolicLink()) continue
-      if (entry.isDirectory()) await visit(path)
-      else if (entry.isFile() && entry.name === name) found.push(path)
-    }
-  }
-  await visit(root)
-  return found
 }
 
 async function safeReadDir(path) {

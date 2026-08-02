@@ -64,8 +64,8 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     assert.equal(model.kernel.invoke, 'node ./endroit.mjs')
     assert.deepEqual(model.desk.preferences, { addressAs: 'Alexis', responseLanguage: 'fr' })
     assert.equal(model.projections.every((entry) => entry.status === 'fresh'), true)
-    assert.deepEqual(model.surfaces.equipment.map((entry) => entry.id), ['endroit/artifacts', 'endroit/hud', 'endroit/hygiene', 'endroit/onboarding', 'endroit/rooms', 'endroit/sites', 'endroit/workplace'])
-    assert.deepEqual(model.surfaces.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'hygiene', 'room', 'site'])
+    assert.deepEqual(model.surfaces.equipment.map((entry) => entry.id), ['endroit/artifacts', 'endroit/hud', 'endroit/hygiene', 'endroit/onboarding', 'endroit/rooms', 'endroit/sites', 'endroit/work', 'endroit/workplace'])
+    assert.deepEqual(model.surfaces.runtimes.map((entry) => entry.namespace), ['artifact', 'hud', 'hygiene', 'room', 'site', 'work'])
     assert.deepEqual(
       model.trust.runtimes.map((entry) => [entry.owner, entry.trust]),
       [
@@ -74,10 +74,11 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
         ['endroit/hygiene', 'bundled'],
         ['endroit/rooms', 'bundled'],
         ['endroit/sites', 'bundled'],
+        ['endroit/work', 'bundled'],
       ],
     )
     assert.deepEqual({ bundled: model.trust.bundled, approved: model.trust.approved, pending: model.trust.pending }, {
-      bundled: 5,
+      bundled: 6,
       approved: 0,
       pending: 0,
     })
@@ -96,9 +97,9 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
     await dispatchRuntime(home, 'hud', ['prompt'], prompt.io)
     assert.match(prompt.stdout(), /^<endroit-hud version="2" status="ready" generated-at="[^"]+" event="command">/)
     assert.match(prompt.stdout(), new RegExp(`<home name="home" emoji="🏠" root="${escapeRegex(model.home.root)}" providers="codex,claude" members="owner"/>`))
-    assert.match(prompt.stdout(), /<kernel runtime="@endroit\/cli@0\.8\.0-alpha\.1" source="npm" invoke="node \.\/endroit\.mjs"\/>/)
+    assert.match(prompt.stdout(), /<kernel runtime="@endroit\/cli@0\.8\.0-alpha\.2" source="npm" invoke="node \.\/endroit\.mjs"\/>/)
     assert.match(prompt.stdout(), /<item id="demo" emoji="🎛️" state="active" access="model,user" summary="Demo Room\." tags="demo" when="Working on the demo\." ref="room:desk\/demo"/)
-    assert.match(prompt.stdout(), /<runtimes namespaces="artifact,hud,hygiene,room,site"\/>/)
+    assert.match(prompt.stdout(), /<runtimes namespaces="artifact,hud,hygiene,room,site,work"\/>/)
     assert.match(prompt.stdout(), /<instruction owner="endroit\/desk" id="desk" source="DESK\.md">/)
     assert.match(prompt.stdout(), /<advisory>\s+<item subject="home" code="home-dirty">/)
     assert.doesNotMatch(prompt.stdout(), /<equipment>|<skills>|<commands>|<recent-desk>/)
@@ -120,7 +121,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
 
     const human = captureIo()
     await dispatchRuntime(home, 'hud', ['show'], human.io)
-    assert.equal(human.stdout().split('\n')[0], 'ENDROIT    home · codex+claude · @endroit/cli@0.8.0-alpha.1 · npm · ready')
+    assert.equal(human.stdout().split('\n')[0], 'ENDROIT    home · codex+claude · @endroit/cli@0.8.0-alpha.2 · npm · ready')
   } finally {
     await removeTree(temporary, { force: true })
   }
@@ -158,12 +159,12 @@ test('HUD prompt groups canonical capabilities within fresh and mature budgets',
     const second = captureIo()
     assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], first.io), 0, first.stderr())
     assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], second.io), 0, second.stderr())
-    assert.ok(Buffer.byteLength(first.stdout()) <= 6750, `fresh HUD is ${Buffer.byteLength(first.stdout())} B`)
+    assert.ok(Buffer.byteLength(first.stdout()) <= 7000, `fresh HUD is ${Buffer.byteLength(first.stdout())} B`)
     assert.equal(normalizeGeneratedAt(first.stdout()), normalizeGeneratedAt(second.stdout()))
     const capabilities = first.stdout().match(/<capabilities>([\s\S]*?)<\/capabilities>/)?.[1] ?? ''
     assert.match(capabilities, /ref="capability:endroit\/onboarding:onboard"[^\n]+entrypoints="endroit-onboarding"/)
     assert.match(capabilities, /ref="capability:endroit\/workplace:lifecycle"[^\n]+entrypoints="accept-this,archive-this,deliver-this,retain-this"/)
-    for (const summary of new Set(model.items.capabilities.map((entry) => entry.summary))) {
+    for (const summary of new Set(model.items.capabilities.filter((entry) => entry.access.includes('model')).map((entry) => entry.summary))) {
       assert.equal((capabilities.match(new RegExp(`summary="${escapeRegex(summary)}"`, 'g')) ?? []).length, 1, summary)
     }
 

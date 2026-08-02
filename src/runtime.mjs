@@ -2,6 +2,7 @@ import { spawn } from 'node:child_process'
 import { realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { allInstalledEquipment, equipmentDigest, installedEquipmentDigest, resolveEquipment } from './equipment.mjs'
+import { listArtifacts } from './artifacts.mjs'
 import { API, validateDocument } from './contracts.mjs'
 import { loadDesk } from './desk.mjs'
 import { EndroitError } from './lib/errors.mjs'
@@ -90,6 +91,9 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
     },
     ...(runtime.owner === 'endroit/hygiene' ? {
       inspection: { homeDoctor: await (await import('./doctor.mjs')).doctorHome(root) },
+    } : {}),
+    ...(['endroit/artifacts', 'endroit/work'].includes(runtime.owner) ? {
+      artifacts: await listArtifacts(homeRoot, deskRoot, plan),
     } : {}),
   }
   await validateDocument(input, 'runtime')

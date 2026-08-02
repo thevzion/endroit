@@ -1,7 +1,7 @@
 {
   "$schema": "https://endroit.org/schema/v7/equipment.json",
   "name": "endroit/research",
-  "version": "0.8.0-alpha.1",
+  "version": "0.8.0-alpha.2",
   "description": "Reusable evidence-backed research continuity owned by one Room.",
   "prefix": "research",
   "roomNamespace": "researching",

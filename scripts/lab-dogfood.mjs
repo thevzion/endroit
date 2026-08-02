@@ -33,7 +33,7 @@ try {
   assert.match(claude, /^<endroit-hud /)
   assert.match(claude, /<kernel [^>]*source="development"/)
   const status = JSON.parse((await exec(process.execPath, [...consoleArgs, 'equipment', 'status', '--json'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
-  const coreEquipment = ['endroit/artifacts', 'endroit/hud', 'endroit/hygiene', 'endroit/onboarding', 'endroit/rooms', 'endroit/scratch', 'endroit/sites', 'endroit/workplace']
+  const coreEquipment = ['endroit/artifacts', 'endroit/hud', 'endroit/hygiene', 'endroit/onboarding', 'endroit/rooms', 'endroit/scratch', 'endroit/sites', 'endroit/work', 'endroit/workplace']
   assert.deepEqual(status.map((entry) => entry.name), coreEquipment)
   assert.ok(status.every((entry) => entry.state === 'clean'))
   const sync = JSON.parse((await exec(process.execPath, [...consoleArgs, 'equipment', 'sync', 'endroit/scratch', '--check', '--json'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
@@ -49,7 +49,7 @@ try {
   assert.deepEqual(rooms.rooms.map(({ ref }) => ref), ['room:home/home'])
   const sites = JSON.parse((await exec(process.execPath, [...consoleArgs, 'site', 'list', '--json'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
   assert.equal(sites.sites[0].routes[0].id, 'main')
-  assert.equal(JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')).runtime, '@endroit/cli@0.8.0-alpha.1')
+  assert.equal(JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')).runtime, '@endroit/cli@0.8.0-alpha.2')
   console.log(`packed lab passed (${home})`)
 } finally {
   await removeTree(temporary, { force: true })

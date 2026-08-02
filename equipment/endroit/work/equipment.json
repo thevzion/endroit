@@ -1,0 +1,65 @@
+{
+  "$schema": "https://endroit.org/schema/v7/equipment.json",
+  "name": "endroit/work",
+  "version": "0.8.0-alpha.2",
+  "description": "Experimental resolution of Room-owned work from explicit intent to inspectable evidence and review.",
+  "prefix": "work",
+  "roomNamespace": "working",
+  "files": [
+    "capabilities/resolve.md",
+    "capabilities/review.md",
+    "schemas/artifact.schema.json",
+    "schemas/work.schema.json",
+    "templates/item.md",
+    "templates/WORK.json",
+    "runtime.mjs"
+  ],
+  "capabilities": [
+    {
+      "id": "resolve",
+      "path": "capabilities/resolve.md",
+      "description": "Resolve the current frontier, missing contracts and proof obligations of one Work Item."
+    },
+    {
+      "id": "review",
+      "path": "capabilities/review.md",
+      "description": "Present and record a bounded human review without accepting or delivering the Work Item."
+    }
+  ],
+  "skills": [
+    {
+      "id": "resolve",
+      "capability": "resolve",
+      "description": "Resolve one owned Work Item before execution or closure.",
+      "projectedName": "resolve-work"
+    }
+  ],
+  "commands": [
+    {
+      "id": "click-and-review",
+      "capability": "review",
+      "description": "Inspect ordered surfaces and record explicit human review outcomes.",
+      "projectedName": "click-and-review"
+    }
+  ],
+  "artifactKinds": [
+    {
+      "id": "item",
+      "schema": "schemas/artifact.schema.json",
+      "template": "templates/item.md",
+      "owners": ["desk", "home"],
+      "states": ["draft", "active", "review", "complete", "cancelled"],
+      "requiredFiles": ["templates/WORK.json"]
+    }
+  ],
+  "runtime": {
+    "namespace": "work",
+    "entry": "runtime.mjs",
+    "commands": [
+      { "name": "inspect", "description": "Inspect one Work Item and its typed contract." },
+      { "name": "resolve", "description": "Calculate the deterministic Work Resolution Frontier." },
+      { "name": "review", "description": "List ordered human review targets and their local availability." },
+      { "name": "record-review", "description": "Atomically record one explicit review outcome." }
+    ]
+  }
+}

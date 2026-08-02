@@ -164,7 +164,7 @@ test('the static vertical slice is concrete on Codex and Claude and fails closed
     await createHome(home)
     const gestures = [
       'enter-the-home', 'enter-the-home-room', 'call-the-researcher',
-      'work-as-an-engineer', 'use-research', 'advance-this', 'retain-this', 'accept-this',
+      'work-as-an-engineer', 'use-research', 'advance-this', 'resolve-work', 'click-and-review', 'retain-this', 'accept-this',
       'deliver-this', 'archive-this', 'maintain-the-home',
     ]
     for (const providerRoot of ['.agents/skills', '.claude/skills']) {
@@ -177,7 +177,7 @@ test('the static vertical slice is concrete on Codex and Claude and fails closed
       assert.equal((contract.match(/# Endroit Workplace Profile/g) ?? []).length, 1)
       assert.match(contract, /Target protocol:\*\* `open-workplace\/0\.1`/)
       assert.match(contract, /Canonical profile address:\*\* `endroit\/0\.8`/)
-      assert.match(contract, /Status:\*\* local alpha release candidate/)
+      assert.match(contract, /Status:\*\* alpha release candidate/)
       assert.match(contract, /The center of gravity is the Workplace, not the agent\./)
       assert.match(contract, /An agent is present, not resident\./)
     }
@@ -220,8 +220,8 @@ test('the Endroit Profile and adoption guide disclose separate responsibilities 
   assert.match(profile, /Canonical profile address:\*\* `endroit\/0\.8`/)
   assert.match(profile, /Publisher:\*\* The VZion/)
   assert.match(profile, /Target protocol:\*\* `open-workplace\/0\.1`/)
-  assert.match(profile, /Status:\*\* local alpha release candidate/)
-  assert.match(profile, /not included in the published\s+`@endroit\/cli@0\.8\.0-alpha\.1` package/)
+  assert.match(profile, /Status:\*\* alpha release candidate/)
+  assert.match(profile, /included in the local\s+`@endroit\/cli@0\.8\.0-alpha\.2` candidate/)
   assert.match(profile, /self-contained Endroit Profile specializes the Open Workplace protocol/)
   assert.match(profile, /directory containing it is the Home root; the Home declarations\s+define its trust boundary\. Colocated Site files remain Site-owned/)
   assert.equal((profile.match(/https:\/\/endroit\.org\/adopt\.md/g) ?? []).length, 2)
@@ -257,8 +257,8 @@ test('the Endroit Profile and adoption guide disclose separate responsibilities 
   assert.match(onboarding, /source-owned `ADOPT\.md` release-candidate\s+guide/)
   assert.match(install, /\[ADOPT\.md\]\(https:\/\/endroit\.org\/adopt\.md\)/)
   assert.match(install, /\[Endroit Workplace\s+Profile\]\(https:\/\/endroit\.org\/WORKPLACE\.md\)/)
-  assert.match(install, /commands below install the observed `@endroit\/cli@0\.8\.0-alpha\.1` release/)
-  assert.match(install, /local release-candidate documents[\s\S]*not\s+included in that published package/)
+  assert.match(install, /commands below target the local `@endroit\/cli@0\.8\.0-alpha\.2` release\s+candidate/)
+  assert.match(install, /last\s+observed published release is `0\.8\.0-alpha\.1`/)
   assert.equal('runtime' in workplace, false)
   assert.equal('runtime' in onboardingManifest, false)
   assert.doesNotMatch(cli, /command === ['"]adopt['"]/)
@@ -268,6 +268,8 @@ test('the Endroit Profile and adoption guide disclose separate responsibilities 
   assert.equal(workplace.capabilities.some(({ id }) => id === 'advance'), true)
   assert.equal(workplace.skills.some(({ projectedName }) => projectedName === 'advance-this'), true)
   assert.equal(workplace.commands.some(({ projectedName }) => projectedName === 'advance-this'), true)
+  assert.match(profile, /### Work Resolution extension/)
+  assert.match(profile, /execution-ready` and `closure-ready` describe the Work Item, not external\s+authority/)
 })
 
 test('Home Hygiene composes Doctors read-only and repairs only an exactly approved finding', async () => {

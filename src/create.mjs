@@ -13,7 +13,7 @@ import { digest, exists, removeTree, writeFileAtomic, writeJsonAtomic } from './
 import { createMember } from './member.mjs'
 import { writeRoute, writeSite } from './sites.mjs'
 
-export const bootstrapEquipment = ['@endroit/onboarding', '@endroit/hud', '@endroit/artifacts', '@endroit/sites', '@endroit/rooms', '@endroit/workplace', '@endroit/hygiene']
+export const bootstrapEquipment = ['@endroit/onboarding', '@endroit/hud', '@endroit/artifacts', '@endroit/sites', '@endroit/rooms', '@endroit/workplace', '@endroit/work', '@endroit/hygiene']
 
 export async function createHome(destination, options = {}) {
   const site = resolve(destination)
