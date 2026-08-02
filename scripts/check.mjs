@@ -72,6 +72,16 @@ assert.match(releaseWorkflow, /smoke-next:/)
 const installDocument = await readFile(join(root, 'INSTALL.md'), 'utf8')
 assert.match(installDocument, /@endroit\/cli@0\.8\.0-alpha\.1/)
 assert.match(installDocument, /The agent guides\. The CLI applies\. The human approves\./)
+assert.equal(
+  await readFile(join(root, 'WORKPLACE.md'), 'utf8'),
+  await readFile(join(root, 'equipment/endroit/workplace/instructions/profile.md'), 'utf8'),
+  'WORKPLACE.md must be byte-identical to the Workplace Equipment Profile instruction',
+)
+assert.equal(
+  await readFile(join(root, 'ADOPT.md'), 'utf8'),
+  await readFile(join(root, 'equipment/endroit/onboarding/references/adopt.md'), 'utf8'),
+  'ADOPT.md must be byte-identical to the Onboarding Equipment adoption reference',
+)
 const all = await files(root)
 assert.equal(all.some((path) => path.endsWith('endroit.lock.json')), false)
 for (const path of all.filter((path) => path.endsWith('.mjs'))) execFileSync(process.execPath, ['--check', path], { stdio: 'pipe' })

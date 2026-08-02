@@ -51,6 +51,8 @@
     "templates/",
     "schemas/v7/",
     "src/",
+    "WORKPLACE.md",
+    "ADOPT.md",
     "INSTALL.md",
     "LICENSE",
     "README.md"

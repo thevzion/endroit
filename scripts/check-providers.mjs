@@ -18,7 +18,7 @@ try {
     'endroit-home', 'endroit-onboarding', 'endroit-artifacts', 'endroit-site-manage',
     'endroit-site-map', 'endroit-scratch', 'enter-the-home', 'enter-the-home-room',
     'call-the-researcher', 'work-as-an-engineer', 'use-research', 'retain-this',
-    'accept-this', 'deliver-this', 'archive-this', 'maintain-the-home',
+    'advance-this', 'accept-this', 'deliver-this', 'archive-this', 'maintain-the-home',
   ]) {
     const codex = await readFile(join(home, '.agents/skills', id, 'SKILL.md'), 'utf8')
     const claude = await readFile(join(home, '.claude/skills', id, 'SKILL.md'), 'utf8')

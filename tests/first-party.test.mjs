@@ -158,7 +158,7 @@ test('HUD prompt groups canonical capabilities within fresh and mature budgets',
     const second = captureIo()
     assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], first.io), 0, first.stderr())
     assert.equal(await dispatchRuntime(home, 'hud', ['prompt'], second.io), 0, second.stderr())
-    assert.ok(Buffer.byteLength(first.stdout()) <= 6500, `fresh HUD is ${Buffer.byteLength(first.stdout())} B`)
+    assert.ok(Buffer.byteLength(first.stdout()) <= 6750, `fresh HUD is ${Buffer.byteLength(first.stdout())} B`)
     assert.equal(normalizeGeneratedAt(first.stdout()), normalizeGeneratedAt(second.stdout()))
     const capabilities = first.stdout().match(/<capabilities>([\s\S]*?)<\/capabilities>/)?.[1] ?? ''
     assert.match(capabilities, /ref="capability:endroit\/onboarding:onboard"[^\n]+entrypoints="endroit-onboarding"/)

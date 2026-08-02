@@ -164,12 +164,24 @@ test('the static vertical slice is concrete on Codex and Claude and fails closed
     await createHome(home)
     const gestures = [
       'enter-the-home', 'enter-the-home-room', 'call-the-researcher',
-      'work-as-an-engineer', 'use-research', 'retain-this', 'accept-this',
+      'work-as-an-engineer', 'use-research', 'advance-this', 'retain-this', 'accept-this',
       'deliver-this', 'archive-this', 'maintain-the-home',
     ]
     for (const providerRoot of ['.agents/skills', '.claude/skills']) {
       for (const gesture of gestures) assert.equal(await readFile(join(home, providerRoot, gesture, 'SKILL.md'), 'utf8').then(Boolean), true)
     }
+    const agents = await readFile(join(home, 'AGENTS.md'), 'utf8')
+    const claude = await readFile(join(home, 'CLAUDE.md'), 'utf8')
+    for (const contract of [agents, claude]) {
+      assert.equal((contract.match(/## endroit\/workplace:profile/g) ?? []).length, 1)
+      assert.equal((contract.match(/# Endroit Workplace Profile/g) ?? []).length, 1)
+      assert.match(contract, /Target protocol:\*\* `open-workplace\/0\.1`/)
+      assert.match(contract, /Canonical profile address:\*\* `endroit\/0\.8`/)
+      assert.match(contract, /Status:\*\* local alpha release candidate/)
+      assert.match(contract, /The center of gravity is the Workplace, not the agent\./)
+      assert.match(contract, /An agent is present, not resident\./)
+    }
+    assert.equal(agents, claude)
     for (const gesture of ['call-the-researcher', 'work-as-an-engineer']) {
       assert.match(await readFile(join(home, '.agents/skills', gesture, 'SKILL.md'), 'utf8'), /return `blocked`/i)
       assert.match(await readFile(join(home, '.claude/skills', gesture, 'SKILL.md'), 'utf8'), /return `blocked`/i)
@@ -181,9 +193,81 @@ test('the static vertical slice is concrete on Codex and Claude and fails closed
     assert.match(lifecycle, /does not update Room truth/)
     assert.match(lifecycle, /removes its active link from `ROOM\.md`/)
     assert.match(lifecycle, /Never create a candidate-notes section or file/)
+    const advance = await readFile(join(home, '.agents/skills/advance-this/SKILL.md'), 'utf8')
+    assert.match(advance, /Normal conversation[\s\S]*implement this plan/i)
+    assert.match(advance, /revalidate every Route immediately before its\s+mutation/i)
+    assert.match(advance, /never infer retain, accept, archive, deliver, commit, push/i)
   } finally {
     await removeTree(temporary, { force: true })
   }
+})
+
+test('the Endroit Profile and adoption guide disclose separate responsibilities and release status', async () => {
+  const profile = await readFile(new URL('../WORKPLACE.md', import.meta.url), 'utf8')
+  const adoption = await readFile(new URL('../ADOPT.md', import.meta.url), 'utf8')
+  const install = await readFile(new URL('../INSTALL.md', import.meta.url), 'utf8')
+  const packageDocument = JSON.parse(await readFile(new URL('../package.json', import.meta.url), 'utf8'))
+  const workplace = JSON.parse(await readFile(new URL('../equipment/endroit/workplace/equipment.json', import.meta.url), 'utf8'))
+  const onboardingManifest = JSON.parse(await readFile(new URL('../equipment/endroit/onboarding/equipment.json', import.meta.url), 'utf8'))
+  const onboarding = await readFile(new URL('../equipment/endroit/onboarding/capabilities/onboard.md', import.meta.url), 'utf8')
+  const cli = await readFile(new URL('../src/cli.mjs', import.meta.url), 'utf8')
+
+  assert.equal(packageDocument.files.includes('WORKPLACE.md'), true)
+  assert.equal(packageDocument.files.includes('ADOPT.md'), true)
+  assert.equal(packageDocument.files.includes('INSTALL.md'), true)
+  assert.match(profile, /Profile identifier:\*\* `endroit`/)
+  assert.match(profile, /Profile version:\*\* `0\.8`/)
+  assert.match(profile, /Canonical profile address:\*\* `endroit\/0\.8`/)
+  assert.match(profile, /Publisher:\*\* The VZion/)
+  assert.match(profile, /Target protocol:\*\* `open-workplace\/0\.1`/)
+  assert.match(profile, /Status:\*\* local alpha release candidate/)
+  assert.match(profile, /not included in the published\s+`@endroit\/cli@0\.8\.0-alpha\.1` package/)
+  assert.match(profile, /self-contained Endroit Profile specializes the Open Workplace protocol/)
+  assert.match(profile, /directory containing it is the Home root; the Home declarations\s+define its trust boundary\. Colocated Site files remain Site-owned/)
+  assert.equal((profile.match(/https:\/\/endroit\.org\/adopt\.md/g) ?? []).length, 2)
+  for (const section of [
+    'Discovery', 'Instance identity', 'Object and relationship mapping',
+    'Authority and composition', 'Material lifecycle', 'Sites and Routes',
+    'Projections', 'Degraded mode', 'Validation', 'Limits and extensions',
+  ]) assert.match(profile, new RegExp(`## ${section}`), section)
+  for (const object of [
+    'Workplace', 'Home', 'Member', 'Desk', 'Room', 'Meeting', 'Occupant',
+    'Role', 'Equipment', 'Material', 'Site', 'Route',
+  ]) assert.match(profile, new RegExp(`\\| ${object} \\|`), object)
+  assert.match(profile, /Relationships remain source-backed/)
+  assert.match(profile, /duplicate Room[\s\S]*projection surface collisions[\s\S]*reports `ambiguous`/)
+  assert.match(profile, /provider projection names\s+its source or owner/)
+  assert.match(profile, /If the tracked Console or matching runtime is unavailable[\s\S]*report `ambiguous`/)
+  assert.match(profile, /does not represent a durable Occupant registry, durable Role\s+assignment or canonical live Meeting/)
+  assert.match(profile, /Endroit extensions are explicitly implementation-owned/)
+  assert.match(profile, /center of gravity is the Workplace, not the agent/i)
+  assert.match(profile, /Never infer retain, accept, archive, deliver, commit, push,\s+publication or deployment/)
+  assert.doesNotMatch(profile, /name the exact local roots|Apply this map/)
+  assert.match(adoption, /Start fresh/)
+  assert.match(adoption, /Bring what you have/)
+  assert.match(adoption, /portable, pre-Home adoption guide/)
+  assert.doesNotMatch(adoption, /adoption protocol|stop this protocol|This protocol/)
+  assert.match(adoption, /name the exact local roots/)
+  assert.match(adoption, /candidate selection authorizes deeper analysis[\s\S]*does not authorize mutation/i)
+  assert.match(adoption, /Apply this map/)
+  assert.match(adoption, /Do not scan the user's home directory by default/)
+  assert.match(adoption, /Do not follow symlinks\s+outside the approved roots/)
+  assert.match(adoption, /Existing product files and checkouts stay where they are/)
+  assert.match(onboarding, /two\s+separate consent boundaries/)
+  assert.match(onboarding, /source-owned `ADOPT\.md` release-candidate\s+guide/)
+  assert.match(install, /\[ADOPT\.md\]\(https:\/\/endroit\.org\/adopt\.md\)/)
+  assert.match(install, /\[Endroit Workplace\s+Profile\]\(https:\/\/endroit\.org\/WORKPLACE\.md\)/)
+  assert.match(install, /commands below install the observed `@endroit\/cli@0\.8\.0-alpha\.1` release/)
+  assert.match(install, /local release-candidate documents[\s\S]*not\s+included in that published package/)
+  assert.equal('runtime' in workplace, false)
+  assert.equal('runtime' in onboardingManifest, false)
+  assert.doesNotMatch(cli, /command === ['"]adopt['"]/)
+  assert.deepEqual(workplace.instructions.map(({ id, path }) => ({ id, path })), [{ id: 'profile', path: 'instructions/profile.md' }])
+  assert.deepEqual(onboardingManifest.references.map(({ id, path }) => ({ id, path })), [{ id: 'adopt', path: 'references/adopt.md' }])
+  assert.equal(workplace.files.includes('capabilities/advance.md'), true)
+  assert.equal(workplace.capabilities.some(({ id }) => id === 'advance'), true)
+  assert.equal(workplace.skills.some(({ projectedName }) => projectedName === 'advance-this'), true)
+  assert.equal(workplace.commands.some(({ projectedName }) => projectedName === 'advance-this'), true)
 })
 
 test('Home Hygiene composes Doctors read-only and repairs only an exactly approved finding', async () => {
