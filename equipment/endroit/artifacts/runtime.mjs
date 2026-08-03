@@ -383,9 +383,10 @@ async function selectRoute(input, siteId, routeId) {
     if (!selected) throw failure('route_missing', `${siteId} has no Route ${routeId}.`)
     return selected
   }
-  if (!found.length) throw failure('site_unrouted', `${siteId} has no usable Route.`)
-  if (found.length > 1) throw failure('route_ambiguous', `${siteId} has multiple Routes; pass --route.`)
-  return found[0]
+  const active = found.filter((route) => route.declared.status === 'active')
+  if (!active.length) throw failure('site_unrouted', `${siteId} has no usable active Route.`)
+  if (active.length > 1) throw failure('route_ambiguous', `${siteId} has multiple active Routes; pass --route.`)
+  return active[0]
 }
 
 function renderArtifact(metadata, body) {

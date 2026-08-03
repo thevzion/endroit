@@ -53,8 +53,8 @@ async function route(command, action, rest, flags, argv, io, dependencies) {
   if (command === 'validate') return publicPlan(await resolveHome(root))
   if (command === 'build') return buildHome(root, { check: booleanFlag(flags.check) })
   if (command === 'doctor') return doctorHome(root)
-  if (command === 'route') {
-    const runtimeArgs = ['route', ...withoutHomeFlag(argv.slice(argv.indexOf(command) + 1))]
+  if (command === 'route' || command === 'checkout') {
+    const runtimeArgs = [command, ...withoutHomeFlag(argv.slice(argv.indexOf(command) + 1))]
     return { passthrough: true, exitCode: await dispatchRuntime(root, 'site', runtimeArgs, io) }
   }
   const runtimeArgs = withoutHomeFlag(argv.slice(argv.indexOf(command) + 1))
@@ -196,7 +196,8 @@ function help() {
       'member create|list|inspect|doctor', 'desk init|clone',
       'equipment validate|add|status|sync|remove|override|promote|catalog|trust',
       'room create|list|inspect|doctor', 'site add|list|inspect|doctor|remove',
-      'route bind|clone|worktree|mount|unmount|list|inspect|remove',
+      'route bind|clone|worktree|mount|unmount|park|activate|supersede|migrate|list|inspect|remove',
+      'checkout list|inspect',
       'validate', 'build [--check]', 'doctor',
       '<Equipment runtime namespace> <command...>',
     ],

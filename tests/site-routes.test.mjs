@@ -256,7 +256,20 @@ test('an existing Route can expose and remove a reconstructible Mount without to
     await runtimeJson(home, ['route', 'unmount', 'demo'])
     assert.equal(await pathExists(mounted.path), false)
     assert.equal(await exists(join(moved, 'README.md')), true)
+    await mkdir(join(home, 'checkouts', 'demo'), { recursive: true })
+    await symlink(moved, mounted.path, 'dir')
+    assert.equal((await runtimeJson(home, ['checkout', 'inspect', 'checkout:demo/main'])).observed.mount.status, 'divergent')
+    await rm(mounted.path)
+    await mkdir(mounted.path)
+    assert.equal((await runtimeJson(home, ['checkout', 'inspect', 'checkout:demo/main'])).observed.mount.status, 'conflict')
+    await rm(mounted.path, { recursive: true })
     await rename(moved, repository)
+    const direct = join(home, 'checkouts', 'demo', 'direct')
+    await exec('git', ['clone', '--quiet', repository, direct])
+    await runtimeJson(home, ['route', 'bind', 'demo', direct, '--id', 'direct'])
+    assert.equal((await runtimeJson(home, ['checkout', 'inspect', 'checkout:demo/direct'])).observed.mount.status, 'direct')
+    await runtimeJson(home, ['route', 'remove', 'demo', '--id', 'direct'])
+    await removeTree(direct)
     await runtimeJson(home, ['route', 'remove', 'demo'])
     assert.equal(await exists(join(repository, 'README.md')), true)
   } finally {
@@ -284,10 +297,105 @@ test('a submodule is recognized as a Route without Endroit managing its lifecycl
     await runtimeJson(home, ['add', 'https://github.com/example/child.git', '--id', 'child'])
     const route = await runtimeJson(home, ['route', 'bind', 'child', submodule, '--id', 'module'])
     assert.equal(route.mode, 'submodule')
+    await exec('git', ['submodule', 'deinit', '--force', 'sites/child'], { cwd: parent })
+    await rm(submodule, { recursive: true, force: true })
+    await mkdir(submodule)
+    const readmeBefore = await pathExists(join(submodule, 'README.md'))
+    const inspected = await runtimeJson(home, ['checkout', 'inspect', 'checkout:child/module'])
+    assert.equal(inspected.declared.checkout.mode, 'submodule')
+    assert.equal(inspected.observed.repository.available, false)
+    assert.equal(await pathExists(join(submodule, 'README.md')), readmeBefore)
     await runtimeJson(home, ['route', 'remove', 'child', '--id', 'module'])
     assert.equal(await exists(submodule), true)
   } finally {
     await removeTree(temporary, { force: true })
+  }
+})
+
+test('Route lifecycle changes only metadata and inactive Checkouts leave implicit selection', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository } = fixture
+    const secondary = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'feature--checkout-v8', '--from', 'main', '--new-branch', 'feature/checkout-v8'])
+    const before = {
+      path: await realpath(repository),
+      inode: (await lstat(repository)).ino,
+      head: await git(repository, ['rev-parse', 'HEAD']),
+      dirty: await git(repository, ['status', '--porcelain=v2', '--untracked-files=all']),
+      secondaryHead: await git(secondary.path, ['rev-parse', 'HEAD']),
+    }
+
+    assert.equal((await runtimeJson(home, ['route', 'park', 'demo', '--id', 'main'])).status, 'parked')
+    const implicit = await runtimeJson(home, ['route', 'inspect', 'demo'])
+    assert.equal(implicit.route, 'feature--checkout-v8')
+    assert.equal((await runtimeJson(home, ['route', 'activate', 'demo', '--id', 'main'])).status, 'activated')
+    await runtimeFailure(home, ['route', 'inspect', 'demo'], 'route_ambiguous')
+    assert.equal((await runtimeJson(home, ['route', 'supersede', 'demo', '--id', 'main', '--by', 'feature--checkout-v8'])).status, 'superseded')
+
+    const listed = await runtimeJson(home, ['checkout', 'list', 'demo'])
+    assert.deepEqual(listed.checkouts.map(({ ref, declared }) => [ref, declared.status]), [
+      ['checkout:demo/feature--checkout-v8', 'active'],
+      ['checkout:demo/main', 'superseded'],
+    ])
+    const inspected = await runtimeJson(home, ['checkout', 'inspect', 'checkout:demo/main'])
+    assert.equal(inspected.declared.supersededBy, 'feature--checkout-v8')
+    assert.equal(inspected.observed.repository.available, true)
+    assert.equal(inspected.observed.repository.commonGitDir, listed.checkouts[0].observed.repository.commonGitDir)
+    assert.notEqual(inspected.observed.repository.gitDir, listed.checkouts[0].observed.repository.gitDir)
+
+    assert.deepEqual({
+      path: await realpath(repository),
+      inode: (await lstat(repository)).ino,
+      head: await git(repository, ['rev-parse', 'HEAD']),
+      dirty: await git(repository, ['status', '--porcelain=v2', '--untracked-files=all']),
+      secondaryHead: await git(secondary.path, ['rev-parse', 'HEAD']),
+    }, before)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Checkout observation rejects duplicate gitDir but permits a shared commonGitDir', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository } = fixture
+    await runtimeFailure(home, ['route', 'bind', 'demo', repository, '--id', 'duplicate'], 'checkout_duplicate_git_dir')
+    await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'review--shared', '--from', 'main', '--new-branch', 'review/shared'])
+    const checkouts = (await runtimeJson(home, ['checkout', 'list', 'demo'])).checkouts
+    assert.equal(new Set(checkouts.map((entry) => entry.observed.repository.gitDir)).size, 2)
+    assert.equal(new Set(checkouts.map((entry) => entry.observed.repository.commonGitDir)).size, 1)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('v7 and v8 Route declarations have parity through Sites, HUD and Artifacts', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository } = fixture
+    const siteV8 = (await runtimeJson(home, ['list'])).sites[0].routes[0]
+    const hudV8 = (await runtimeJson(home, ['json'], 'hud')).sites[0].routes[0]
+    const artifactsV8 = await runtimeJson(home, ['list', '--json'], 'artifact')
+    assert.equal(siteV8.declaration, 'routes/demo/main.json')
+
+    await writeFile(join(home, '.desk/routes/demo/main.json'), `${JSON.stringify({
+      $schema: 'https://endroit.org/schema/v7/route.json',
+      id: 'main',
+      site: 'demo',
+      mode: 'existing',
+      path: await realpath(repository),
+      branch: 'main',
+    }, null, 2)}\n`)
+
+    const siteV7 = (await runtimeJson(home, ['list'])).sites[0].routes[0]
+    const hudV7 = (await runtimeJson(home, ['json'], 'hud')).sites[0].routes[0]
+    const artifactsV7 = await runtimeJson(home, ['list', '--json'], 'artifact')
+    assert.deepEqual(siteV7.declared, siteV8.declared)
+    assert.deepEqual(hudV7.declared, hudV8.declared)
+    assert.equal(siteV7.observed.repository.available, siteV8.observed.repository.available)
+    assert.deepEqual(artifactsV7.artifacts, artifactsV8.artifacts)
+  } finally {
+    await fixture.cleanup()
   }
 })
 

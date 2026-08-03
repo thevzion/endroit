@@ -105,7 +105,8 @@
       { "name": "add", "description": "Declare a shared Site." },
       { "name": "remove", "description": "Remove a Site declaration." },
       { "name": "inspect", "description": "Inspect a Site declaration." },
-      { "name": "route", "description": "Bind, clone, mount, inspect or remove a Desk-owned Route." }
+      { "name": "route", "description": "Bind, clone, mount, transition, migrate, inspect or remove a Desk-owned Route." },
+      { "name": "checkout", "description": "List or inspect declared and observed Checkouts read-only." }
     ]
   }
 }

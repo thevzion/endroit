@@ -16,7 +16,7 @@ export async function listArtifacts(homeRoot, deskRoot, plan) {
     ...(deskRoot ? [{ scope: 'desk', path: join(deskRoot, 'artifacts'), legacy: true }] : []),
   )
   for (const site of plan.sites ?? []) {
-    for (const route of (plan.routes ?? []).filter((entry) => entry.site === site.id)) {
+    for (const route of (plan.routes ?? []).filter((entry) => entry.site === site.id && entry.declared.status === 'active')) {
       for (const kind of plan.artifactKinds.filter((entry) => entry.owners.includes('site') && entry.sitePath)) {
         roots.push({
           scope: `site:${site.id}`,

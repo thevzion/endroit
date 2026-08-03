@@ -20,7 +20,14 @@ const ROUTE_HELP = {
   worktree: 'endroit route worktree <site> --id <route> [--from <route>] (--branch <existing> | --new-branch <name> [--start-point <ref>]) [--json]',
   mount: 'endroit route mount <site> [--id <route>] [--json]',
   unmount: 'endroit route unmount <site> [--id <route>] [--json]',
+  park: 'endroit route park <site> [--id <route>] [--json]',
+  activate: 'endroit route activate <site> [--id <route>] [--json]',
+  supersede: 'endroit route supersede <site> --id <route> --by <route> [--json]',
   remove: 'endroit route remove <site> [--id <route>] [--delete] [--json]',
+}
+const CHECKOUT_HELP = {
+  list: 'endroit checkout list [site] [--json]',
+  inspect: 'endroit checkout inspect checkout:<site>/<route> [--json]',
 }
 
 try {
@@ -28,12 +35,13 @@ try {
   const { positionals, flags } = argumentsOf(input.argv)
   const [surface, ...rest] = positionals
   const routeSurface = surface === 'route'
-  const command = routeSurface ? rest.shift() : surface
-  if (flags.help) process.stdout.write(`${help(routeSurface ? 'route' : 'site', command)}\n`)
+  const checkoutSurface = surface === 'checkout'
+  const command = routeSurface || checkoutSurface ? rest.shift() : surface
+  if (flags.help) process.stdout.write(`${help(routeSurface ? 'route' : checkoutSurface ? 'checkout' : 'site', command)}\n`)
   else {
     const value = routeSurface
       ? await routeCommand(input, command, rest, flags)
-      : await siteCommand(input, command, rest, flags)
+      : checkoutSurface ? await checkoutCommand(input, command, rest, flags) : await siteCommand(input, command, rest, flags)
     process.stdout.write(flags.json ? `${JSON.stringify(value, null, 2)}\n` : `${human(value)}\n`)
   }
 } catch (error) {
@@ -58,12 +66,21 @@ async function routeCommand(input, command, args, flags) {
   if (command === 'worktree') return createWorktree(input, required(args[0], 'Site id'), flags)
   if (command === 'mount') return mountRoute(input, required(args[0], 'Site id'), flags.id)
   if (command === 'unmount') return unmountRoute(input, required(args[0], 'Site id'), flags.id)
+  if (command === 'park') return transitionRoute(input, required(args[0], 'Site id'), flags.id, 'parked')
+  if (command === 'activate') return transitionRoute(input, required(args[0], 'Site id'), flags.id, 'active')
+  if (command === 'supersede') return supersedeRoute(input, required(args[0], 'Site id'), required(flags.id, 'Route id'), required(flags.by, 'Replacement Route id'))
   if (command === 'remove') return removeRoute(input, required(args[0], 'Site id'), flags.id, flags)
-  throw failure('usage', 'endroit route bind|clone|worktree|mount|unmount|list|inspect|remove', 2)
+  throw failure('usage', 'endroit route bind|clone|worktree|mount|unmount|park|activate|supersede|migrate|list|inspect|remove', 2)
 }
 
-async function listSites(input) {
-  return Promise.all(declarations(input).map(async (site) => {
+async function checkoutCommand(input, command, args, flags) {
+  if (command === 'list') return { status: 'listed', checkouts: await listCheckouts(input, args[0]) }
+  if (command === 'inspect') return inspectCheckout(input, required(args[0], 'Checkout ref'), flags.id)
+  throw failure('usage', 'endroit checkout list|inspect', 2)
+}
+
+async function listSites(input, siteId) {
+  return Promise.all(declarations(input).filter((site) => !siteId || site.id === siteId).map(async (site) => {
     const routes = await routesFor(input, site.id)
     const inspected = await Promise.all(routes.map((route) => observeRoute(input, site, route)))
     const registered = new Map(inspected.filter((route) => route.observed.path).map((route) => [route.observed.path, route.id]))
@@ -96,7 +113,7 @@ async function listRoutes(input, siteId) {
 
 async function inspectSite(input, id) {
   const site = declaration(input, id)
-  const listed = (await listSites(input)).find((entry) => entry.id === id)
+  const [listed] = await listSites(input, id)
   return { status: 'inspected', ...site, routes: listed.routes, worktrees: listed.worktrees }
 }
 
@@ -150,6 +167,26 @@ async function inspectRoute(input, id, routeId) {
       ],
     },
   }
+}
+
+async function listCheckouts(input, siteId) {
+  if (siteId) declaration(input, siteId)
+  const sites = siteId ? [declaration(input, siteId)] : declarations(input)
+  const values = []
+  for (const site of sites) {
+    for (const route of await routesFor(input, site.id)) values.push(await observeRoute(input, site, route))
+  }
+  assertDistinctGitDirs(values)
+  return values.sort((left, right) => left.site.localeCompare(right.site) || left.id.localeCompare(right.id))
+}
+
+async function inspectCheckout(input, selector, routeId) {
+  const parsed = parseCheckoutRef(selector, routeId)
+  const site = declaration(input, parsed.site)
+  const route = await selectRoute(input, parsed.site, parsed.id, '--id')
+  const checkout = await observeRoute(input, site, route)
+  assertDistinctGitDirs(await listCheckouts(input, parsed.site))
+  return { status: 'inspected', ...checkout }
 }
 
 async function doctorSites(input) {
@@ -241,6 +278,7 @@ async function bindRoute(input, id, repositoryPath, routeId = 'main', declaredSi
   await assertRouteAvailable(input, id, routeId)
   const evidence = await inspectRepository(resolve(repositoryPath))
   assertSiteMatches(site, evidence)
+  await assertGitDirAvailable(input, id, evidence)
   const superproject = await git(['rev-parse', '--show-superproject-working-tree'], evidence.root).catch(() => '')
   const mode = evidence.root === input.homeRoot ? 'embedded' : superproject ? 'submodule' : 'existing'
   const route = await writeRoute(input, {
@@ -251,6 +289,42 @@ async function bindRoute(input, id, repositoryPath, routeId = 'main', declaredSi
     branch: evidence.branch,
   })
   return { ...route, checkout: evidence.checkout }
+}
+
+async function transitionRoute(input, siteId, routeId, status) {
+  const route = await selectRoute(input, siteId, routeId)
+  requireV8Route(route)
+  if (route.status === status) return { status: status === 'active' ? 'activated' : 'parked', site: siteId, route: route.id, ref: route.ref, declared: route.declared }
+  const expected = status === 'parked' ? 'active' : 'parked'
+  if (route.status !== expected) throw failure('route_status_invalid', `Route ${siteId}/${route.id} must be ${expected} before becoming ${status}.`)
+  const document = routeDocument(route, { status })
+  await writeJsonAtomic(route.documentPath, document)
+  return {
+    status: status === 'active' ? 'activated' : 'parked',
+    site: siteId,
+    route: route.id,
+    ref: route.ref,
+    declared: { status, checkout: { ...route.declared.checkout } },
+  }
+}
+
+async function supersedeRoute(input, siteId, routeId, replacementId) {
+  if (routeId === replacementId) throw failure('route_supersession_invalid', 'A Route cannot supersede itself.')
+  const route = await selectRoute(input, siteId, routeId)
+  const replacement = await selectRoute(input, siteId, replacementId)
+  requireV8Route(route)
+  requireV8Route(replacement)
+  if (route.status !== 'active') throw failure('route_status_invalid', `Route ${siteId}/${route.id} must be active before it can be superseded.`)
+  if (replacement.status !== 'active') throw failure('route_replacement_inactive', `Replacement Route ${siteId}/${replacement.id} must be active.`)
+  const document = routeDocument(route, { status: 'superseded', supersededBy: replacement.id })
+  await writeJsonAtomic(route.documentPath, document)
+  return {
+    status: 'superseded',
+    site: siteId,
+    route: route.id,
+    ref: route.ref,
+    declared: { status: 'superseded', supersededBy: replacement.id, checkout: { ...route.declared.checkout } },
+  }
 }
 
 async function cloneRoute(input, id, routeId = 'main') {
@@ -402,11 +476,11 @@ async function inspectMount(input, route) {
   }
   if (!info.isSymbolicLink()) {
     const target = await realpath(path).catch(() => null)
-    return { status: target === route.path ? 'direct' : 'invalid', path, ...(target ? { target } : {}) }
+    return { status: target === route.path ? 'direct' : 'conflict', path, ...(target ? { target } : {}) }
   }
   const target = await realpath(path).catch(() => null)
   if (!target) return { status: 'broken', path }
-  return { status: target === route.path ? 'ready' : 'mismatch', path, target }
+  return { status: target === route.path ? 'ready' : 'divergent', path, target }
 }
 
 async function routesFor(input, id) {
@@ -436,9 +510,10 @@ async function selectRoute(input, id, routeId, flag = '--id') {
     if (!selected) throw failure('route_missing', `${id} has no Route ${routeId}.`)
     return selected
   }
-  if (!routes.length) throw failure('site_unrouted', `${id} has no Route.`)
-  if (routes.length > 1) throw failure('route_ambiguous', `${id} has multiple Routes; pass ${flag}.`)
-  return routes[0]
+  const active = routes.filter((route) => route.status === 'active')
+  if (!active.length) throw failure('site_unrouted', `${id} has no active Route.`)
+  if (active.length > 1) throw failure('route_ambiguous', `${id} has multiple active Routes; pass ${flag}.`)
+  return active[0]
 }
 
 async function writeSite(input, site) {
@@ -505,6 +580,9 @@ function mountPath(input, site, route) {
 }
 
 async function routeRepositoryPath(input, route) {
+  if (route.mode === 'submodule' && !await exists(join(route.path, '.git'))) {
+    throw failure('checkout_submodule_uninitialized', `Submodule Checkout ${route.site}/${route.id} is not initialized.`)
+  }
   return route.mode.startsWith('managed-') ? (await validateManagedCheckout(input, route)).resolvedPath : route.path
 }
 
@@ -626,7 +704,7 @@ function routeDeclaration(route) {
     ref: route.ref,
     schemaVersion: route.schemaVersion,
     declared: route.declared,
-    declaration: relative(dirname(dirname(route.documentPath)), route.documentPath),
+    declaration: relative(dirname(dirname(dirname(route.documentPath))), route.documentPath),
   }
 }
 
@@ -641,6 +719,47 @@ async function observeRoute(input, site, route) {
       matches: matchesSite(site, repository),
       observedAt: new Date().toISOString(),
     },
+  }
+}
+
+function routeDocument(route, overrides = {}) {
+  const status = overrides.status ?? route.status
+  const supersededBy = overrides.supersededBy
+  return {
+    $schema: 'https://endroit.org/schema/v8/route.json',
+    id: route.id,
+    site: route.site,
+    status,
+    ...(status === 'superseded' ? { supersededBy } : {}),
+    checkout: { ...route.declared.checkout },
+  }
+}
+
+function requireV8Route(route) {
+  if (route.schemaVersion !== 8) throw failure('route_migration_required', `Route ${route.site}/${route.id} must be migrated to v8 before changing lifecycle.`)
+}
+
+function parseCheckoutRef(value, routeId) {
+  if (routeId) return { site: value.replace(/^site:/, ''), id: routeId }
+  const match = String(value).match(/^checkout:([a-z0-9][a-z0-9._-]{0,127})\/([a-z0-9][a-z0-9._-]{0,127})$/)
+  if (!match) throw failure('checkout_ref_invalid', 'Use checkout:<site>/<route>.', 2)
+  return { site: match[1], id: match[2] }
+}
+
+function assertDistinctGitDirs(checkouts) {
+  const seen = new Map()
+  for (const checkout of checkouts.filter((entry) => entry.observed.repository.available)) {
+    const gitDir = checkout.observed.repository.gitDir
+    const existing = seen.get(gitDir)
+    if (existing) throw failure('checkout_duplicate_git_dir', `${existing} and ${checkout.ref} resolve to the same Git directory.`)
+    seen.set(gitDir, checkout.ref)
+  }
+}
+
+async function assertGitDirAvailable(input, siteId, evidence) {
+  for (const route of await routesFor(input, siteId)) {
+    const observed = await routeRepositoryPath(input, route).then(inspectRepository).catch(() => null)
+    if (observed?.gitDir === evidence.gitDir) throw failure('checkout_duplicate_git_dir', `${route.ref} already declares this Git checkout.`)
   }
 }
 
@@ -706,11 +825,12 @@ function argumentsOf(argv) {
 }
 function human(value) {
   if (value.sites) return value.sites.length ? value.sites.map((site) => `${site.id} · ${site.state} · ${site.routes.length} route(s)`).join('\n') : 'No Sites.'
-  if (value.routes) return value.routes.length ? value.routes.map((route) => `${route.site}/${route.id} · ${route.mode} · ${route.path}`).join('\n') : 'No Routes.'
+  if (value.routes) return value.routes.length ? value.routes.map((route) => `${route.ref} · ${route.declared.status} · ${route.declared.checkout.mode}`).join('\n') : 'No Routes.'
+  if (value.checkouts) return value.checkouts.length ? value.checkouts.map((checkout) => `${checkout.ref} · ${checkout.declared.status} · ${checkout.observed.repository.available ? 'available' : 'missing'}`).join('\n') : 'No Checkouts.'
   return Object.entries(value).map(([key, entry]) => `${key}: ${typeof entry === 'object' ? JSON.stringify(entry) : entry}`).join('\n')
 }
 function help(surface, command) {
-  const entries = surface === 'route' ? ROUTE_HELP : SITE_HELP
+  const entries = surface === 'route' ? ROUTE_HELP : surface === 'checkout' ? CHECKOUT_HELP : SITE_HELP
   if (!command) return [`Usage: endroit ${surface} <command> [options]`, '', ...Object.keys(entries).map((name) => `  ${name}`)].join('\n')
   if (!entries[command]) throw failure('usage', `Unknown ${surface} command ${command}.`, 2)
   return `Usage: ${entries[command]}`

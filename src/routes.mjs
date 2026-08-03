@@ -16,7 +16,7 @@ export async function loadRoutes(homeRoot, deskRoot, sites = []) {
   const declaredSites = new Set(sites.map((site) => site.id))
   const values = []
   for (const siteEntry of await directories(join(deskRoot, 'routes'))) {
-    if (declaredSites.size && !declaredSites.has(siteEntry.name)) {
+    if (!declaredSites.has(siteEntry.name)) {
       throw new EndroitError('route_site_missing', `Routes declare unknown Site ${siteEntry.name}.`)
     }
     const siteRoot = join(deskRoot, 'routes', siteEntry.name)
@@ -36,6 +36,10 @@ export async function loadRoutes(homeRoot, deskRoot, sites = []) {
       }))
     }
   }
+  for (const route of values.filter((entry) => entry.declared.status === 'superseded')) {
+    const replacement = values.find((entry) => entry.site === route.site && entry.id === route.declared.supersededBy)
+    if (!replacement) throw new EndroitError('route_supersession_invalid', `Route ${route.site}/${route.id} supersedes to a missing Route ${route.declared.supersededBy}.`)
+  }
   return values.sort((left, right) => left.site.localeCompare(right.site) || left.id.localeCompare(right.id))
 }
 
@@ -47,7 +51,14 @@ export async function resolveCheckout(homeRoot, document, options = {}) {
     throw new EndroitError('route_invalid', `Route ${site}/${id} identity does not match its document.`)
   }
   const version = document.$schema === API.route ? 8 : 7
+  if (version === 8 && document.supersededBy === id) {
+    throw new EndroitError('route_supersession_invalid', `Route ${site}/${id} cannot supersede itself.`)
+  }
   const declared = version === 8 ? declaredV8(document) : declaredV7(homeRoot, document)
+  if (version === 8 && ['existing', 'submodule'].includes(declared.checkout.mode) && !isAbsolute(declared.checkout.path)) {
+    const segments = declared.checkout.path.split(/[\\/]+/)
+    if (segments.includes('..')) throw new EndroitError('route_path_invalid', `Route ${site}/${id} path must not escape its Home context.`)
+  }
   const declaredPath = checkoutPath(homeRoot, site, id, declared.checkout)
   return {
     id,

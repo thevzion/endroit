@@ -319,6 +319,7 @@ async function hud(input) {
       attention.push(item('advisory', `site:${site.id}`, 'site-worktrees-unrouted', `${site.id} has ${unroutedWorktrees.length} Git worktree(s) without a local Route; inspect site list or site doctor.`))
     }
     for (const route of site.routes) {
+      if (route.declared.status !== 'active') continue
       if (!route.observed.git?.available) attention.push(item('blocking', `site:${site.id}/${route.id}`, 'site-broken', 'Route is not a usable Git checkout.'))
       else if (route.observed.git.conflicts) attention.push(item('blocking', `site:${site.id}/${route.id}`, 'site-conflicts', `Route has ${route.observed.git.conflicts} conflict(s).`))
       else if (!route.observed.git.clean) attention.push(item('advisory', `site:${site.id}/${route.id}`, 'site-dirty', `Route has ${route.observed.git.changes} change(s).`))
@@ -499,7 +500,7 @@ function siteItem(site) {
     tags: site.tags ?? [],
     ref: `site:${site.id}`,
     access: ['model', 'user'],
-    routable: !metadataError && site.routes.some((route) => route.observed.git?.available),
+    routable: !metadataError && site.routes.some((route) => route.declared.status === 'active' && route.observed.git?.available),
     entrypoint: { model: 'endroit-site-map', user: 'endroit-site-map' },
     routes: site.routes.map((route) => ({
       id: route.id,
