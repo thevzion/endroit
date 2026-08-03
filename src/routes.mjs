@@ -1,9 +1,11 @@
 import { lstat, readFile, readdir } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { API, validateRouteDocument } from './contracts.mjs'
+import { parseDocument, renderDocument, validateDocumentV9, V9_API } from './documents.mjs'
 import { EndroitError } from './lib/errors.mjs'
 import { assertId } from './lib/io.mjs'
 
+export const ROUTE_V9 = V9_API.route
 export const ROUTE_STATUSES = Object.freeze(['active', 'parked', 'superseded'])
 export const CHECKOUT_MODES = Object.freeze(['embedded', 'existing', 'managed-clone', 'managed-worktree', 'submodule'])
 
@@ -20,18 +22,28 @@ export async function loadRoutes(homeRoot, deskRoot, sites = []) {
       throw new EndroitError('route_site_missing', `Routes declare unknown Site ${siteEntry.name}.`)
     }
     const siteRoot = join(deskRoot, 'routes', siteEntry.name)
+    const identities = new Set()
     for (const entry of await safeReadDir(siteRoot)) {
-      if (!entry.isFile() || entry.isSymbolicLink() || !entry.name.endsWith('.json')) continue
-      const documentPath = join(siteRoot, entry.name)
-      let document
-      try {
-        document = JSON.parse(await readFile(documentPath, 'utf8'))
-      } catch (error) {
-        throw new EndroitError('route_invalid', `${relative(homeRoot, documentPath)} is not valid JSON: ${error.message}`)
+      if (entry.isSymbolicLink()) throw new EndroitError('route_invalid', `${relative(homeRoot, join(siteRoot, entry.name))} must not be a symbolic link.`)
+      const legacy = entry.isFile() && entry.name.endsWith('.json')
+      const current = entry.isDirectory()
+      if (!legacy && !current) continue
+      const id = legacy ? entry.name.slice(0, -5) : entry.name
+      const documentPath = legacy ? join(siteRoot, entry.name) : join(siteRoot, entry.name, 'ROUTE.md')
+      if (current) {
+        const info = await lstat(documentPath).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+        if (!info || info.isSymbolicLink() || !info.isFile()) {
+          throw new EndroitError('route_invalid', `${relative(homeRoot, documentPath)} must be a regular Route document.`)
+        }
       }
+      if (identities.has(id)) throw new EndroitError('route_source_collision', `Route ${siteEntry.name}/${id} has multiple declarations.`)
+      identities.add(id)
+      const document = legacy
+        ? parseLegacyRoute(await readFile(documentPath, 'utf8'), relative(homeRoot, documentPath))
+        : await parseRouteMarkdown(await readFile(documentPath, 'utf8'), relative(homeRoot, documentPath))
       values.push(await resolveCheckout(homeRoot, document, {
         site: siteEntry.name,
-        id: entry.name.slice(0, -5),
+        id,
         documentPath,
       }))
     }
@@ -44,22 +56,26 @@ export async function loadRoutes(homeRoot, deskRoot, sites = []) {
 }
 
 export async function resolveCheckout(homeRoot, document, options = {}) {
-  await validateRouteDocument(document)
+  if (document?.$schema === ROUTE_V9) await validateDocumentV9(document, 'route')
+  else await validateRouteDocument(document)
   const site = options.site ?? document.site
   const id = options.id ?? document.id
   if (document.site !== site || document.id !== id) {
     throw new EndroitError('route_invalid', `Route ${site}/${id} identity does not match its document.`)
   }
-  const version = document.$schema === API.route ? 8 : 7
-  if (version === 8 && document.supersededBy === id) {
+  const version = document.$schema === ROUTE_V9 ? 9 : document.$schema === API.route ? 8 : 7
+  const supersededBy = version === 9 ? document.superseded_by : document.supersededBy
+  if (version >= 8 && supersededBy === id) {
     throw new EndroitError('route_supersession_invalid', `Route ${site}/${id} cannot supersede itself.`)
   }
-  const declared = version === 8 ? declaredV8(document) : declaredV7(homeRoot, document)
+  const declared = version === 9 ? declaredV9(document) : version === 8 ? declaredV8(document) : declaredV7(homeRoot, document)
   if (version === 8 && ['existing', 'submodule'].includes(declared.checkout.mode) && !isAbsolute(declared.checkout.path)) {
     const segments = declared.checkout.path.split(/[\\/]+/)
     if (segments.includes('..')) throw new EndroitError('route_path_invalid', `Route ${site}/${id} path must not escape its Home context.`)
   }
-  const declaredPath = checkoutPath(homeRoot, site, id, declared.checkout)
+  const declaredPath = version === 9 && declared.checkout.mode !== 'embedded'
+    ? managedCheckoutPath(homeRoot, site, id)
+    : checkoutPath(homeRoot, site, id, declared.checkout)
   return {
     id,
     site,
@@ -67,8 +83,39 @@ export async function resolveCheckout(homeRoot, document, options = {}) {
     schemaVersion: version,
     declared,
     declaredPath,
+    ...(version === 9 ? { owner: document.owner } : {}),
     ...(options.documentPath ? { documentPath: options.documentPath } : {}),
   }
+}
+
+export async function routeV9Document(route) {
+  const document = {
+    $schema: ROUTE_V9,
+    kind: 'endroit/route',
+    id: assertId(route.id, 'Route id'),
+    site: assertId(route.site, 'Site id'),
+    owner: route.owner,
+    route_state: route.status ?? route.route_state ?? 'active',
+    ...(route.supersededBy ? { superseded_by: route.supersededBy } : {}),
+    checkout_mode: route.checkout?.mode ?? route.checkout_mode ?? route.mode,
+    ...(route.revision ? { revision: { ...route.revision } } : {}),
+  }
+  return validateDocumentV9(document, 'route')
+}
+
+export async function routeV9Markdown(route) {
+  const metadata = await routeV9Document(route)
+  return renderDocument({
+    metadata,
+    body: `# ${metadata.site} / ${metadata.id}\n\nLocal address: \`checkout:${metadata.site}/${metadata.id}\`.`,
+  })
+}
+
+export async function parseRouteMarkdown(source, label = 'ROUTE.md') {
+  const document = parseDocument(source, { path: label })
+  if (!document.body.trim()) throw new EndroitError('route_invalid', `${label} must contain a human-readable body.`)
+  await validateDocumentV9(document.metadata, 'route')
+  return document.metadata
 }
 
 export async function routeV8Document(route) {
@@ -107,6 +154,15 @@ function declaredV8(document) {
   }
 }
 
+function declaredV9(document) {
+  return {
+    status: document.route_state,
+    ...(document.superseded_by ? { supersededBy: document.superseded_by } : {}),
+    checkout: { mode: document.checkout_mode },
+    ...(document.revision ? { revision: { ...document.revision } } : {}),
+  }
+}
+
 function declaredV7(homeRoot, document) {
   if (document.mode === 'embedded' && document.path !== '.') {
     throw new EndroitError('route_path_invalid', `Embedded Route ${document.site}/${document.id} must resolve from its Home context.`)
@@ -128,6 +184,12 @@ function checkoutPath(homeRoot, site, id, checkout) {
   if (checkout.mode === 'embedded') return resolve(homeRoot)
   if (checkout.mode.startsWith('managed-')) return managedCheckoutPath(homeRoot, site, id)
   return isAbsolute(checkout.path) ? resolve(checkout.path) : resolve(homeRoot, checkout.path)
+}
+
+function parseLegacyRoute(source, label) {
+  try { return JSON.parse(source) } catch (error) {
+    throw new EndroitError('route_invalid', `${label} is not valid JSON: ${error.message}`)
+  }
 }
 
 async function directories(path) {

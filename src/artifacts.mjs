@@ -31,9 +31,10 @@ export async function listArtifacts(homeRoot, deskRoot, plan) {
 
   const found = []
   const seen = new Set()
+  const documentNames = [...new Set([...plan.artifactKinds.map((kind) => kind.document).filter(Boolean), 'artifact.md'])]
   for (const root of roots) {
-    for (const path of await findNamed(root.path, 'artifact.md')) {
-      const key = await realpath(path).catch(() => path)
+    for (const path of (await Promise.all(documentNames.map((name) => findNamed(root.path, name)))).flat()) {
+      const key = await realpath(dirname(path)).catch(() => dirname(path))
       if (seen.has(key)) continue
       seen.add(key)
       const directory = await realpath(dirname(path)).catch(() => dirname(path))
@@ -41,6 +42,9 @@ export async function listArtifacts(homeRoot, deskRoot, plan) {
         const parsed = parseArtifact(await readFile(path, 'utf8'))
         const metadata = normalizeMetadata(parsed.metadata)
         const kind = selectKind(plan, metadata.kind)
+        const document = basename(path)
+        const legacyDocument = document === 'artifact.md' && kind.document
+        if (document !== (kind.document ?? 'artifact.md') && !legacyDocument) continue
         const room = root.room ?? roomFromOwner(metadata.owner, plan.rooms)
         found.push({
           ...metadata,
@@ -50,7 +54,8 @@ export async function listArtifacts(homeRoot, deskRoot, plan) {
           ...(root.route ? { route: root.route } : {}),
           ref: room ? artifactRef(room, kind, metadata.id) : legacyRef(metadata, root),
           path: directory,
-          legacy: root.legacy || isLegacyMetadata(parsed.metadata),
+          document,
+          legacy: root.legacy || Boolean(legacyDocument) || isLegacyMetadata(parsed.metadata),
         })
       } catch (error) {
         found.push({ scope: root.scope, path: directory, legacy: root.legacy, invalid: error.message })
@@ -83,7 +88,7 @@ function normalizeMetadata(raw) {
   const createdAt = raw.created_at ?? raw.createdAt
   return {
     ...raw,
-    status: raw.status ?? raw.state,
+    status: raw.status ?? raw.work_state ?? raw.state,
     created_by: raw.created_by ?? raw.createdBy,
     created_at: createdAt,
     updated_at: raw.updated_at ?? createdAt,

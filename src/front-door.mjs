@@ -1,56 +1,56 @@
+const BOOTSTRAP_MAX_BYTES = 4_096
+
 export function renderFloorPlan(plan) {
-  const runtimes = plan.runtimes
-    .map((runtime) => `- \`${runtime.namespace}\`: ${runtime.commands.map((command) => command.name).join(', ')}`)
-    .join('\n') || '- none'
-  const wakeUp = plan.frontDoor
-    ? `\`${plan.frontDoor.route}\` via \`${plan.frontDoor.namespace} ${plan.frontDoor.command}\``
-    : 'not configured'
-  return `## Endroit Floor Plan
+  const workplace = resolvedWorkplace(plan)
+  return `## Endroit Workplace
 
-<!-- generated from the Resolved Home; rebuild instead of editing -->
+<!-- generated provider projection; rebuild instead of editing -->
 
-- Home: \`${plan.home.name}\`
-- Members: ${plan.members.map((member) => `\`${member.id}\``).join(', ')}
-- Providers: ${plan.home.providers.map((provider) => `\`${provider}\``).join(', ')}
-- Home sources: \`endroit.json\`, \`HOME.md\`, \`members/\`, \`equipment/\`, \`rooms/\`
-- Desk sources: \`.desk/DESK.md\`, \`.desk/equipment/\`, \`.desk/rooms/\`, \`.desk/routes/\`
-- Local Checkout index and managed worktrees: \`checkouts/\` (ignored)
-- Local rebuildable state: \`.endroit/\`
+- Identity: \`${workplace.id}\`
+- Profile: \`${workplace.profile}\`
+- Protocol: \`${workplace.protocol}\`
+- Revision: \`${sourceRevision(plan)}\`
 
-The Home owns its constitution, shared Rooms and projections. The Desk
-owns collaborator-local Rooms. Sites own product sources. Artifacts live
-inside their owning Room; legacy Artifact roots are read-only. Generated
-provider files and external systems are never canonical.
+### Source and projection
 
-Use the tracked Home Console for every Kernel or Equipment route:
+Owned Markdown sources are canonical. This provider file is a rebuildable
+projection; edit its named source and rebuild it instead of treating edits here
+as durable truth.
+
+### Authority and routing
+
+The human retains direction, judgment, acceptance and delivery consent. Prefer
+an explicitly named Room, Site or Route; otherwise continue only a unique
+semantic match and ask when the destination is ambiguous. Access to a Site is
+not authority to mutate or deliver it.
+
+### Local Console
 
     node ./endroit.mjs <namespace> <command> [...arguments]
 
-Kernel routes:
+If the Console is unavailable, keep working from readable owned sources,
+report \`degraded\`, and stop structural mutation, Route-mediated mutation and
+external effects.`
+}
 
-- \`member create|list|inspect|doctor\`
-- \`desk init|clone\`
-- \`equipment validate|add|status|sync|remove|override|promote|catalog|trust\`
-- \`room create|list|inspect|doctor\`
-- \`site add|list|inspect|doctor|remove\`
-- \`route list|inspect|park|activate|supersede|migrate|remove\`
-- \`checkout list|inspect|resolve|adopt|clone|worktree|reconcile|delete\`
-- \`validate\`, \`build\`, \`doctor\`
+export function renderProviderBootstrap(plan, constitution) {
+  const body = `# Endroit provider bootstrap
 
-Equipment runtime namespaces:
+<!-- source revision: ${sourceRevision(plan)} -->
 
-${runtimes}
+## Constitution
 
-Wake-up: ${wakeUp}.
+${String(constitution ?? '').trim()}
 
-The Floor Plan is the static authoritative entrypoint, not a complete live
-inventory. If Wake-up is unavailable, use these local read-only inspections:
-
-    node ./endroit.mjs room list
-    node ./endroit.mjs site list
-    node ./endroit.mjs equipment catalog
-
-Do not guess another runtime or search outside the Home to compensate.`
+${renderFloorPlan(plan)}
+`
+  const bytes = Buffer.byteLength(body)
+  if (bytes > BOOTSTRAP_MAX_BYTES) {
+    const error = new Error(`Provider bootstrap is ${bytes} bytes, over the ${BOOTSTRAP_MAX_BYTES} byte limit.`)
+    error.code = 'context_budget_exceeded'
+    throw error
+  }
+  return body
 }
 
 export function homeConsole() {
@@ -60,13 +60,13 @@ import { lstatSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const homeRoot = dirname(fileURLToPath(import.meta.url))
-const home = JSON.parse(readFileSync(join(homeRoot, 'endroit.json'), 'utf8'))
-if (!/^@endroit\\/cli@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(home.runtime)) {
-  throw new Error('endroit.json contains an invalid runtime.')
+const workplaceRoot = dirname(fileURLToPath(import.meta.url))
+const runtime = declaredRuntime(workplaceRoot)
+if (!/^@endroit\\/cli@[0-9]+\\.[0-9]+\\.[0-9]+(?:-[0-9A-Za-z.-]+)?$/.test(runtime)) {
+  throw new Error('The Workplace declaration contains an invalid runtime.')
 }
 
-const development = join(homeRoot, '.endroit', 'dev-cli')
+const development = join(workplaceRoot, '.endroit', 'dev-cli')
 let local = false
 try {
   const info = lstatSync(development)
@@ -79,12 +79,13 @@ try {
 const command = local ? process.execPath : process.platform === 'win32' ? 'npx.cmd' : 'npx'
 const args = local
   ? [development, ...process.argv.slice(2)]
-  : ['--yes', home.runtime, ...process.argv.slice(2)]
+  : ['--yes', runtime, ...process.argv.slice(2)]
 const child = spawn(command, args, {
-  cwd: homeRoot,
+  cwd: workplaceRoot,
   env: {
     ...process.env,
-    ENDROIT_HOME_PATH: homeRoot,
+    ENDROIT_WORKPLACE_PATH: workplaceRoot,
+    ENDROIT_HOME_PATH: workplaceRoot,
     ENDROIT_RUNTIME_SOURCE: local ? 'development' : 'npm',
   },
   stdio: 'inherit',
@@ -101,20 +102,34 @@ child.on('exit', (code, signal) => {
   if (signal) process.kill(process.pid, signal)
   else process.exitCode = code ?? 1
 })
+
+function declaredRuntime(root) {
+  try {
+    const source = readFileSync(join(root, 'WORKPLACE.md'), 'utf8')
+    const match = source.match(/^runtime:\\s*(.+)$/m)
+    if (!match) throw new Error('WORKPLACE.md has no runtime.')
+    try { return JSON.parse(match[1].trim()) } catch { return match[1].trim() }
+  } catch (error) {
+    if (error.code !== 'ENOENT') throw error
+    return JSON.parse(readFileSync(join(root, 'endroit.json'), 'utf8')).runtime
+  }
+}
 `
 }
 
-export function sessionWrapper(provider, frontDoor, limits = {}) {
+export function sessionWrapper(provider, frontDoor = {}, limits = {}) {
   const timeoutMs = limits.timeoutMs ?? 30_000
-  const maxBytes = limits.maxBytes ?? 256 * 1024
+  const maxBytes = limits.maxBytes ?? BOOTSTRAP_MAX_BYTES
+  const namespace = frontDoor.namespace ?? 'hud'
+  const command = frontDoor.command ?? 'prompt'
   return `#!/usr/bin/env node
 import { spawn } from 'node:child_process'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const provider = ${JSON.stringify(provider)}
-const route = ${JSON.stringify([frontDoor.namespace, frontDoor.command])}
-const homeRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
+const route = ${JSON.stringify([namespace, command])}
+const workplaceRoot = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..')
 const degraded = '<endroit-front-door version="1" status="degraded" reason="wake-up-unavailable" />'
 
 try {
@@ -142,8 +157,8 @@ function execute() {
   return new Promise((resolvePromise, reject) => {
     let output = Buffer.alloc(0)
     let settled = false
-    const child = spawn(process.execPath, [join(homeRoot, 'endroit.mjs'), ...route], {
-      cwd: homeRoot,
+    const child = spawn(process.execPath, [join(workplaceRoot, 'endroit.mjs'), ...route], {
+      cwd: workplaceRoot,
       env: {
         ...process.env,
         ENDROIT_INVOCATION_KIND: 'wake-up',
@@ -175,4 +190,23 @@ function execute() {
   })
 }
 `
+}
+
+function resolvedWorkplace(plan) {
+  if (plan.workplace) {
+    return {
+      id: plan.workplace.id,
+      profile: plan.workplace.profile,
+      protocol: plan.workplace.protocol,
+    }
+  }
+  return {
+    id: plan.home.name,
+    profile: 'endroit/legacy-v7',
+    protocol: 'open-workplace/0.1',
+  }
+}
+
+function sourceRevision(plan) {
+  return plan.revision ?? plan.workplace?.source_digest ?? 'legacy'
 }

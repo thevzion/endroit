@@ -1,26 +1,48 @@
-import { mkdir, readFile, realpath } from 'node:fs/promises'
-import { join, resolve } from 'node:path'
-import { API, validateDocument } from './contracts.mjs'
+import { lstat, mkdir, readFile, realpath } from 'node:fs/promises'
+import { join, relative, resolve } from 'node:path'
+import { V9_API, parseDocument, readDocument, renderDocument, validateDocumentV9 } from './documents.mjs'
 import { git } from './git.mjs'
 import { loadHome } from './home.mjs'
-import { DESK_INSTRUCTION, readInstructionFile, renderInstructionTemplate } from './instructions.mjs'
+import { DESK_INSTRUCTION, renderInstructionTemplate } from './instructions.mjs'
+import { loadLegacyDesk } from './legacy/workplace.mjs'
 import { EndroitError } from './lib/errors.mjs'
-import { assertId, exists, readJson, removeTree, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
+import { assertId, exists, removeTree, writeFileAtomic } from './lib/io.mjs'
 import { loadMember } from './member.mjs'
 
 export async function loadDesk(root) {
-  const path = join(root, '.desk', 'desk.json')
-  if (!await exists(path)) return null
-  const desk = await validateDocument(await readJson(path), 'desk')
-  await loadMember(root, desk.member)
-  desk.settings ??= {}
-  return desk
+  const path = join(root, '.desk', DESK_INSTRUCTION)
+  const legacyPath = join(root, '.desk', 'desk.json')
+  const current = await exists(path)
+  const legacy = await exists(legacyPath)
+  if (current && legacy) throw new EndroitError('ambiguous_sources', `${root}/.desk contains both DESK.md and legacy desk.json declarations.`)
+  if (!current && !legacy) return null
+  if (legacy) {
+    const desk = await loadLegacyDesk(root)
+    await loadMember(root, desk.member)
+    return desk
+  }
+  const document = await readDocument(path)
+  await validateDocumentV9(document.metadata, 'desk')
+  const member = document.metadata.owner.replace(/^member:/, '')
+  await loadMember(root, member)
+  if (!document.body.trim()) throw new EndroitError('desk_invalid', `${path} must contain collaboration context.`)
+  return {
+    ...document.metadata,
+    member,
+    settings: document.metadata.settings ?? {},
+    body: document.body,
+    sections: document.sections,
+    fragments: document.fragments,
+    source_digest: document.source_digest,
+    path: relative(root, path),
+    legacy: false,
+  }
 }
 
 export async function initDesk(root, options = {}) {
-  const home = await loadHome(root)
+  const workplace = await loadHome(root)
   const directory = join(root, '.desk')
-  if (await exists(directory)) throw new EndroitError('desk_exists', 'This Home already has a Desk directory.')
+  if (await exists(directory)) throw new EndroitError('desk_exists', 'This Workplace already has a Desk directory.')
   const member = options.member ?? 'owner'
   await loadMember(root, member)
   const repository = options.repository ?? 'separate'
@@ -29,16 +51,17 @@ export async function initDesk(root, options = {}) {
   await mkdir(directory, { recursive: true })
   try {
     if (repository === 'separate') await git(['init', '--quiet', '--initial-branch=main'], { cwd: directory })
-    const document = deskDocument(options.id, member)
-    await writeJsonAtomic(join(directory, 'desk.json'), document, 0o600)
-    await writeFileAtomic(join(directory, DESK_INSTRUCTION), await renderInstructionTemplate('desk', {
+    const document = deskDocument(options.id, member, options)
+    await validateDocumentV9(document, 'desk')
+    const template = parseDocument(await renderInstructionTemplate('desk', {
       'desk.id': document.id,
-      'desk.member': document.member,
-      'home.name': home.name,
-    }), 0o644)
+      'desk.member': member,
+      'home.name': workplace.name,
+    }), { path: 'templates/DESK.md' })
+    await writeFileAtomic(join(directory, DESK_INSTRUCTION), renderDocument({ metadata: document, body: template.body }), 0o644)
     await writeFileAtomic(join(directory, '.gitignore'), '/routes/\n/.DS_Store\n', 0o644)
     await configureParentIgnore(root, repository, previousIgnore)
-    return { status: 'initialized', id: document.id, member, repository: await deskGitBoundary(root) }
+    return { status: 'initialized', ...document, member, repository: await deskGitBoundary(root) }
   } catch (error) {
     await removeTree(directory, { force: true })
     await writeFileAtomic(join(root, '.gitignore'), previousIgnore, 0o644)
@@ -55,8 +78,7 @@ export async function cloneDesk(root, repository) {
   await git(['clone', '--quiet', '--', repository, directory], { cwd: root })
   try {
     const desk = await loadDesk(root)
-    if (!desk) throw new EndroitError('desk_invalid', 'The cloned repository does not contain desk.json.')
-    await readInstructionFile(join(directory, DESK_INSTRUCTION), 'desk_instruction')
+    if (!desk) throw new EndroitError('desk_invalid', 'The cloned repository does not contain DESK.md or a compatible legacy desk.json.')
     await configureParentIgnore(root, 'separate')
     return { status: 'cloned', id: desk.id, member: desk.member, source: repository, repository: await deskGitBoundary(root) }
   } catch (error) {
@@ -66,11 +88,16 @@ export async function cloneDesk(root, repository) {
   }
 }
 
-export function deskDocument(id = 'local', member = 'owner') {
+export function deskDocument(id = 'local', member = 'owner', options = {}) {
   return {
-    $schema: API.desk,
+    $schema: V9_API.desk,
+    kind: 'endroit/desk',
     id: assertId(id, 'Desk id'),
-    member: assertId(member, 'Member id'),
+    owner: `member:${assertId(member, 'Member id')}`,
+    desk_state: 'active',
+    ...(options.address_as ? { address_as: options.address_as } : {}),
+    ...(options.response_language ? { response_language: options.response_language } : {}),
+    ...(options.settings && Object.keys(options.settings).length ? { settings: options.settings } : {}),
   }
 }
 

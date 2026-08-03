@@ -1,0 +1,21 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v9/document.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "kind", "id", "owner", "document_role"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v9/document.json" },
+    "kind": { "$ref": "#/$defs/kind" },
+    "id": { "$ref": "#/$defs/id" },
+    "owner": { "$ref": "#/$defs/ref" },
+    "document_role": {
+      "enum": ["declaration", "material", "artifact", "projection", "site_native"]
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+    "kind": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._:-]{0,127}$" },
+    "ref": { "type": "string", "pattern": "^[a-z][a-z0-9_-]*:[^\\s]+$" }
+  }
+}

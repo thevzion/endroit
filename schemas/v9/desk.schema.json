@@ -1,0 +1,24 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v9/desk.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "kind", "id", "owner", "desk_state"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v9/desk.json" },
+    "kind": { "const": "endroit/desk" },
+    "id": { "$ref": "#/$defs/id" },
+    "owner": { "type": "string", "pattern": "^member:[a-z0-9][a-z0-9._-]{0,127}$" },
+    "desk_state": { "enum": ["active", "inactive"] },
+    "address_as": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "response_language": { "type": "string", "minLength": 2, "maxLength": 35 },
+    "settings": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$" },
+      "additionalProperties": { "type": "object" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" }
+  }
+}

@@ -10,8 +10,8 @@
     "capabilities/review.md",
     "schemas/artifact.schema.json",
     "schemas/work.schema.json",
-    "templates/item.md",
-    "templates/WORK.json",
+    "schemas/v1alpha2.schema.json",
+    "templates/WORK.md",
     "runtime.mjs"
   ],
   "capabilities": [
@@ -46,10 +46,10 @@
     {
       "id": "item",
       "schema": "schemas/artifact.schema.json",
-      "template": "templates/item.md",
+      "template": "templates/WORK.md",
+      "document": "WORK.md",
       "owners": ["desk", "home"],
-      "states": ["draft", "active", "review", "complete", "cancelled"],
-      "requiredFiles": ["templates/WORK.json"]
+      "states": ["active", "paused", "closed"]
     }
   ],
   "runtime": {

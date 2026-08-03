@@ -74,24 +74,44 @@ async function createArtifact(input, kindSelector, id, flags) {
   assertSourceScope(kind, room.scope)
   const destination = roomDestination(input, kind, id, room)
   if (await exists(destination)) throw failure('artifact_exists', `${relative(input.homeRoot, destination)} already exists.`)
-  const timestamp = new Date().toISOString()
-  const metadata = {
-    ...extraFields(flags.field),
-    $schema: 'https://endroit.org/schema/v7/artifact.json',
-    id,
-    kind: kind.id,
-    status: flags.status ?? flags.state ?? kind.states?.[0] ?? 'draft',
-    owner: room.ref,
-    created_at: timestamp,
-    updated_at: timestamp,
-    derived_from: values(flags['derived-from']),
+  const name = artifactDocument(kind)
+  const template = await readFile(join(kind.root, kind.template), 'utf8')
+  const state = flags.status ?? flags.state ?? kind.states?.[0] ?? 'draft'
+  let metadata
+  let body
+  if (name === 'artifact.md') {
+    const timestamp = new Date().toISOString()
+    metadata = {
+      ...extraFields(flags.field),
+      $schema: 'https://endroit.org/schema/v7/artifact.json',
+      id,
+      kind: kind.id,
+      status: state,
+      owner: room.ref,
+      created_at: timestamp,
+      updated_at: timestamp,
+      derived_from: values(flags['derived-from']),
+    }
+    body = template
+  } else {
+    const parsed = parseArtifact(template, name)
+    const stateKey = Object.hasOwn(parsed.metadata, 'work_state') ? 'work_state' : 'status'
+    metadata = {
+      ...parsed.metadata,
+      ...extraFields(flags.field),
+      id,
+      kind: kind.id,
+      owner: room.ref,
+      derived_from: values(flags['derived-from']),
+      [stateKey]: state,
+    }
+    body = parsed.body
   }
-  const body = await readFile(join(kind.root, kind.template), 'utf8')
   await mkdir(dirname(destination), { recursive: true })
   const stage = await mkdtemp(join(dirname(destination), '.endroit-artifact-'))
   try {
     if (flags.from) await copyInput(flags.from, stage)
-    await writeFile(join(stage, 'artifact.md'), renderArtifact(metadata, body), { mode: 0o644 })
+    await writeFile(join(stage, name), renderArtifact(metadata, body), { mode: 0o644 })
     await installRequiredFiles(stage, kind)
     await validateDirectory(stage, metadata, kind, room.scope, false)
     await rename(stage, destination)
@@ -106,11 +126,12 @@ async function createArtifact(input, kindSelector, id, flags) {
     owner: room.ref,
     ref: artifactRef(room, kind, id),
     path: relative(input.homeRoot, destination),
+    document: name,
   }
 }
 
 function extraFields(entries) {
-  const reserved = new Set(['$schema', 'id', 'kind', 'status', 'owner', 'created_at', 'updated_at', 'derived_from', 'source_digest'])
+  const reserved = new Set(['$schema', 'id', 'kind', 'status', 'work_state', 'owner', 'contract', 'created_at', 'updated_at', 'derived_from', 'source_digest'])
   const fields = {}
   for (const entry of values(entries)) {
     const separator = String(entry).indexOf('=')
@@ -131,19 +152,22 @@ async function listArtifacts(input) {
 
 async function inspectArtifact(input, selector) {
   const artifact = await selectArtifact(input, selector)
-  const document = parseArtifact(await readFile(join(artifact.path, 'artifact.md'), 'utf8'))
-  return { status: 'inspected', ...artifact, body: document.body }
+  const kind = selectKind(input.resolvedHome, artifact.kind)
+  const name = artifactDocument(kind, artifact)
+  const document = parseArtifact(await readFile(join(artifact.path, name), 'utf8'), name)
+  return { status: 'inspected', ...artifact, document: name, body: document.body }
 }
 
 async function validateArtifact(input, selector) {
   const artifact = await selectArtifact(input, selector)
   if (artifact.invalid) throw failure('artifact_invalid', artifact.invalid)
   const kind = selectKind(input.resolvedHome, artifact.kind)
-  const document = parseArtifact(await readFile(join(artifact.path, 'artifact.md'), 'utf8'))
-  const metadata = normalizeMetadata(document.metadata)
+  const name = artifactDocument(kind, artifact)
+  const document = parseArtifact(await readFile(join(artifact.path, name), 'utf8'), name)
+  const metadata = document.metadata
   const ownerScope = artifact.scope.startsWith('site:') ? 'site' : artifact.scope
   await validateDirectory(artifact.path, metadata, kind, ownerScope, artifact.legacy)
-  return { status: 'valid', id: artifact.id, kind: artifact.kind, scope: artifact.scope, legacy: artifact.legacy }
+  return { status: 'valid', id: artifact.id, kind: artifact.kind, scope: artifact.scope, document: name, legacy: artifact.legacy }
 }
 
 async function promoteArtifact(input, selector, flags) {
@@ -174,14 +198,20 @@ async function promoteArtifact(input, selector, flags) {
     destinationRef = `artifact:site/${destination.id}/${kind.roomNamespace ?? kind.owner}/${kind.localId}/${artifact.id}`
   }
   if (await exists(sitePath)) throw failure('artifact_exists', `${relative(input.homeRoot, sitePath)} already exists.`)
-  const source = parseArtifact(await readFile(join(artifact.path, 'artifact.md'), 'utf8'))
-  const metadata = {
-    ...normalizeMetadata(source.metadata),
+  const name = artifactDocument(kind, artifact)
+  const source = parseArtifact(await readFile(join(artifact.path, name), 'utf8'), name)
+  const current = name === 'artifact.md' ? normalizeMetadata(source.metadata) : source.metadata
+  const metadata = name === 'artifact.md' ? {
+    ...current,
     owner,
     updated_at: new Date().toISOString(),
-    derived_from: [...new Set([...normalizeMetadata(source.metadata).derived_from, artifact.ref])],
+    derived_from: [...new Set([...current.derived_from, artifact.ref])],
     source_digest: await treeDigest(artifact.path),
     ...(destination.kind === 'site' ? { sites: [...new Set([...(source.metadata.sites ?? []), destination.id])] } : {}),
+  } : {
+    ...current,
+    owner,
+    derived_from: [...new Set([...current.derived_from, artifact.ref])],
   }
   await mkdir(dirname(sitePath), { recursive: true })
   const stage = await mkdtemp(join(dirname(sitePath), '.endroit-artifact-'))
@@ -189,10 +219,10 @@ async function promoteArtifact(input, selector, flags) {
     await assertTree(artifact.path)
     for (const entry of await readdir(artifact.path, { withFileTypes: true })) {
       if (entry.isSymbolicLink()) throw failure('symlink_forbidden', `Artifact contains symbolic link ${entry.name}.`)
-      if (entry.name === 'artifact.md') continue
+      if (entry.name === name) continue
       await cp(join(artifact.path, entry.name), join(stage, entry.name), { recursive: true, errorOnExist: true })
     }
-    await writeFile(join(stage, 'artifact.md'), renderArtifact(metadata, source.body), { mode: 0o644 })
+    await writeFile(join(stage, name), renderArtifact(metadata, source.body), { mode: 0o644 })
     await validateDirectory(stage, metadata, kind, destination.kind === 'site' ? 'site' : 'home', false)
     await rename(stage, sitePath)
   } catch (error) {
@@ -211,6 +241,19 @@ async function promoteArtifact(input, selector, flags) {
 }
 
 async function validateDirectory(directory, metadata, kind, ownerScope, legacy) {
+  const name = artifactDocument(kind)
+  if (name !== 'artifact.md') {
+    for (const key of ['$schema', 'id', 'kind', 'owner', 'contract', 'work_type', 'work_state', 'derived_from']) {
+      if (metadata[key] === undefined || metadata[key] === '') throw failure('artifact_invalid', `Artifact metadata requires ${key}.`)
+    }
+    if (metadata.kind !== kind.id) throw failure('artifact_invalid', `Artifact kind ${metadata.kind} does not match ${kind.id}.`)
+    if (!Array.isArray(metadata.derived_from)) throw failure('artifact_invalid', 'derived_from must be an array.')
+    if (kind.states?.length && !kind.states.includes(metadata.work_state)) throw failure('artifact_invalid', `${metadata.work_state} is not valid for ${kind.id}.`)
+    if (!legacy) assertSourceScope(kind, ownerScope)
+    const schema = JSON.parse(await readFile(join(kind.root, kind.schema), 'utf8'))
+    validateMetadataSchema(metadata, schema)
+    return
+  }
   for (const key of ['$schema', 'id', 'kind', 'owner', 'status', 'created_at', 'updated_at', 'derived_from']) {
     if (metadata[key] === undefined || metadata[key] === '') throw failure('artifact_invalid', `Artifact metadata requires ${key}.`)
   }
@@ -264,7 +307,7 @@ function roomFromOwner(owner, rooms = []) {
 
 async function selectArtifact(input, selector) {
   const selectedPath = resolve(selector)
-  const candidate = basename(selectedPath) === 'artifact.md' ? dirname(selectedPath) : selectedPath
+  const candidate = ['artifact.md', 'WORK.md'].includes(basename(selectedPath)) ? dirname(selectedPath) : selectedPath
   const selectedDirectory = await realpath(candidate).catch(() => candidate)
   const matches = (await listArtifacts(input)).filter((entry) =>
     entry.id === selector
@@ -299,7 +342,7 @@ function normalizeMetadata(raw) {
   const createdAt = raw.created_at ?? raw.createdAt
   return {
     ...raw,
-    status: raw.status ?? raw.state,
+    status: raw.status ?? raw.work_state ?? raw.state,
     created_by: raw.created_by ?? raw.createdBy,
     created_at: createdAt,
     updated_at: raw.updated_at ?? createdAt,
@@ -397,9 +440,13 @@ function renderArtifact(metadata, body) {
   return `---\n${lines.join('\n')}\n---\n\n${body.trim()}\n`
 }
 
-function parseArtifact(content) {
+function artifactDocument(kind, artifact) {
+  return artifact?.document ?? kind.document ?? 'artifact.md'
+}
+
+function parseArtifact(content, name = 'artifact.md') {
   const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
-  if (!match) throw failure('artifact_invalid', 'artifact.md must start with frontmatter.')
+  if (!match) throw failure('artifact_invalid', `${name} must start with frontmatter.`)
   const metadata = {}
   for (const line of match[1].split(/\r?\n/)) {
     const separator = line.indexOf(':')

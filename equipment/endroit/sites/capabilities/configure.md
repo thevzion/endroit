@@ -1,25 +1,26 @@
 # Configure Sites
 
-Inspect the current HUD and ask which repositories matter to this Home. Propose
-the smallest useful set, separating shared Site declarations from personal
-Routes and explaining which scope owns each change.
+Inspect the current HUD and ask which repositories matter to this Workplace.
+Separate shared Site declarations from Desk-owned Routes and explain which
+scope owns each proposed change.
 
-Discover repositories only inside a human-approved search root. Present the
-exact declarations and Routes before requesting consent, persist machine paths
-only in Desk-owned Routes and leave rejected discoveries untouched.
+Use only repositories named explicitly by the human or already reachable from
+a declared Site repository. Never scan an arbitrary projects directory.
+Present exact declarations and Routes before requesting consent and leave
+rejected discoveries untouched.
 
-Offer three checkout choices:
+Offer three Checkout choices:
 
-1. **Use existing checkout** — recommended when a matching repository is
-   already available; record its path in a Desk-owned Route without moving it.
-2. **Create managed checkout** — clone it physically below
+1. **Use an existing checkout** — create a Route and bind its conventional
+   Checkout address without moving it or persisting its host path.
+2. **Create a managed checkout** — clone it physically below
    `checkouts/<site>/<route>`.
-3. **Pin a submodule** — only when the Home explicitly chooses a Git-owned
-   composition; Endroit validates it but never runs submodule add/init/update.
+3. **Use a submodule** — recognize a user-managed Git composition at the same
+   address; Endroit never runs submodule add, init or update.
 
-Do not move an existing repository during onboarding. `checkout adopt`
-preserves it and `checkout reconcile --apply` creates the conventional index
-link. Linked worktrees remain an explicit Checkout operation.
+`checkout adopt <site>/<route> <path>` is the only explicit association of an
+existing repository. A missing symlink leaves the Route `unbound` until it is
+adopted again. Linked worktrees remain an explicit Checkout operation.
 
 Confirm the resulting Route is usable, then offer a Site Map as a separate
-next outcome rather than creating one implicitly.
+outcome rather than creating one implicitly.

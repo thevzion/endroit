@@ -6,7 +6,7 @@ import test from 'node:test'
 import { API, validateRouteDocument } from '../src/contracts.mjs'
 import { createHome } from '../src/create.mjs'
 import { removeTree } from '../src/lib/io.mjs'
-import { loadRoutes, resolveCheckout, routeV8Document } from '../src/routes.mjs'
+import { loadRoutes, parseRouteMarkdown, resolveCheckout, routeV8Document, routeV9Document, routeV9Markdown } from '../src/routes.mjs'
 import { publicPlan, resolveHome } from '../src/resolved.mjs'
 import { writeRoute, writeSite } from '../src/sites.mjs'
 
@@ -132,6 +132,54 @@ test('the Core loader reads mixed v7/v8 Routes once into the Resolved Home shape
       ['legacy', 7, '/tmp/legacy'],
       ['main', 8, join(home, 'checkouts', 'demo', 'main')],
     ])
+  } finally {
+    await removeTree(home, { force: true })
+  }
+})
+
+test('Route v9 is a pathless human-owned declaration with one derived Checkout address', async () => {
+  const document = await routeV9Document({
+    id: 'main',
+    site: 'demo',
+    owner: 'desk:alexis',
+    mode: 'existing',
+  })
+  assert.equal(document.kind, 'endroit/route')
+  assert.equal(document.route_state, 'active')
+  assert.equal(document.checkout_mode, 'existing')
+  assert.equal('path' in document, false)
+  assert.equal(JSON.stringify(document).includes('/tmp/'), false)
+  const markdown = await routeV9Markdown(document)
+  assert.match(markdown, /^---\n\$schema: "https:\/\/endroit\.org\/schema\/v9\/route\.json"/)
+  assert.match(markdown, /Local address: `checkout:demo\/main`\./)
+  const parsed = await parseRouteMarkdown(markdown)
+  assert.deepEqual(parsed, document)
+  const route = await resolveCheckout(root, parsed)
+  assert.equal(route.schemaVersion, 9)
+  assert.equal(route.declaredPath, join(root, 'checkouts', 'demo', 'main'))
+  assert.equal(route.owner, 'desk:alexis')
+  await assert.rejects(resolveCheckout(root, { ...document, path: '/tmp/demo' }), (error) => error.code === 'document_invalid')
+  await assert.rejects(resolveCheckout(root, { ...document, final: false }), (error) => error.code === 'document_invalid')
+})
+
+test('the Core loader reads v9 ROUTE.md beside legacy declarations and rejects source collisions', async () => {
+  const home = await mkdtemp(join(tmpdir(), 'endroit-routes-v9-'))
+  const desk = join(home, '.desk')
+  const routeRoot = join(desk, 'routes', 'demo')
+  try {
+    await mkdir(join(routeRoot, 'current'), { recursive: true })
+    await writeFile(join(routeRoot, 'current', 'ROUTE.md'), await routeV9Markdown({
+      id: 'current', site: 'demo', owner: 'desk:local', mode: 'managed-clone',
+    }))
+    await writeFile(join(routeRoot, 'legacy.json'), `${JSON.stringify(await routeV8Document({
+      id: 'legacy', site: 'demo', checkout: { mode: 'existing', path: '/tmp/legacy' },
+    }))}\n`)
+    const routes = await loadRoutes(home, desk, [{ id: 'demo' }])
+    assert.deepEqual(routes.map(({ id, schemaVersion }) => [id, schemaVersion]), [['current', 9], ['legacy', 8]])
+    await writeFile(join(routeRoot, 'current.json'), `${JSON.stringify(await routeV8Document({
+      id: 'current', site: 'demo', checkout: { mode: 'embedded' },
+    }))}\n`)
+    await assert.rejects(loadRoutes(home, desk, [{ id: 'demo' }]), (error) => error.code === 'route_source_collision')
   } finally {
     await removeTree(home, { force: true })
   }

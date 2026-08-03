@@ -6,10 +6,9 @@ import { buildHome } from './build.mjs'
 import { initDesk } from './desk.mjs'
 import { doctorHome } from './doctor.mjs'
 import { git } from './git.mjs'
-import { homeDocument, homeId } from './home.mjs'
-import { HOME_INSTRUCTION, renderInstructionTemplate } from './instructions.mjs'
+import { loadHome, renderWorkplaceDocument, workplaceDocument, workplaceId, WORKPLACE_INSTRUCTION } from './home.mjs'
 import { EndroitError } from './lib/errors.mjs'
-import { digest, exists, removeTree, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
+import { digest, exists, removeTree, writeFileAtomic } from './lib/io.mjs'
 import { createMember } from './member.mjs'
 import { writeRoute, writeSite } from './sites.mjs'
 
@@ -24,7 +23,7 @@ export async function createHome(destination, options = {}) {
     await git(['init', '--quiet', '--initial-branch=main'], { cwd: stage })
     await initHome(stage, {
       ...options,
-      name: options.name ?? homeId(site),
+      name: options.name ?? workplaceId(site),
       deskStrategy: options.deskStrategy ?? 'tracked',
       frontDoor: { wakeUp: 'endroit/hud:prompt' },
     })
@@ -32,14 +31,14 @@ export async function createHome(destination, options = {}) {
     await bootstrapHomeRoom(stage)
     await buildHome(stage)
     const doctor = await doctorHome(stage)
-    if (doctor.status !== 'ready') throw new EndroitError('create_qualification_failed', `Created Home is ${doctor.status}: ${doctor.limits.join(', ')}.`)
+    if (doctor.status !== 'ready') throw new EndroitError('create_qualification_failed', `Created Workplace is ${doctor.status}: ${doctor.limits.join(', ')}.`)
     await git(['add', '--all'], { cwd: stage })
     await git(['-c', 'user.name=Endroit', '-c', 'user.email=local@endroit.org', 'commit', '--quiet', '-m', 'chore: initialize Endroit Home'], { cwd: stage })
-    if (await git(['remote'], { cwd: stage })) throw new EndroitError('home_remote_forbidden', 'Home creation must not configure a remote.')
+    if (await git(['remote'], { cwd: stage })) throw new EndroitError('workplace_remote_forbidden', 'Workplace creation must not configure a remote.')
     await rename(stage, site)
     return {
       status: 'created',
-      home: site,
+      workplace: site,
       desk: options.deskStrategy ?? 'tracked',
       equipment: result.equipment,
       launch: launchInstructions(site, options.providers ?? ['codex', 'claude']),
@@ -54,14 +53,14 @@ async function bootstrapHomeRoom(root) {
   const roomRoot = join(root, 'rooms', 'home')
   const equipmentRoot = join(root, 'equipment', 'endroit', 'rooms')
   const timestamp = new Date().toISOString()
-  const home = JSON.parse(await readFile(join(root, 'endroit.json'), 'utf8'))
+  const workplace = await loadHome(root)
   const values = {
     id: 'home',
     tag: 'home',
     scope: 'home',
     timestamp,
     title: 'Home',
-    summary: `Improve and maintain ${home.name}.`,
+    summary: `Improve and maintain ${workplace.name}.`,
   }
   if (await exists(roomRoot)) throw new EndroitError('home_room_exists', `${roomRoot} already exists.`)
   await mkdir(roomRoot, { recursive: true })
@@ -81,7 +80,7 @@ export async function initializeExistingHome(destination = process.cwd(), option
   if (!await exists(join(root, '.git'))) throw new EndroitError('git_repository_required', 'endroit init requires an existing Git repository.')
   const initOptions = {
     ...options,
-    name: options.name ?? homeId(root),
+    name: options.name ?? workplaceId(root),
     deskStrategy,
     frontDoor: { wakeUp: 'endroit/hud:prompt' },
   }
@@ -105,17 +104,17 @@ export async function initializeExistingHome(destination = process.cwd(), option
     }
     await buildHome(root)
     const doctor = await doctorHome(root)
-    if (doctor.status !== 'ready') throw new EndroitError('init_qualification_failed', `Initialized Home is ${doctor.status}: ${doctor.limits.join(', ')}.`)
+    if (doctor.status !== 'ready') throw new EndroitError('init_qualification_failed', `Initialized Workplace is ${doctor.status}: ${doctor.limits.join(', ')}.`)
     return {
       status: 'initialized',
-      home: root,
+      workplace: root,
       desk: deskStrategy,
       equipment: result.equipment,
       site: site.id,
       launch: launchInstructions(root, options.providers ?? ['codex', 'claude']),
     }
   } catch (error) {
-    throw new EndroitError('init_incomplete', `Home initialization stopped after source creation (${error.code ?? 'unknown'}): ${error.message}`)
+    throw new EndroitError('init_incomplete', `Workplace initialization stopped after source creation (${error.code ?? 'unknown'}): ${error.message}`)
   }
 }
 
@@ -155,13 +154,15 @@ export async function initHome(root = process.cwd(), options = {}) {
   root = resolve(root)
   if (Object.hasOwn(options, 'mode')) throw new EndroitError('legacy_mode_unsupported', 'Endroit 0.8 removed mode: solo|team. Use deskStrategy tracked|separate|later.', { exitCode: 3 })
   await mkdir(root, { recursive: true })
-  if (await exists(join(root, 'endroit.json'))) throw new EndroitError('home_exists', `${root} already contains endroit.json.`)
+  if (await exists(join(root, WORKPLACE_INSTRUCTION)) || await exists(join(root, 'endroit.json'))) {
+    throw new EndroitError('workplace_exists', `${root} already contains a current or legacy Endroit declaration.`)
+  }
   const deskStrategy = options.deskStrategy ?? 'later'
   if (!['tracked', 'separate', 'later'].includes(deskStrategy)) {
     throw new EndroitError('desk_strategy_invalid', 'Desk strategy must be tracked, separate or later.', { exitCode: 2 })
   }
   const ignorePath = join(root, '.gitignore')
-  const instructionPath = join(root, HOME_INSTRUCTION)
+  const instructionPath = join(root, WORKPLACE_INSTRUCTION)
   const deskPath = join(root, '.desk')
   const memberId = options.memberId ?? 'owner'
   const membersPath = join(root, 'members')
@@ -170,21 +171,18 @@ export async function initHome(root = process.cwd(), options = {}) {
   let memberCreated = false
   const ignoreExisted = await exists(ignorePath)
   const currentIgnore = ignoreExisted ? await readFile(ignorePath, 'utf8') : ''
-  if (await exists(instructionPath)) throw new EndroitError('home_instruction_exists', `${instructionPath} already exists.`)
+  if (await exists(instructionPath)) throw new EndroitError('workplace_declaration_exists', `${instructionPath} already exists.`)
   if (await exists(deskPath)) throw new EndroitError('desk_exists', `${deskPath} already exists.`)
   try {
-    const home = homeDocument({
+    const workplace = workplaceDocument({
       destination: root,
       name: options.name,
+      memberId,
       emoji: options.emoji,
       providers: options.providers,
       prefix: options.prefix,
-      frontDoor: options.frontDoor,
     })
-    await writeJsonAtomic(join(root, 'endroit.json'), home, 0o644)
-    await writeFileAtomic(instructionPath, await renderInstructionTemplate('home', {
-      'home.name': home.name,
-    }), 0o644)
+    await writeFileAtomic(instructionPath, await renderWorkplaceDocument(workplace, { title: options.title ?? options.name ?? workplace.id }), 0o644)
     const required = ['/.endroit/', '/checkouts/', ...(deskStrategy === 'separate' || deskStrategy === 'later' ? ['/.desk/'] : ['/.desk/routes/']), '/.DS_Store']
     const lines = currentIgnore.split(/\r?\n/)
     const missing = required.filter((line) => !lines.includes(line))
@@ -196,9 +194,8 @@ export async function initHome(root = process.cwd(), options = {}) {
       member: memberId,
       repository: deskStrategy,
     })
-    return { status: 'initialized', home: root, desk: deskStrategy, member: memberId, providers: home.providers, equipment: [] }
+    return { status: 'initialized', workplace: root, desk: deskStrategy, member: memberId, providers: workplace.providers, equipment: [] }
   } catch (error) {
-    await rm(join(root, 'endroit.json'), { force: true })
     await rm(instructionPath, { force: true })
     await removeTree(deskPath, { force: true })
     if (memberCreated) await removeTree(memberPath, { force: true })

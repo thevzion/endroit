@@ -1,6 +1,6 @@
 # Enter
 
-Reload `HOME.md`, the Resolved Home and the selected `ROOM.md` plus only the
+Reload `WORKPLACE.md`, the Resolved Workplace and the selected `ROOM.md` plus only the
 Material linked for the current question. Treat repeated entry as idempotent:
 re-read authoritative sources and do not create a global active-Room state.
 

@@ -6,6 +6,7 @@ import { dirname, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 const exec = promisify(execFile)
+const PROMPT_FINDING_LIMIT = 8
 
 const HUD_HELP = {
   show: {
@@ -16,7 +17,7 @@ const HUD_HELP = {
   prompt: {
     usage: 'endroit hud prompt',
     effect: 'read-only',
-    summary: 'Render the bounded agent-facing HUD selected by the Front Door.',
+    summary: 'Render the compact agent-facing status overlay selected by the Front Door.',
   },
   json: {
     usage: 'endroit hud json',
@@ -45,7 +46,7 @@ try {
     const model = await hud(input)
     if (command === 'json' && args.length === 0) process.stdout.write(`${JSON.stringify(model, null, 2)}\n`)
     else if (command === 'prompt' && args.length === 0) {
-      const prompt = await xml(model, input)
+      const prompt = xml(model)
       const budget = input.resolvedHome.home.settings?.['endroit/hud']?.promptBytes
       if (budget !== undefined && Buffer.byteLength(prompt) > budget) {
         throw failure('hud_budget_exceeded', `HUD prompt is ${Buffer.byteLength(prompt)} bytes, over the ${budget} byte budget.`)
@@ -327,8 +328,8 @@ async function hud(input) {
       if (!revisionMatches(route.declared.revision, route.observed.git)) attention.push(item('blocking', `site:${site.id}/${route.id}`, 'site-revision-divergent', 'Observed HEAD does not satisfy the Route revision.'))
     }
     for (const worktree of site.worktrees.filter((entry) => !entry.route)) {
-      if (!worktree.clean || worktree.conflicts || worktree.operation) attention.push(item('blocking', `site:${site.id}`, 'site-worktree-blocking', `${worktree.path} is dirty, conflicted or in a Git operation.`))
-      else if (worktree.locked || worktree.prunable) attention.push(item('warning', `site:${site.id}`, 'site-worktree-metadata', `${worktree.path} is ${worktree.locked ? 'locked' : 'prunable'}.`))
+      if (!worktree.clean || worktree.conflicts || worktree.operation) attention.push(item('blocking', `site:${site.id}`, 'site-worktree-blocking', `${site.id} has an unrouted worktree that is dirty, conflicted or in a Git operation.`))
+      else if (worktree.locked || worktree.prunable) attention.push(item('warning', `site:${site.id}`, 'site-worktree-metadata', `${site.id} has an unrouted worktree with ${worktree.locked ? 'locked' : 'prunable'} Git metadata.`))
     }
   }
   for (const runtime of trust.runtimes.filter((entry) => entry.trust === 'pending')) {
@@ -351,6 +352,7 @@ async function hud(input) {
     generatedAt: new Date().toISOString(),
     status: severity,
     event: input.invocation?.kind ?? 'command',
+    workplace: workplaceIdentity(plan),
     home: {
       name: plan.home.name,
       emoji: plan.home.emoji ?? null,
@@ -767,14 +769,14 @@ async function gitOperation(root) {
 async function projectionProbe(homeRoot, providers) {
   const state = await readJson(join(homeRoot, '.endroit', 'build.json'), null)
   const definitions = {
-    codex: { instruction: 'AGENTS.md', hook: '.codex/hooks/endroit-session-start.mjs' },
-    claude: { instruction: 'CLAUDE.md', hook: '.claude/hooks/endroit-session-start.mjs' },
+    codex: { instruction: 'AGENTS.md' },
+    claude: { instruction: 'CLAUDE.md' },
   }
   const values = []
   for (const id of providers) {
     const definition = definitions[id]
-    const expected = [definition.instruction, definition.hook]
-    const owned = [...(state?.outputs ?? []), ...(state?.managed ?? [])].filter((entry) => expected.includes(entry.path))
+    const expected = [definition.instruction]
+    const owned = (state?.outputs ?? []).filter((entry) => expected.includes(entry.path))
     let status = state ? 'fresh' : 'tracked-unverified'
     for (const path of expected) {
       const content = await readFile(join(homeRoot, path)).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
@@ -811,7 +813,7 @@ function human(model, full) {
   if (attention.length) lines.push('ATTENTION', ...attention.map((entry) => `  ${entry.severity} · ${entry.code} · ${entry.message}`))
   if (full) {
     lines.push('ROUTABLE ITEMS', ...Object.values(model.items).flat().map((entry) => `  ${entry.kind}:${entry.id} · ${entry.state} · ${entry.access.join(',')} · routable:${entry.routable} · ${entry.ref}`))
-    lines.push('PROJECTIONS', ...model.projections.map((entry) => `  ${entry.id} · ${entry.status} · ${entry.instruction} · ${entry.hook}`))
+    lines.push('PROJECTIONS', ...model.projections.map((entry) => `  ${entry.id} · ${entry.status} · ${entry.instruction}`))
     lines.push('EQUIPMENT', ...model.surfaces.equipment.map((equipment) => `  ${equipment.id}@${equipment.version} · ${equipment.scope}${equipment.overridden ? ' · override' : ''}${equipment.runtime ? ` · ${equipment.runtime.namespace}` : ''}`))
     lines.push('NATIVE EQUIPMENT', ...model.surfaces.catalog.map((equipment) => `  ${equipment.id}@${equipment.version} · ${equipment.installed.length ? `installed:${equipment.installed.join(',')}` : 'available'}`))
     lines.push('SKILLS', ...model.surfaces.skills.map((entry) => `  ${entry.projectedId} · ${entry.owner}`))
@@ -828,109 +830,53 @@ function gitSummary(git) {
   return `${git.branch ?? 'detached'} · ${git.clean ? 'clean' : `${git.changes} changes`} · ${short(git.head)} · ${git.worktrees.length} worktrees · ${date(git.committedAt)}`
 }
 
-async function xml(model, input) {
-  const deskInstructions = await resolvedDeskInstructions(input.resolvedHome)
+function xml(model) {
+  const findings = promptFindings(model.attention)
   const lines = [
-    `<endroit-hud version="2" status="${model.status}" generated-at="${model.generatedAt}" event="${escape(model.event)}">`,
-    `  <home name="${escape(model.home.name)}"${model.home.emoji ? ` emoji="${escape(model.home.emoji)}"` : ''} root="${escape(model.home.root)}" providers="${model.home.providers.join(',')}" members="${escape(model.members.map((member) => member.id).join(','))}"/>`,
-    `  <kernel runtime="${escape(model.kernel.runtime)}" source="${model.kernel.source}" invoke="${escape(model.kernel.invoke)}"/>`,
+    `<endroit-hud version="3" status="${model.status}" event="${escape(model.event)}">`,
+    `  <workplace id="${escape(model.workplace.id)}" profile="${escape(model.workplace.profile)}" protocol="${escape(model.workplace.protocol)}" revision="${escape(model.workplace.revision)}"/>`,
+    '  <routing priority="explicit-human,unique-semantic-match,ask-if-ambiguous">Inspect only the owned sources needed for the current request. The Wake-up does not select a destination.</routing>',
+    `  <attention blocking="${model.attention.blocking.length}" warning="${model.attention.warning.length}" advisory="${model.attention.advisory.length}">`,
   ]
-  if (model.collaborator) {
-    lines.push(`  <collaborator id="${escape(model.collaborator.id)}"${model.collaborator.addressAs ? ` address-as="${escape(model.collaborator.addressAs)}"` : ''}${model.collaborator.responseLanguage ? ` response-language="${escape(model.collaborator.responseLanguage)}"` : ''}/>`)
+  for (const finding of findings.items) {
+    lines.push(`    <item severity="${finding.severity}" code="${escape(bounded(finding.code, 96))}" count="${finding.count}" subject="${escape(bounded(finding.subject, 160))}">${escape(bounded(finding.message, 240))}</item>`)
   }
-  lines.push(`  <desk configured="${model.desk.configured}"${model.desk.configured ? ` id="${escape(model.desk.id)}" member="${escape(model.desk.member)}" repository="${model.desk.repository}" root="${escape(model.desk.root)}"` : ''}/>`)
-  lines.push(`  ${gitXml('home-git', model.home.git)}`)
-  if (model.desk.configured) lines.push(model.desk.git?.root === model.home.git?.root ? '  <desk-git same-as="home-git"/>' : `  ${gitXml('desk-git', model.desk.git)}`)
-  lines.push('  <routing priority="explicit-human,unique-semantic-match,ask-if-ambiguous">The Wake-up does not know the user message. Use these items to infer later; do not resolve a route now.</routing>')
-  lines.push(`  <providers states="${escape(model.projections.map((entry) => `${entry.id}:${entry.status}`).join(','))}"/>`, '  <items>')
-  for (const group of ['rooms', 'meetings', 'sites', 'capabilities']) {
-    lines.push(`    <${group}>`)
-    const entries = group === 'capabilities' ? promptCapabilityItems(input.resolvedHome) : model.items[group]
-    for (const entry of entries) lines.push(`      <item ${group === 'capabilities' ? promptCapabilityAttributes(entry) : itemAttributes(entry)}/>`)
-    lines.push(`    </${group}>`)
-  }
-  lines.push('  </items>', `  <runtimes namespaces="${escape(model.surfaces.runtimes.map((entry) => entry.namespace).join(','))}"/>`)
-  lines.push(`  <context instructions-bytes="${model.context.instructionBytes}" desk-instructions-bytes="${model.context.deskInstructionBytes}" model-descriptions-bytes="${model.context.modelDescriptionBytes}"${model.context.promptBudgetBytes === null ? '' : ` hud-budget-bytes="${model.context.promptBudgetBytes}"`}/>`)
-  lines.push(`  <trust bundled="${model.trust.bundled}" approved="${model.trust.approved}" pending="${model.trust.pending}"/>`, '  <desk-instructions>')
-  for (const instruction of deskInstructions) {
-    lines.push(`    <instruction owner="${escape(instruction.owner)}" id="${escape(instruction.id)}" source="${escape(instruction.source)}">${escape(instruction.content)}</instruction>`)
-  }
-  lines.push('  </desk-instructions>', '  <attention>')
-  for (const [severity, entries] of Object.entries(model.attention)) {
-    lines.push(`    <${severity}>`)
-    for (const entry of entries) {
-      lines.push(`      <item subject="${escape(entry.subject)}" code="${escape(entry.code)}">${escape(entry.message)}</item>`)
-    }
-    lines.push(`    </${severity}>`)
-  }
+  if (findings.omitted) lines.push(`    <omitted count="${findings.omitted}"/>`)
   lines.push('  </attention>', '</endroit-hud>')
   return lines.join('\n')
 }
 
-function itemAttributes(entry) {
-  const capability = entry.kind === 'capability'
-  return [
-    `id="${escape(entry.id)}"`,
-    ...(entry.emoji ? [`emoji="${escape(entry.emoji)}"`] : []),
-    ...(capability ? [] : [`state="${entry.state}"`]),
-    ...(entry.routable ? [] : ['routable="false"']),
-    ...(capability ? [] : [`access="${entry.access.join(',')}"`]),
-    `summary="${escape(entry.summary ?? '')}"`,
-    ...(capability ? [] : [`tags="${escape((entry.tags ?? []).join(','))}"`]),
-    ...((entry.when ?? []).length ? [`when="${escape(entry.when.join(' | '))}"`] : []),
-    ...(capability ? [] : [`ref="${escape(entry.ref)}"`]),
-    ...(entry.routes ? [`routes="${escape(entry.routes.map((route) => `${route.id}:${route.state}${route.head ? `@${short(route.head)}` : ''}`).join(','))}"`] : []),
-    ...(entry.map ? [`map="${entry.map.state === 'missing' ? 'missing' : `${entry.map.state}:${entry.map.count}${entry.map.derivedFrom ? `@${short(String(entry.map.derivedFrom).split('@').at(-1))}` : ''}`}"`] : []),
-    ...(entry.metadataError ? [`metadata-error="${escape(entry.metadataError)}"`] : []),
-  ].join(' ')
-}
-
-function promptCapabilityItems(plan) {
-  return plan.capabilities.flatMap((capability) => {
-    const skills = plan.skills.filter((entry) => entry.capability === capability.id)
-    if (!skills.length) return []
-    return [{
-      ref: `capability:${capability.id}`,
-      summary: capability.description,
-      when: [...new Set(skills.map((entry) => entry.description))],
-      entrypoints: [...new Set(skills.map((entry) => entry.projectedId))].sort(),
-    }]
-  }).sort((left, right) => left.ref.localeCompare(right.ref))
-}
-
-function promptCapabilityAttributes(entry) {
-  return [
-    `ref="${escape(entry.ref)}"`,
-    `summary="${escape(entry.summary)}"`,
-    ...(entry.when.length ? [`when="${escape(entry.when.join(' | '))}"`] : []),
-    `entrypoints="${escape(entry.entrypoints.join(','))}"`,
-  ].join(' ')
-}
-
-function gitXml(name, git) {
-  if (!git?.available) return `<${name} available="false"${git?.error ? ` error="${escape(git.error)}"` : ''}/>`
-  return `<${name} available="true" root="${escape(git.root)}" branch="${escape(git.branch ?? 'detached')}"${git.head ? ` head="${git.head}"` : ' state="unborn"'} clean="${git.clean}" changes="${git.changes}" conflicts="${git.conflicts}" ahead="${git.ahead}" behind="${git.behind}" operation="${git.operation ?? 'none'}" worktrees="${git.worktrees.length}"${git.committedAt ? ` committed-at="${git.committedAt}"` : ''}/>`
-}
-
-async function resolvedDeskInstructions(plan) {
-  const entries = []
-  if (plan.deskInstruction) {
-    entries.push({
-      owner: plan.deskInstruction.owner,
-      id: plan.deskInstruction.id,
-      source: plan.deskInstruction.path,
-      content: await readFile(join(plan.deskInstruction.root, plan.deskInstruction.path), 'utf8'),
-    })
+function promptFindings(attention) {
+  const grouped = new Map()
+  for (const [severity, entries] of Object.entries(attention)) {
+    for (const entry of entries) {
+      const key = `${severity}:${entry.code}`
+      const current = grouped.get(key)
+      if (current) current.count += 1
+      else grouped.set(key, {
+        severity,
+        count: 1,
+        ...entry,
+        message: entry.code === 'home-git-unavailable' ? 'Home Git inspection is unavailable.' : entry.message,
+      })
+    }
   }
-  for (const instruction of plan.instructions.filter((entry) => entry.scope === 'desk')) {
-    entries.push({
-      owner: instruction.owner,
-      id: instruction.localId,
-      source: `equipment/${instruction.owner}/${instruction.path}`,
-      content: await readFile(join(instruction.root, instruction.path), 'utf8'),
-    })
+  const values = [...grouped.values()]
+  return { items: values.slice(0, PROMPT_FINDING_LIMIT), omitted: Math.max(0, values.length - PROMPT_FINDING_LIMIT) }
+}
+
+function workplaceIdentity(plan) {
+  return {
+    id: plan.workplace?.id ?? plan.home.name,
+    profile: plan.workplace?.profile ?? 'endroit/legacy-v7',
+    protocol: plan.workplace?.protocol ?? 'open-workplace/0.1',
+    revision: plan.revision ?? plan.workplace?.source_digest ?? 'legacy',
   }
-  return entries
+}
+
+function bounded(value, limit) {
+  const text = String(value)
+  return text.length <= limit ? text : `${text.slice(0, limit - 1)}…`
 }
 
 function frontmatter(content) {

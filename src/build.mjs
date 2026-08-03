@@ -1,10 +1,10 @@
 import { lstat, readFile } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { isAbsolute, join, relative, sep } from 'node:path'
 import { applyTransaction } from './equipment.mjs'
-import { homeConsole, renderFloorPlan, sessionWrapper } from './front-door.mjs'
-import { git } from './git.mjs'
+import { homeConsole, renderProviderBootstrap } from './front-door.mjs'
+import { extractSection, readDocument } from './documents.mjs'
 import { EndroitError } from './lib/errors.mjs'
-import { digest, exists, readJson, resolvePackageFile, writeFileAtomic } from './lib/io.mjs'
+import { digest, readJson, resolvePackageFile } from './lib/io.mjs'
 import { provider } from './providers/index.mjs'
 import { resolveHome } from './resolved.mjs'
 
@@ -13,33 +13,27 @@ export async function buildHome(root, options = {}) {
   const statePath = join(root, '.endroit', 'build.json')
   const previous = await readJson(statePath, null)
   const wanted = await providerOutputs(plan)
-  wanted.sort((left, right) => left.path.localeCompare(right.path))
+  wanted.sort((left, right) => compareStrings(left.path, right.path))
   assertNoOutputCollisions(wanted)
   const mutations = await reconcileOutputs(root, previous?.outputs ?? [], wanted, Boolean(options.check))
-  const writes = [...mutations.writes]
-  const managed = []
-
-  for (const id of ['codex', 'claude']) {
-    const projector = provider(id)
-    const active = plan.home.providers.includes(id) && Boolean(plan.frontDoor)
-    const hookPath = join(root, projector.hookPath)
-    const hook = await planHookConfig(hookPath, active, projector, options.check)
-    if (hook.managed) managed.push(relativeManaged(root, hook.managed))
-    if (hook.write) writes.push(hook.write)
+  const state = {
+    version: 1,
+    revision: plan.revision ?? plan.workplace?.source_digest ?? 'legacy',
+    sources: await receiptSources(plan, wanted),
+    outputs: mutations.outputs,
   }
-
-  const state = { version: 2, outputs: mutations.outputs, managed }
   if (options.check) {
     if (previous && JSON.stringify(previous) !== JSON.stringify(state)) throw stale('Local build state does not match the resolved Home.')
   } else {
-    writes.push({ path: statePath, content: Buffer.from(`${JSON.stringify(state, null, 2)}\n`) })
+    mutations.writes.push({ path: statePath, content: Buffer.from(`${JSON.stringify(state, null, 2)}\n`) })
   }
-  await reconcileDeskExcludes(root, plan, mutations.outputs, Boolean(options.check))
-  if (!options.check) await applyTransaction(root, writes, mutations.deletes)
+  if (!options.check) await applyTransaction(root, mutations.writes, mutations.deletes)
   return state
 }
 
 async function providerOutputs(plan) {
+  const declaration = declarationSource(plan)
+  const resolvedSources = resolvedSourcePaths(plan)
   const capabilities = new Map()
   for (const entry of plan.capabilities) {
     capabilities.set(entry.id, { ...entry, content: await readFile(await resolvePackageFile(entry.root, entry.path, `${entry.owner} Capability`), 'utf8') })
@@ -55,8 +49,9 @@ async function providerOutputs(plan) {
     provider: null,
     owner: 'endroit/kernel',
     scope: 'home',
+    sources: [sourcePath(plan, declaration)],
   })
-  for (const providerId of plan.home.providers) {
+  for (const providerId of plan.workplace?.providers ?? plan.home.providers) {
     const projector = provider(providerId)
     values.push({
       path: projector.instructionPath,
@@ -64,21 +59,20 @@ async function providerOutputs(plan) {
       provider: providerId,
       owner: 'endroit/instructions',
       scope: 'home',
+      sources: resolvedSources.length ? resolvedSources : [sourcePath(plan, declaration)],
     })
-    if (plan.frontDoor) {
-      values.push({
-        path: projector.sessionPath,
-        content: Buffer.from(sessionWrapper(providerId, plan.frontDoor)),
-        provider: providerId,
-        owner: 'endroit/kernel',
-        scope: 'home',
-      })
-    }
-    for (const surface of [...surfaces.values()].sort((left, right) => left.projectedId.localeCompare(right.projectedId))) {
+    for (const surface of [...surfaces.values()].sort((left, right) => compareStrings(left.projectedId, right.projectedId))) {
       const capability = capabilities.get(surface.capability)
       if (!capability) throw new EndroitError('capability_missing', `${surface.id} references missing ${surface.capability}.`)
       const output = projector.output(surface, capability)
-      values.push({ ...output, provider: providerId, owner: surface.owner, scope: surface.scope, content: Buffer.from(output.content) })
+      values.push({
+        ...output,
+        provider: providerId,
+        owner: surface.owner,
+        scope: surface.scope,
+        sources: surfaceSourcePaths(plan, surface, capability),
+        content: Buffer.from(output.content),
+      })
     }
   }
   return values
@@ -101,16 +95,15 @@ function mergeSurface(surfaces, item, kind) {
 }
 
 async function renderAgentContract(plan) {
-  const home = await readFile(await resolvePackageFile(plan.homeInstruction.root, plan.homeInstruction.path, 'Home Instruction'), 'utf8')
-  const entries = [
-    `<!-- source: ${plan.homeInstruction.path} -->\n\n${home.trim()}`,
-    renderFloorPlan(plan),
-  ]
-  for (const instruction of plan.instructions.filter((entry) => entry.scope === 'home')) {
-    const content = await readFile(await resolvePackageFile(instruction.root, instruction.path, `${instruction.owner} Instruction`), 'utf8')
-    entries.push(`## ${instruction.owner}:${instruction.localId}\n\n<!-- source: equipment/${instruction.owner}/${instruction.path} -->\n\n${content.trim()}`)
+  if (plan.workplace) {
+    const source = declarationSource(plan)
+    const document = plan.home?.declaration
+      ?? await readDocument(await resolvePackageFile(source.root, source.path, 'Workplace declaration'))
+    return renderProviderBootstrap(plan, extractSection(document, 'Constitution')?.body)
   }
-  return `${entries.join('\n\n')}\n`
+  const source = declarationSource(plan)
+  const constitution = await readFile(await resolvePackageFile(source.root, source.path, 'Home Instruction'), 'utf8')
+  return renderProviderBootstrap(plan, constitution)
 }
 
 async function reconcileOutputs(root, previous, wanted, check) {
@@ -135,7 +128,14 @@ async function reconcileOutputs(root, previous, wanted, check) {
     if (current && !prior && digest(current) !== digest(entry.content)) throw new EndroitError('generated_output_collision', `${entry.path} already exists and Endroit does not own it.`, { exitCode: 5 })
     if (check && (!current || digest(current) !== digest(entry.content))) throw stale(`${entry.path} needs a rebuild.`)
     if (!check && (!current || digest(current) !== digest(entry.content))) writes.push({ path, content: entry.content })
-    outputs.push({ path: entry.path, provider: entry.provider, owner: entry.owner, scope: entry.scope, digest: digest(entry.content) })
+    outputs.push({
+      path: entry.path,
+      digest: digest(entry.content),
+      provider: entry.provider,
+      owner: entry.owner,
+      scope: entry.scope,
+      sources: [...new Set(entry.sources)].sort(),
+    })
   }
   return { outputs, writes, deletes }
 }
@@ -153,51 +153,6 @@ async function generatedFile(path, label) {
   }
 }
 
-async function planHookConfig(path, active, projector, check) {
-  const currentText = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
-  if (!active && currentText === null) return { managed: null, write: null }
-  const current = currentText ? JSON.parse(currentText) : {}
-  current.hooks ??= {}
-  const entries = (current.hooks.SessionStart ?? []).flatMap((entry) => {
-    const hooks = (entry.hooks ?? []).filter((hook) => !endroitSessionHook(hook.command))
-    return hooks.length ? [{ ...entry, hooks }] : []
-  })
-  if (active) entries.push(projector.hook())
-  if (entries.length) current.hooks.SessionStart = entries
-  else delete current.hooks.SessionStart
-  if (!Object.keys(current.hooks).length) delete current.hooks
-  const next = `${JSON.stringify(current, null, 2)}\n`
-  if (check && currentText !== next) throw stale(`${path} needs a SessionStart hook rebuild.`)
-  return {
-    managed: active ? { path, digest: digest(next) } : null,
-    write: !check && currentText !== next ? { path, content: Buffer.from(next) } : null,
-  }
-}
-
-function endroitSessionHook(command = '') {
-  return /endroit-session-start\.mjs$/.test(command)
-}
-
-async function reconcileDeskExcludes(root, plan, outputs, check) {
-  let path
-  try {
-    path = await git(['rev-parse', '--git-path', 'info/exclude'], { cwd: root })
-  } catch {
-    return
-  }
-  if (!path.startsWith('/')) path = join(root, path)
-  const current = await readFile(path, 'utf8').catch((error) => error.code === 'ENOENT' ? '' : Promise.reject(error))
-  const region = /# endroit:desk-projections begin\n[\s\S]*?# endroit:desk-projections end\n?/g
-  const base = current.replace(region, '')
-  const paths = plan.desk?.repository === 'separate'
-    ? outputs.filter((entry) => entry.scope === 'desk').map((entry) => `/${entry.path}`).sort()
-    : []
-  const block = paths.length ? `# endroit:desk-projections begin\n${paths.join('\n')}\n# endroit:desk-projections end\n` : ''
-  const next = block ? `${base.trimEnd()}${base.trim() ? '\n' : ''}${block}` : `${base.trimEnd()}${base.trim() ? '\n' : ''}`
-  if (check && current !== next) throw stale('Local Git excludes do not match Desk projections.')
-  if (!check && current !== next) await writeFileAtomic(path, next, 0o644)
-}
-
 function assertNoOutputCollisions(outputs) {
   const owners = new Map()
   for (const output of outputs) {
@@ -206,6 +161,71 @@ function assertNoOutputCollisions(outputs) {
   }
 }
 
-function relativeManaged(root, entry) { return { ...entry, path: relative(root, entry.path) } }
+async function receiptSources(plan, outputs) {
+  const candidates = plan.sources ?? plan.workplace?.sources ?? []
+  const sources = candidates.map((source) => ({
+    path: sourcePath(plan, source),
+    owner: source.owner,
+    digest: source.digest ?? source.source_digest,
+  }))
+  const needed = new Set(outputs.flatMap((output) => output.sources))
+  const dependencies = [
+    declarationSource(plan),
+    ...plan.capabilities.flatMap((capability) => [
+      capability,
+      { root: capability.root, path: 'equipment.json', owner: capability.owner },
+    ]),
+  ]
+  for (const source of dependencies) {
+    if (!source?.path) continue
+    const path = sourcePath(plan, source)
+    if (!needed.has(path) || sources.some((entry) => entry.path === path)) continue
+    const file = await resolvePackageFile(source.root ?? plan.root, source.path, `${source.owner} source`)
+    sources.push({ path, owner: source.owner, digest: digest(await readFile(file)) })
+  }
+  const receipt = sources
+    .filter((source) => source.path && source.owner && source.digest)
+    .sort((left, right) => compareStrings(left.path, right.path))
+  const declared = new Set(receipt.map((source) => source.path))
+  const missing = [...needed].filter((path) => !declared.has(path))
+  if (missing.length) throw new EndroitError('build_source_missing', `Build outputs reference missing sources: ${missing.join(', ')}.`)
+  return receipt
+}
+
+function sourcePath(plan, source) {
+  const path = isAbsolute(source.path)
+    ? relative(plan.root, source.path)
+    : relative(plan.root, join(source.root ?? plan.root, source.path))
+  if (!path || path === '..' || path.startsWith(`..${sep}`) || isAbsolute(path)) {
+    throw new EndroitError('build_source_invalid', `Build source ${source.path} is outside the Workplace.`)
+  }
+  return path
+}
+
+function resolvedSourcePaths(plan) {
+  return [...new Set((plan.sources ?? plan.workplace?.sources ?? []).map((source) => sourcePath(plan, source)))].sort(compareStrings)
+}
+
+function surfaceSourcePaths(plan, surface, capability) {
+  const paths = [
+    sourcePath(plan, capability),
+    sourcePath(plan, { root: capability.root, path: 'equipment.json' }),
+    ...(surface.route?.path ? [sourcePath(plan, { root: plan.root, path: surface.route.path })] : []),
+  ]
+  return [...new Set(paths)].sort(compareStrings)
+}
+
+function declarationSource(plan) {
+  if (plan.workplace?.path) {
+    return {
+      root: plan.root,
+      path: plan.workplace.path,
+      owner: plan.workplace.owner,
+    }
+  }
+  return plan.homeInstruction
+}
+
+function compareStrings(left, right) { return left < right ? -1 : left > right ? 1 : 0 }
 function stale(message) { return new EndroitError('build_stale', message, { exitCode: 5 }) }
 function diverged(path) { return new EndroitError('generated_output_diverged', `${path} was edited.`, { exitCode: 5 }) }

@@ -1,6 +1,7 @@
 import { lstat, mkdir, mkdtemp, readFile, readdir, rename } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import { API, validateDocument } from './contracts.mjs'
+import { V9_API, readDocument, validateDocumentV9 } from './documents.mjs'
+import { loadLegacyMember } from './legacy/workplace.mjs'
 import { EndroitError } from './lib/errors.mjs'
 import { assertId, exists, removeTree, writeFileAtomic } from './lib/io.mjs'
 
@@ -16,18 +17,21 @@ export async function createMember(root, id, options = {}) {
     if (info.isSymbolicLink() || !info.isDirectory()) throw new EndroitError('members_root_invalid', `${membersRoot} must be a regular directory.`)
   } else await mkdir(membersRoot, { recursive: true })
   const member = {
-    $schema: API.member,
+    $schema: V9_API.member,
+    kind: 'endroit/member',
     id,
+    owner: `member:${id}`,
     name: String(options.name ?? title(id)).trim(),
-    status: options.status ?? 'active',
+    membership_state: options.membership_state ?? options.status ?? 'active',
     accounts: options.accounts ?? [],
   }
-  await validateDocument(member, 'member')
+  await validateDocumentV9(member, 'member')
   const template = await readFile(templatePath, 'utf8')
   const values = {
     'member.id': JSON.stringify(member.id),
+    'member.owner': JSON.stringify(member.owner),
     'member.name': JSON.stringify(member.name),
-    'member.status': JSON.stringify(member.status),
+    'member.status': JSON.stringify(member.membership_state),
     'member.accounts': JSON.stringify(member.accounts),
   }
   const content = template.replace(/\{\{([^{}]+)\}\}/g, (_match, key) => {
@@ -46,19 +50,28 @@ export async function createMember(root, id, options = {}) {
 }
 
 export async function loadMember(root, id) {
-  const path = join(root, 'members', assertId(id, 'Member id'), 'MEMBER.md')
-  let info
-  try { info = await lstat(path) }
+  id = assertId(id, 'Member id')
+  const path = join(root, 'members', id, 'MEMBER.md')
+  let document
+  try { document = await readDocument(path) }
   catch (error) {
-    if (error.code === 'ENOENT') throw new EndroitError('member_missing', `Member ${id} does not exist in this Home.`)
+    if (error.code === 'document_missing') throw new EndroitError('member_missing', `Member ${id} does not exist in this Workplace.`)
     throw error
   }
-  if (info.isSymbolicLink() || !info.isFile()) throw new EndroitError('member_invalid', `${path} must be a regular file.`)
-  const { metadata, body } = parseMember(await readFile(path, 'utf8'), path)
-  await validateDocument(metadata, 'member')
-  if (metadata.id !== id) throw new EndroitError('member_identity_mismatch', `${path} declares Member ${metadata.id}, expected ${id}.`)
-  if (!body.trim()) throw new EndroitError('member_invalid', `${path} must contain collaboration context.`)
-  return { ...metadata, body, path: relative(root, path) }
+  if (document.metadata.$schema !== V9_API.member) return loadLegacyMember(root, id)
+  await validateDocumentV9(document.metadata, 'member')
+  if (document.metadata.id !== id) throw new EndroitError('member_identity_mismatch', `${path} declares Member ${document.metadata.id}, expected ${id}.`)
+  if (document.metadata.owner !== `member:${id}`) throw new EndroitError('member_owner_mismatch', `${path} must be owned by member:${id}.`)
+  if (!document.body.trim()) throw new EndroitError('member_invalid', `${path} must contain collaboration context.`)
+  return {
+    ...document.metadata,
+    body: document.body,
+    sections: document.sections,
+    fragments: document.fragments,
+    source_digest: document.source_digest,
+    path: relative(root, path),
+    legacy: false,
+  }
 }
 
 export async function listMembers(root, options = {}) {
@@ -94,19 +107,5 @@ export function parseAccounts(values = []) {
   })
 }
 
-function parseMember(content, path) {
-  const match = content.match(/^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/)
-  if (!match) throw new EndroitError('member_invalid', `${path} must start with frontmatter.`)
-  const metadata = {}
-  for (const line of match[1].split(/\r?\n/)) {
-    const separator = line.indexOf(':')
-    if (separator < 1) throw new EndroitError('member_invalid', `Invalid frontmatter line in ${path}: ${line}`)
-    const key = line.slice(0, separator).trim()
-    const raw = line.slice(separator + 1).trim()
-    try { metadata[key] = JSON.parse(raw) } catch { metadata[key] = raw.replace(/^"|"$/g, '') }
-  }
-  return { metadata, body: match[2] }
-}
-
-function withoutBody({ body, ...member }) { return member }
+function withoutBody({ body, sections, fragments, ...member }) { return member }
 function title(id) { return id.split(/[-_.]+/).map((part) => part ? part[0].toUpperCase() + part.slice(1) : part).join(' ') }

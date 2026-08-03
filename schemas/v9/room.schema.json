@@ -1,0 +1,31 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v9/room.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "kind", "id", "owner", "room_state"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v9/room.json" },
+    "kind": { "const": "endroit/room" },
+    "id": { "$ref": "#/$defs/id" },
+    "owner": { "type": "string", "pattern": "^(?:workplace|desk):[a-z0-9][a-z0-9._-]{0,127}$" },
+    "room_state": { "enum": ["active", "archived"] },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "emoji": { "type": "string", "minLength": 1, "maxLength": 16 },
+    "when": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" }
+  }
+}

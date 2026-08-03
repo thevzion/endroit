@@ -11,7 +11,9 @@ Present the review projection of one owned `endroit/work:item`.
    human invoked this command; the Work runtime itself never executes it.
 4. Interpret `1 OK` as `accepted`, `2 changes: <note>` as
    `changes-requested`, and `3 blocked: <note>` as `blocked`. Record only the
-   named item through `node ./endroit.mjs work record-review`.
+   named fragment through `node ./endroit.mjs work record-review`. The command
+   changes only that fragment's metadata in `WORK.md`; its prose remains owned
+   by the document.
 5. Present the updated review list and remaining pending items.
 
 Review never accepts the Artifact, changes its lifecycle, commits, pushes,

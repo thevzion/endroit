@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v9/route.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "kind", "id", "site", "owner", "route_state", "checkout_mode"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v9/route.json" },
+    "kind": { "const": "endroit/route" },
+    "id": { "$ref": "#/$defs/id" },
+    "site": { "$ref": "#/$defs/id" },
+    "owner": { "type": "string", "pattern": "^desk:[a-z0-9][a-z0-9._-]{0,127}$" },
+    "route_state": { "enum": ["active", "parked", "superseded"] },
+    "superseded_by": { "$ref": "#/$defs/id" },
+    "revision": { "$ref": "#/$defs/revision" },
+    "checkout_mode": { "enum": ["embedded", "existing", "managed-clone", "managed-worktree", "submodule"] }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "route_state": { "const": "superseded" } },
+        "required": ["route_state"]
+      },
+      "then": { "required": ["superseded_by"] },
+      "else": { "not": { "required": ["superseded_by"] } }
+    },
+    {
+      "if": {
+        "properties": { "checkout_mode": { "const": "managed-worktree" } },
+        "required": ["checkout_mode"]
+      },
+      "then": { "required": ["revision"] }
+    },
+    {
+      "if": {
+        "properties": { "checkout_mode": { "const": "submodule" } },
+        "required": ["checkout_mode"]
+      },
+      "then": { "not": { "required": ["revision"] } }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+    "revision": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": { "const": "branch" },
+            "name": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "sha"],
+          "properties": {
+            "kind": { "const": "commit" },
+            "sha": { "type": "string", "pattern": "^[a-fA-F0-9]{40,64}$" }
+          }
+        }
+      ]
+    }
+  }
+}

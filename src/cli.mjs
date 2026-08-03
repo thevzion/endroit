@@ -15,11 +15,12 @@ import { bootstrapEquipment, createHome, initializeExistingHome } from './create
 import { runCreateWizard } from './create-wizard.mjs'
 import { cloneDesk, initDesk } from './desk.mjs'
 import { doctorHome } from './doctor.mjs'
-import { assertRuntime, findHome } from './home.mjs'
+import { assertRuntime } from './home.mjs'
 import { asEndroitError, EndroitError } from './lib/errors.mjs'
 import { publicPlan, resolveHome } from './resolved.mjs'
 import { dispatchRuntime, runtimeTrust } from './runtime.mjs'
 import { createMember, doctorMembers, inspectMember, listMembers, parseAccounts } from './member.mjs'
+import { findWorkplace } from './workplace.mjs'
 
 export async function runCli(argv = process.argv.slice(2), io = process, dependencies = {}) {
   const { positionals, flags } = parseArguments(argv)
@@ -41,11 +42,11 @@ export async function runCli(argv = process.argv.slice(2), io = process, depende
 async function route(command, action, rest, flags, argv, io, dependencies) {
   if (!command) return help()
   if (command === 'create') return createRoute(required(action, 'destination'), flags, io, dependencies.prompts)
-  if (command === 'init') return initRoute(action ?? flags.home ?? process.cwd(), flags)
+  if (command === 'init') return initRoute(action ?? workplaceFlag(flags) ?? process.cwd(), flags)
   if (command === 'equipment' && action === 'validate') {
-    return validateEquipmentSource(flags.home ?? process.cwd(), required(rest[0], 'Equipment source'))
+    return validateEquipmentSource(workplaceFlag(flags) ?? process.cwd(), required(rest[0], 'Equipment source'))
   }
-  const root = await findHome(flags.home ?? process.cwd())
+  const root = await findWorkplace(workplaceFlag(flags) ?? process.cwd())
   await assertRuntime(root)
   if (command === 'desk') return deskRoute(root, action, rest, flags)
   if (command === 'member') return memberRoute(root, action, rest, flags)
@@ -54,10 +55,10 @@ async function route(command, action, rest, flags, argv, io, dependencies) {
   if (command === 'build') return buildHome(root, { check: booleanFlag(flags.check) })
   if (command === 'doctor') return doctorHome(root)
   if (command === 'route' || command === 'checkout') {
-    const runtimeArgs = [command, ...withoutHomeFlag(argv.slice(argv.indexOf(command) + 1))]
+    const runtimeArgs = [command, ...withoutWorkplaceFlag(argv.slice(argv.indexOf(command) + 1))]
     return { passthrough: true, exitCode: await dispatchRuntime(root, 'site', runtimeArgs, io) }
   }
-  const runtimeArgs = withoutHomeFlag(argv.slice(argv.indexOf(command) + 1))
+  const runtimeArgs = withoutWorkplaceFlag(argv.slice(argv.indexOf(command) + 1))
   return { passthrough: true, exitCode: await dispatchRuntime(root, command, runtimeArgs, io) }
 }
 
@@ -177,7 +178,7 @@ async function equipmentRoute(root, action, rest, flags, io) {
   if (action === 'override') return overrideEquipment(root, required(rest[0], 'Equipment'))
   if (action === 'catalog') return { status: 'catalogued', equipment: await catalogEquipment(root) }
   if (action === 'promote' || action === 'publish') {
-    if (flags.to !== 'home') throw usage(`endroit equipment ${action} <id> --to home`)
+    if (!['workplace', 'home'].includes(flags.to)) throw usage(`endroit equipment ${action} <id> --to workplace`)
     const result = await promoteEquipment(root, required(rest[0], 'Equipment'))
     return action === 'publish'
       ? { ...result, deprecated: 'equipment publish is deprecated; use equipment promote.' }
@@ -189,10 +190,10 @@ async function equipmentRoute(root, action, rest, flags, io) {
 
 function help() {
   return {
-    summary: 'One Home for the agents, methods, and repositories you already use.',
-    next: ['endroit create <home> or endroit init', 'open an agent in the Home', 'describe what you are working on'],
+    summary: 'One declared Workplace for the agents, methods, and repositories you already use.',
+    next: ['endroit create <workplace> or endroit init', 'open an agent in the Workplace', 'describe what you are working on'],
     commands: [
-      'create <home> [--desk tracked|separate|later]', 'init [repository] [--desk tracked|separate|later]',
+      'create <workplace> [--desk tracked|separate|later]', 'init [repository] [--desk tracked|separate|later]',
       'member create|list|inspect|doctor', 'desk init|clone',
       'equipment validate|add|status|sync|remove|override|promote|catalog|trust',
       'room create|list|inspect|doctor', 'site add|list|inspect|doctor|remove',
@@ -221,9 +222,9 @@ function parseArguments(argv) {
 
 function renderHuman(value) {
   if (value?.summary && value?.commands) return [value.summary, '', 'Next:', ...value.next.map((item) => `  ${item}`), '', 'Commands:', ...value.commands.map((item) => `  endroit ${item}`)].join('\n')
-  if ((value?.status === 'created' || value?.status === 'initialized') && value.home) return [
-    value.status === 'created' ? 'Endroit Home created' : 'Endroit Home initialized',
-    value.home,
+  if ((value?.status === 'created' || value?.status === 'initialized') && value.workplace) return [
+    value.status === 'created' ? 'Endroit Workplace created' : 'Endroit Workplace initialized',
+    value.workplace,
     `Desk: ${value.desk}`,
     ...(value.site ? [`Embedded Site: ${value.site}`] : []),
     `Equipment: ${value.equipment.join(', ')}`,
@@ -235,7 +236,7 @@ function renderHuman(value) {
     ]),
   ].join('\n')
   if (value?.status === 'catalogued') return value.equipment.map((entry) => `- ${entry.id}${entry.installed.length ? ` [${entry.installed.join(',')}]` : ''}: ${entry.description}`).join('\n')
-  if (value?.home?.name && value?.limits) return [`Endroit doctor — ${value.status}`, `Home: ${value.home.name}`, `Desk: ${value.desk.configured ? value.desk.id : 'not configured'}`, `Members: ${value.members?.length ?? 0}`, `Equipment: ${value.equipment.length}`, `Build: ${value.build}`, ...(value.limits.length ? ['', 'Limits:', ...value.limits.map((item) => `  - ${item}`)] : []), ...(value.warnings?.length ? ['', 'Warnings:', ...value.warnings.map((item) => `  - ${item}`)] : [])].join('\n')
+  if (value?.home?.name && value?.limits) return [`Endroit doctor — ${value.status}`, `Workplace: ${value.home.name}`, `Desk: ${value.desk.configured ? value.desk.id : 'not configured'}`, `Members: ${value.members?.length ?? 0}`, `Equipment: ${value.equipment.length}`, `Build: ${value.build}`, ...(value.limits.length ? ['', 'Limits:', ...value.limits.map((item) => `  - ${item}`)] : []), ...(value.warnings?.length ? ['', 'Warnings:', ...value.warnings.map((item) => `  - ${item}`)] : [])].join('\n')
   if (Array.isArray(value)) return value.length ? value.map((entry) => `- ${entry.name ?? entry.id ?? JSON.stringify(entry)}${entry.state ? `: ${entry.state}` : ''}`).join('\n') : 'No entries.'
   return Object.entries(value ?? {}).map(([key, entry]) => `${key}: ${typeof entry === 'object' ? JSON.stringify(entry) : entry}`).join('\n')
 }
@@ -256,11 +257,15 @@ function deskStrategy(value, fallback) {
   if (!['tracked', 'separate', 'later'].includes(strategy)) throw usage('--desk must be tracked, separate or later.')
   return strategy
 }
-function withoutHomeFlag(argv) {
+function workplaceFlag(flags) {
+  if (flags.workplace && flags.home && flags.workplace !== flags.home) throw usage('--workplace and deprecated --home must identify the same directory.')
+  return flags.workplace ?? flags.home
+}
+function withoutWorkplaceFlag(argv) {
   const values = []
   for (let index = 0; index < argv.length; index += 1) {
-    if (argv[index] === '--home') { index += 1; continue }
-    if (argv[index].startsWith('--home=')) continue
+    if (argv[index] === '--home' || argv[index] === '--workplace') { index += 1; continue }
+    if (argv[index].startsWith('--home=') || argv[index].startsWith('--workplace=')) continue
     values.push(argv[index])
   }
   return values

@@ -1,5 +1,5 @@
 # Work Item
 
-`WORK.json` owns the machine-readable contract. Keep this document useful to a
-human: summarize the objective, the current frontier and the evidence that
-matters. Do not copy a conversation transcript or infer an external authority.
+This file declares the Artifact identity and lifecycle. `WORK.md` owns the
+human-readable Work contract. Do not copy a conversation transcript or infer
+an external authority.

@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v9/site.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "kind", "id", "owner", "site_state"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v9/site.json" },
+    "kind": { "const": "endroit/site" },
+    "id": { "$ref": "#/$defs/id" },
+    "owner": { "type": "string", "pattern": "^site:[a-z0-9][a-z0-9._-]{0,127}$" },
+    "site_state": { "enum": ["active", "archived"] },
+    "repository": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "source": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 500 },
+    "emoji": { "type": "string", "minLength": 1, "maxLength": 16 },
+    "when": {
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 3,
+      "items": { "type": "string", "minLength": 1, "maxLength": 200 }
+    },
+    "tags": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "$ref": "#/$defs/id" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" }
+  }
+}

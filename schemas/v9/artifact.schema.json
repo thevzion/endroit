@@ -1,0 +1,22 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v9/artifact.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "kind", "id", "owner", "material_state", "currentness", "derived_from"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v9/artifact.json" },
+    "kind": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*:[a-z0-9][a-z0-9._-]*$" },
+    "id": { "$ref": "#/$defs/id" },
+    "owner": { "type": "string", "pattern": "^(?:workplace|desk|room|site):[^\\s]+$" },
+    "material_state": { "enum": ["retained", "archived"] },
+    "currentness": { "enum": ["current", "superseded", "withdrawn"] },
+    "derived_from": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1, "maxLength": 2048 } },
+    "created_at": { "type": "string", "minLength": 1 },
+    "updated_at": { "type": "string", "minLength": 1 },
+    "source_digest": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" }
+  }
+}

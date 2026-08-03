@@ -1,16 +1,20 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://endroit.org/schema/work/artifact-v1alpha1.json",
+  "$id": "https://endroit.org/schema/work/document-v1alpha2.json",
   "type": "object",
-  "required": ["$schema", "id", "kind", "status", "owner", "created_at", "updated_at", "derived_from"],
+  "additionalProperties": false,
+  "required": ["$schema", "kind", "id", "owner", "contract", "work_type", "work_state", "derived_from"],
   "properties": {
-    "$schema": { "const": "https://endroit.org/schema/v7/artifact.json" },
-    "id": { "type": "string" },
+    "$schema": { "const": "https://endroit.org/schema/work/v1alpha2.json" },
     "kind": { "const": "endroit/work:item" },
-    "owner": { "type": "string" },
-    "status": { "enum": ["draft", "active", "review", "complete", "cancelled"] },
-    "created_at": { "type": "string" },
-    "updated_at": { "type": "string" },
-    "derived_from": { "type": "array", "items": { "type": "string" } }
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+    "owner": { "type": "string", "minLength": 1 },
+    "contract": { "const": "endroit/work/v1alpha2" },
+    "work_type": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$"
+    },
+    "work_state": { "enum": ["active", "paused", "closed"] },
+    "derived_from": { "type": "array", "items": { "type": "string", "minLength": 1 } }
   }
 }

@@ -1,46 +1,34 @@
 # Manage Sites
 
-A Site is an independent repository known by stable identity. Its declaration
-is shared at `sites/<site>/SITE.md`. Each collaborator owns zero or more Route
-declarations under `.desk/routes/<site>/<route>.json`; managed checkout
-material lives separately under `checkouts/<site>/<route>/`.
+A Site is an independent authority known by stable identity. Its declaration
+is shared at `sites/<site>/SITE.md`. A Desk owns Route Documents at
+`.desk/routes/<site>/<route>/ROUTE.md`. Every non-embedded Route has the local
+address `checkouts/<site>/<route>`, as a physical checkout or symlink.
 
-Resolve the intended Site and inspect its current declarations and Routes
-before proposing a change. Read Checkouts through `checkout list|inspect|resolve` so
-declared lifecycle/configuration stays separate from fresh Git and index
-observation. When several active Routes exist, require an explicit selection.
-Explain separately whether the operation changes shared Home state,
-personal Desk state or a managed checkout.
+Resolve the intended Site and inspect its current Route before proposing a
+change. Read Checkouts through `checkout list|inspect|resolve` so declared
+lifecycle stays separate from fresh Git and host observation. When several
+active Routes exist, require an explicit selection.
 
-Apply only the accepted declaration, adoption, clone, worktree, lifecycle,
-migration, Route removal or Site removal effect. The canonical managed root is
-`checkouts/<site>/<route>`. Keep Route IDs and Git branches separate.
+The symlink or directory at the Checkout address is the complete local
+binding. If it is lost, report `unbound` and require an explicit
+`checkout adopt`; never recover a target from a machine index or a global
+filesystem scan. A durable file reference uses
+`checkout:<site>/<route>#<relative-path>` and must stay inside that Checkout.
 
-`checkouts/` is the physical index for every non-embedded Checkout. Existing
-repositories stay in place and appear through generated symlinks; managed
-checkouts and canonical submodules are direct. `checkout reconcile` is
-read-only unless `--apply` is explicit and may only change links recorded in
-`.endroit/checkout-index.json`. Refuse unknown paths and report direct, linked,
-missing, broken, divergent or conflicting entries.
+Parked and superseded Routes remain readable but are not implicit operational
+targets. Read v7/v8 Route metadata only through the legacy adapter and write
+v9 `ROUTE.md` only. Migration preview and rollback preserve exact bytes and
+modes without touching Git state.
 
-Parked and superseded Routes remain readable but are never operational or
-implicit targets. `activate` may select one parked Route; supersession requires
-an active same-Site successor. Refuse removing a successor while another Route
-still names it. Read frozen v7 metadata, write v8 only, and use `route migrate
---check` before the metadata-only cutover. Rollback must restore exact Route
-bytes without touching Git or index state.
+Use `checkout worktree` for a new linked worktree. It uses local refs and does
+not fetch, force, copy working changes, delete branches, prune, repair or unlock
+Git metadata. Worktrees discovered through already-declared Site repositories
+are reported, never auto-bound; associate one only through explicit
+`checkout adopt`.
 
-Use `checkout worktree` for a new linked worktree. It never fetches or copies
-uncommitted changes: an existing local branch keeps its commit, while a new
-branch starts from the selected local ref or the source Route HEAD, and
-`--detach` records the resolved commit constraint. Adopt an
-external worktree only through explicit `checkout adopt`; never auto-bind
-discovered worktrees.
-
-Never remove a dirty, locked or prunable managed checkout, delete a branch,
-persist a machine path in settings or invoke Git force, prune, repair or unlock
-implicitly. A managed linked worktree must be removed through
-`git worktree remove`, never through filesystem deletion. `route remove`
-removes only the relationship and generated link; `checkout delete` is the
-approved managed-checkout deletion path and never removes a branch. Revalidate
-the selected Route before any later Site mutation.
+Never remove a dirty, locked or prunable managed checkout. A managed linked
+worktree is removed through `git worktree remove`, never recursive filesystem
+deletion. `route remove` removes only the relationship and its symlink;
+`checkout delete` is the approval-gated managed-checkout deletion path.
+Revalidate the exact Route immediately before a Site mutation.

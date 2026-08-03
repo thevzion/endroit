@@ -4,28 +4,27 @@ import { basename, join, relative } from 'node:path'
 import { allInstalledEquipment, catalogEquipment } from './equipment.mjs'
 import { deskGitBoundary, loadDesk } from './desk.mjs'
 import { renderFloorPlan } from './front-door.mjs'
-import { loadHome } from './home.mjs'
-import { DESK_INSTRUCTION, HOME_INSTRUCTION, readInstructionFile } from './instructions.mjs'
+import { loadHome, WORKPLACE_INSTRUCTION } from './home.mjs'
+import { DESK_INSTRUCTION } from './instructions.mjs'
 import { EndroitError } from './lib/errors.mjs'
-import { resolvePackageFile } from './lib/io.mjs'
+import { digest, resolvePackageFile } from './lib/io.mjs'
 import { loadSites } from './sites.mjs'
 import { loadRoutes } from './routes.mjs'
 import { listMembers } from './member.mjs'
 
 export async function resolveHome(root) {
-  const [home, loadedDesk, members, installed, catalog] = await Promise.all([
+  const [home, loadedDesk, loadedMembers, installed, catalog] = await Promise.all([
     loadHome(root),
     loadDesk(root),
-    listMembers(root),
+    listMembers(root, { body: true }),
     allInstalledEquipment(root),
     catalogEquipment(root),
   ])
-  const invalidMember = members.find((member) => member.invalid)
+  const invalidMember = loadedMembers.find((member) => member.invalid)
   if (invalidMember) throw new EndroitError('member_invalid', `${invalidMember.id} is invalid: ${invalidMember.invalid}`)
-  if (!members.length) throw new EndroitError('member_missing', 'A Home requires at least one Member source.')
-  const desk = loadedDesk ? { ...loadedDesk, repository: await deskGitBoundary(root) } : null
-  await readInstructionFile(join(root, HOME_INSTRUCTION), 'home_instruction')
-  if (desk) await readInstructionFile(join(root, '.desk', DESK_INSTRUCTION), 'desk_instruction')
+  if (!loadedMembers.length) throw new EndroitError('member_missing', 'A Workplace requires at least one Member source.')
+  const members = loadedMembers.map(withoutDocumentContent)
+  const desk = loadedDesk ? { ...withoutDocumentContent(loadedDesk), repository: await deskGitBoundary(root) } : null
   const invalid = installed.find((entry) => entry.invalid)
   if (invalid) throw new EndroitError('equipment_invalid', `${invalid.id} is invalid: ${invalid.invalid.message}`)
 
@@ -47,15 +46,16 @@ export async function resolveHome(root) {
   assertRoomIdentities(accessors.room)
   const plan = {
     root,
+    workplace: home.declaration.metadata,
     home,
     desk,
     members,
     homeInstruction: {
-      id: 'home',
-      owner: 'endroit/home',
+      id: 'workplace',
+      owner: 'endroit/workplace',
       scope: 'home',
       root,
-      path: HOME_INSTRUCTION,
+      path: WORKPLACE_INSTRUCTION,
     },
     deskInstruction: desk ? {
       id: 'desk',
@@ -80,6 +80,10 @@ export async function resolveHome(root) {
     setup: [],
     runtimes: [],
     frontDoor: null,
+    sources: [],
+    documents: [],
+    fragments: resolvedFragments(home, loadedMembers, loadedDesk),
+    revision: null,
   }
 
   for (const entry of equipment) {
@@ -147,7 +151,25 @@ export async function resolveHome(root) {
   assertUnique(plan.roomNamespaces, (entry) => entry.id, 'Room namespace')
   assertUnique(plan.artifactKinds, (entry) => entry.id, 'Artifact kind')
   assertAccessors(plan.skills, plan.commands)
-  plan.frontDoor = resolveFrontDoor(home.frontDoor, plan)
+  const frontDoor = home.frontDoor ?? (plan.runtimes.some((entry) => entry.owner === 'endroit/hud') ? { wakeUp: 'endroit/hud:prompt' } : null)
+  plan.frontDoor = resolveFrontDoor(frontDoor, plan)
+  plan.sources = await resolvedSources(root, home, loadedMembers, loadedDesk, equipment, plan.rooms, sites, declaredRoutes)
+  plan.documents = resolvedDocuments(home, loadedMembers, loadedDesk)
+  plan.revision = digest(JSON.stringify({
+    profile: home.profile,
+    runtime: home.runtime,
+    sources: plan.sources.map(({ path, source_digest }) => [path, source_digest]),
+  }))
+  plan.resolvedWorkplace = {
+    status: home.legacy ? 'degraded' : 'resolved',
+    id: home.id,
+    profile: home.profile,
+    runtime: home.runtime,
+    revision: plan.revision,
+    sources: plan.sources,
+    documents: plan.documents,
+    fragments: plan.fragments,
+  }
   plan.context = await contextFootprint(plan)
   enforceBudgets(home.budgets ?? {}, plan.context)
   return plan
@@ -159,7 +181,8 @@ export function publicPlan(plan) {
     return { ...entry, ...(entry.path ? { path: relative(plan.root, join(root ?? plan.root, entry.path)) } : {}) }
   }
   return {
-    home: plan.home,
+    workplace: plan.workplace,
+    resolved_workplace: plan.resolvedWorkplace,
     desk: plan.desk,
     members: plan.members,
     homeInstruction: withoutRoot(plan.homeInstruction),
@@ -169,10 +192,7 @@ export function publicPlan(plan) {
     rooms: plan.rooms,
     meetings: plan.meetings,
     sites: plan.sites,
-    routes: plan.routes.map((route) => ({
-      ...route,
-      documentPath: relative(plan.root, route.documentPath),
-    })),
+    routes: plan.routes.map((route) => publicRoute(plan.root, route)),
     roomNamespaces: plan.roomNamespaces,
     instructions: plan.instructions.map(withoutRoot),
     capabilities: plan.capabilities.map(withoutRoot),
@@ -186,6 +206,75 @@ export function publicPlan(plan) {
     context: plan.context,
   }
 }
+
+function publicRoute(root, route) {
+  const { declaredPath, documentPath, ...value } = route
+  const declared = value.declared?.checkout?.path
+    ? { ...value.declared, checkout: { mode: value.declared.checkout.mode } }
+    : value.declared
+  return { ...value, declared, ...(documentPath ? { document_path: relative(root, documentPath) } : {}) }
+}
+
+async function resolvedSources(root, home, members, desk, equipment, rooms, sites, routes) {
+  const values = [{
+    ref: `workplace:${home.id}`,
+    kind: 'endroit/workplace',
+    owner: home.owner,
+    path: home.declaration.path,
+    source_digest: home.declaration.source_digest,
+  }]
+  for (const member of members) values.push({
+    ref: `member:${member.id}`,
+    kind: member.kind,
+    owner: member.owner,
+    path: member.path,
+    source_digest: member.source_digest,
+  })
+  if (desk) values.push({
+    ref: `desk:${desk.id}`,
+    kind: desk.kind,
+    owner: desk.owner,
+    path: desk.path,
+    source_digest: desk.source_digest,
+  })
+  for (const entry of equipment) {
+    await addFileSource(values, root, join(entry.root, 'equipment.json'), `equipment:${entry.id}`, 'endroit/equipment', entry.id)
+    for (const file of [...entry.manifest.files].sort()) {
+      await addFileSource(values, root, join(entry.root, file), `equipment:${entry.id}#${file}`, 'endroit/equipment-material', entry.id)
+    }
+  }
+  for (const room of rooms) await addFileSource(values, root, join(root, room.path), room.ref, 'endroit/room', room.ref)
+  for (const site of sites) await addFileSource(values, root, join(root, site.path), site.ref, 'endroit/site', site.ref)
+  for (const route of routes) {
+    if (route.documentPath) await addFileSource(values, root, route.documentPath, `route:${route.site}/${route.id}`, 'endroit/route', route.owner ?? `desk:${desk?.id ?? 'legacy'}`)
+  }
+  return values.sort((left, right) => left.path.localeCompare(right.path))
+}
+
+async function addFileSource(values, root, path, ref, kind, owner) {
+  const sourcePath = relative(root, path)
+  if (sourcePath === '..' || sourcePath.startsWith('../')) throw new EndroitError('source_path_escape', `${ref} source escapes the Workplace.`)
+  values.push({ ref, kind, owner, path: sourcePath, source_digest: digest(await readFile(path)) })
+}
+
+function resolvedDocuments(home, members, desk) {
+  return [
+    { ref: `workplace:${home.id}`, kind: 'endroit/workplace', owner: home.owner, path: home.declaration.path, source_digest: home.declaration.source_digest },
+    ...members.map((member) => ({ ref: `member:${member.id}`, kind: member.kind, owner: member.owner, path: member.path, source_digest: member.source_digest })),
+    ...(desk ? [{ ref: `desk:${desk.id}`, kind: desk.kind, owner: desk.owner, path: desk.path, source_digest: desk.source_digest }] : []),
+  ]
+}
+
+function resolvedFragments(home, members, desk) {
+  return [home.declaration, ...members, ...(desk ? [desk] : [])].flatMap((document) =>
+    (document.fragments ?? []).map((fragment) => ({
+      ...fragment,
+      document: document.path,
+      owner: document.owner,
+    })))
+}
+
+function withoutDocumentContent({ body, sections, fragments, metadata, legacy_document, ...value }) { return value }
 
 function material(entry, item) {
   return {

@@ -1,7 +1,10 @@
-import Ajv2020 from 'ajv/dist/2020.js'
-import { readFile } from 'node:fs/promises'
-import { fileURLToPath } from 'node:url'
-import { EndroitError } from './lib/errors.mjs'
+import {
+  V9_API,
+  compileSchemasV9,
+  validateContract,
+  validateDocumentV9,
+  validateLegacyDocument,
+} from './documents.mjs'
 
 export const API = Object.freeze({
   home: 'https://endroit.org/schema/v7/home.json',
@@ -13,70 +16,33 @@ export const API = Object.freeze({
   routeV7: 'https://endroit.org/schema/v7/route.json',
   artifact: 'https://endroit.org/schema/v7/artifact.json',
   runtime: 'endroit.org/runtime/v2alpha1',
+  documentV9: V9_API.document,
+  profileV9: V9_API.profile,
+  workplace: V9_API.workplace,
+  memberV9: V9_API.member,
+  deskV9: V9_API.desk,
+  roomV9: V9_API.room,
+  siteV9: V9_API.site,
+  routeV9: V9_API.route,
+  equipmentV9: V9_API.equipment,
+  artifactV9: V9_API.artifact,
 })
 
-const schemaFiles = ['home.schema.json', 'desk.schema.json', 'member.schema.json', 'equipment.schema.json', 'site.schema.json', 'route.schema.json', 'runtime.schema.json', 'artifact.schema.json']
-let validatorsPromise
-let routeV8ValidatorPromise
-
-async function validators() {
-  validatorsPromise ??= (async () => {
-    const ajv = new Ajv2020({ allErrors: true, strict: true, strictRequired: false })
-    const values = new Map()
-    for (const file of schemaFiles) {
-      const path = fileURLToPath(new URL(`../schemas/v7/${file}`, import.meta.url))
-      const schema = JSON.parse(await readFile(path, 'utf8'))
-      values.set(file.replace('.schema.json', ''), ajv.compile(schema))
-    }
-    return values
-  })()
-  return validatorsPromise
-}
+const legacyTypes = ['home', 'desk', 'member', 'equipment', 'site', 'route', 'runtime', 'artifact']
 
 export async function validateDocument(document, type) {
-  if (type === 'route') return validateRouteDocument(document)
-  const validate = (await validators()).get(type)
-  if (!validate) throw new EndroitError('document_unsupported', `Unsupported document type ${type}.`)
-  const expectedSchema = API[type]
-  if (expectedSchema?.startsWith('https://') && document?.$schema !== expectedSchema) {
-    throw new EndroitError(
-      'schema_version_mismatch',
-      `Unsupported ${type} schema ${document?.$schema ?? '(missing)'}; Endroit 0.9 requires ${expectedSchema}.`,
-      { exitCode: 3 },
-    )
-  }
-  if (!validate(document)) {
-    const message = validate.errors.map((error) => `${error.instancePath || '/'} ${error.message}`).join('; ')
-    throw new EndroitError('document_invalid', `Invalid ${type}: ${message}.`, { details: { errors: validate.errors } })
-  }
-  return document
+  if (V9_API[type] && document?.$schema === V9_API[type]) return validateDocumentV9(document, type)
+  return validateLegacyDocument(document, type)
 }
 
 export async function validateRouteDocument(document) {
-  let validate
-  if (document?.$schema === API.routeV7) {
-    validate = (await validators()).get('route')
-  } else if (document?.$schema === API.route) {
-    routeV8ValidatorPromise ??= (async () => {
-      const ajv = new Ajv2020({ allErrors: true, strict: true, strictRequired: false })
-      const path = fileURLToPath(new URL('../schemas/v8/route.schema.json', import.meta.url))
-      return ajv.compile(JSON.parse(await readFile(path, 'utf8')))
-    })()
-    validate = await routeV8ValidatorPromise
-  } else {
-    throw new EndroitError(
-      'schema_version_mismatch',
-      `Unsupported route schema ${document?.$schema ?? '(missing)'}; Endroit reads v7 and v8 Routes.`,
-      { exitCode: 3 },
-    )
-  }
-  if (!validate(document)) {
-    const message = validate.errors.map((error) => `${error.instancePath || '/'} ${error.message}`).join('; ')
-    throw new EndroitError('document_invalid', `Invalid route: ${message}.`, { details: { errors: validate.errors } })
-  }
-  return document
+  if (document?.$schema === V9_API.route) return validateDocumentV9(document, 'route')
+  return validateLegacyDocument(document, 'route')
 }
 
 export async function compileSchemas() {
-  return [...(await validators()).keys()]
+  await compileSchemasV9()
+  return [...legacyTypes]
 }
+
+export { compileSchemasV9, validateContract, validateDocumentV9, V9_API }

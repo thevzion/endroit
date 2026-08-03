@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v9/workplace.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "kind", "id", "owner", "profile", "protocol", "runtime", "providers"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v9/workplace.json" },
+    "kind": { "const": "endroit/workplace" },
+    "id": { "$ref": "#/$defs/id" },
+    "owner": { "type": "string", "pattern": "^member:[a-z0-9][a-z0-9._-]{0,127}$" },
+    "profile": { "const": "endroit/0.10" },
+    "protocol": { "const": "open-workplace/0.2-draft" },
+    "runtime": { "const": "@endroit/cli@0.10.0-alpha.0" },
+    "providers": {
+      "type": "array",
+      "minItems": 1,
+      "uniqueItems": true,
+      "items": { "enum": ["codex", "claude"] }
+    },
+    "prefix": { "$ref": "#/$defs/id" },
+    "emoji": { "type": "string", "minLength": 1, "maxLength": 16 },
+    "settings": {
+      "type": "object",
+      "propertyNames": { "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$" },
+      "additionalProperties": { "type": "object" }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" }
+  }
+}

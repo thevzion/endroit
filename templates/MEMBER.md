@@ -1,8 +1,10 @@
 ---
-$schema: "https://endroit.org/schema/v7/member.json"
+$schema: "https://endroit.org/schema/v9/member.json"
+kind: "endroit/member"
 id: {{member.id}}
+owner: {{member.owner}}
 name: {{member.name}}
-status: {{member.status}}
+membership_state: {{member.status}}
 accounts: {{member.accounts}}
 ---
 
@@ -16,4 +18,4 @@ with this Member.
 ## Collaboration context
 
 Keep durable, non-secret collaboration context here. Credentials and local
-runtime access belong outside the Home-owned Member source.
+runtime access belong outside the Workplace-owned Member source.

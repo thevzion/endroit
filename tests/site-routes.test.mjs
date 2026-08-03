@@ -10,6 +10,7 @@ import { promisify } from 'node:util'
 import test from 'node:test'
 import { createHome } from '../src/create.mjs'
 import { initDesk } from '../src/desk.mjs'
+import { parseDocument } from '../src/documents.mjs'
 import { removeTree } from '../src/lib/io.mjs'
 import { dispatchRuntime } from '../src/runtime.mjs'
 import { captureIo } from './helpers.mjs'
@@ -135,7 +136,7 @@ test('Checkout revisions are explicit and detached worktrees persist only their 
   try {
     const { home, repository, temporary } = fixture
     const detached = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'detached', '--from', 'main', '--detach', 'starting-point'])
-    const document = JSON.parse(await readFile(join(home, '.desk/routes/demo/detached.json'), 'utf8'))
+    const document = await routeMetadata(home, 'demo', 'detached')
     assert.equal(detached.detached, true)
     assert.equal(detached.branch, null)
     assert.deepEqual(document.checkout, { mode: 'managed-worktree' })
@@ -144,12 +145,12 @@ test('Checkout revisions are explicit and detached worktrees persist only their 
     const external = join(temporary, 'external-revision')
     await git(repository, ['worktree', 'add', '-b', 'explicit-revision', external, 'HEAD'])
     await runtimeJson(home, ['checkout', 'adopt', 'demo', external, '--id', 'unconstrained'])
-    assert.equal('revision' in JSON.parse(await readFile(join(home, '.desk/routes/demo/unconstrained.json'), 'utf8')), false)
+    assert.equal('revision' in await routeMetadata(home, 'demo', 'unconstrained'), false)
     await runtimeJson(home, ['route', 'remove', 'demo', '--id', 'unconstrained'])
     await runtimeFailure(home, ['checkout', 'adopt', 'demo', external, '--id', 'wrong', '--branch', 'other'], 'route_revision_divergent')
-    assert.equal(await pathExists(join(home, '.desk/routes/demo/wrong.json')), false)
+    assert.equal(await pathExists(routeDocumentPath(home, 'demo', 'wrong')), false)
     await runtimeJson(home, ['checkout', 'adopt', 'demo', external, '--id', 'constrained', '--branch', 'explicit-revision'])
-    assert.deepEqual(JSON.parse(await readFile(join(home, '.desk/routes/demo/constrained.json'), 'utf8')).revision, { kind: 'branch', name: 'explicit-revision' })
+    assert.deepEqual((await routeMetadata(home, 'demo', 'constrained')).revision, { kind: 'branch', name: 'explicit-revision' })
   } finally {
     await fixture.cleanup()
   }
@@ -261,7 +262,7 @@ test('managed clone and worktree deletion refuse symlink escapes and preserve ex
       await runtimeFailure(home, ['checkout', 'delete', `checkout:demo/${route.route}`, '--approve', `checkout:demo/${route.route}`], 'route_checkout_symlink')
       assert.equal(await readFile(join(external, 'README.md'), 'utf8'), '# second\n')
       assert.equal((await lstat(route.path)).isSymbolicLink(), true)
-      assert.equal(await exists(join(home, `.desk/routes/demo/${route.route}.json`)), true)
+      assert.equal(await exists(routeDocumentPath(home, 'demo', route.route)), true)
     }
   } finally {
     await fixture.cleanup()
@@ -289,7 +290,7 @@ test('managed clone deletion refuses an inode race and restores its Route', asyn
     assert.match(result.stderr, /route_checkout_changed/)
     assert.equal(await readFile(join(cloned.path, 'valuable.txt'), 'utf8'), 'preserve\n')
     assert.equal(await exists(join(preserved, 'README.md')), true)
-    assert.equal(await exists(join(home, '.desk/routes/demo/race.json')), true)
+    assert.equal(await exists(routeDocumentPath(home, 'demo', 'race')), true)
   } finally {
     await fixture.cleanup()
   }
@@ -318,8 +319,8 @@ test('managed clone deletion revalidates its staged inode immediately before rec
     assert.match(result.stderr, /Route backup retained/)
     assert.equal(await readFile(join(stagedPath, 'valuable.txt'), 'utf8'), 'preserve replacement\n')
     assert.equal(await exists(join(preserved, 'README.md')), true)
-    assert.equal(await exists(join(home, '.desk/routes/demo/staged-race.json')), false)
-    assert.ok((await readdir(join(home, '.desk/routes/demo'))).some((entry) => entry.startsWith('staged-race.json.') && entry.endsWith('.delete')))
+    assert.equal(await exists(routeDocumentPath(home, 'demo', 'staged-race')), false)
+    assert.ok((await readdir(dirname(routeDocumentPath(home, 'demo', 'staged-race')))).some((entry) => entry.startsWith('ROUTE.md.') && entry.endsWith('.delete')))
   } finally {
     await fixture.cleanup()
   }
@@ -331,7 +332,7 @@ test('managed deletion preserves a concurrently recreated canonical Route', asyn
     const { home, temporary } = fixture
     const cloned = await runtimeJson(home, ['checkout', 'clone', 'demo', '--id', 'route-race'])
     const marker = join(temporary, 'route-staged-ready')
-    const routePath = join(home, '.desk/routes/demo/route-race.json')
+    const routePath = routeDocumentPath(home, 'demo', 'route-race')
     const concurrent = 'concurrent route replacement\n'
     const deletion = cliResult(home, ['checkout', 'delete', 'checkout:demo/route-race', '--approve', 'checkout:demo/route-race'], {
       NODE_ENV: 'test',
@@ -346,7 +347,7 @@ test('managed deletion preserves a concurrently recreated canonical Route', asyn
     assert.match(result.stderr, /was replaced while restoring its Route/)
     assert.equal(await readFile(routePath, 'utf8'), concurrent)
     assert.equal(await exists(join(cloned.path, 'README.md')), true)
-    assert.ok((await readdir(dirname(routePath))).some((entry) => entry.startsWith('route-race.json.') && entry.endsWith('.delete')))
+    assert.ok((await readdir(dirname(routePath))).some((entry) => entry.startsWith('ROUTE.md.') && entry.endsWith('.delete')))
   } finally {
     await fixture.cleanup()
   }
@@ -366,11 +367,11 @@ test('managed clone deletion reports a recoverable partial state after its destr
     assert.match(result.stderr, /Route recovery:/)
     assert.match(result.stderr, /Checkout recovery:/)
     assert.equal(await exists(cloned.path), false)
-    assert.equal(await exists(join(home, '.desk/routes/demo/partial.json')), false)
+    assert.equal(await exists(routeDocumentPath(home, 'demo', 'partial')), false)
     const stagedCheckout = (await readdir(join(home, 'checkouts/demo'))).find((entry) => entry.startsWith('.partial.') && entry.endsWith('.delete'))
     assert.ok(stagedCheckout)
     assert.equal(await exists(join(home, 'checkouts/demo', stagedCheckout, 'README.md')), true)
-    assert.ok((await readdir(join(home, '.desk/routes/demo'))).some((entry) => entry.startsWith('partial.json.') && entry.endsWith('.delete')))
+    assert.ok((await readdir(dirname(routeDocumentPath(home, 'demo', 'partial')))).some((entry) => entry.startsWith('ROUTE.md.') && entry.endsWith('.delete')))
   } finally {
     await fixture.cleanup()
   }
@@ -424,7 +425,7 @@ test('Site unbind preserves dirty, locked, prunable, dependent and submodule wor
     await exec('git', ['-c', 'protocol.file.allow=always', 'submodule', 'update', '--init', '--quiet'], { cwd: submodule.path })
     await runtimeFailure(home, ['checkout', 'delete', 'checkout:demo/submodule', '--approve', 'checkout:demo/submodule'], 'git_failed')
     assert.equal(await exists(submodule.path), true)
-    assert.equal(await exists(join(home, '.desk/routes/demo/submodule.json')), true)
+    assert.equal(await exists(routeDocumentPath(home, 'demo', 'submodule')), true)
     await git(repository, ['worktree', 'remove', '--force', submodule.path])
   } finally {
     await fixture.cleanup()
@@ -456,8 +457,11 @@ test('Sites can stay remote-only while different Desks own independent Routes', 
 
     await initDesk(home, { id: 'two', member: 'owner', repository: 'tracked' })
     await runtimeJson(home, ['checkout', 'adopt', 'product', second, '--id', 'local'])
-    assert.equal(JSON.parse(await readFile(join(firstDesk, 'routes/product/local.json'), 'utf8')).checkout.path, await realpath(first))
-    assert.equal(JSON.parse(await readFile(join(home, '.desk/routes/product/local.json'), 'utf8')).checkout.path, await realpath(second))
+    const firstRoute = parseDocument(await readFile(join(firstDesk, 'routes/product/local/ROUTE.md'), 'utf8')).metadata
+    const secondRoute = await routeMetadata(home, 'product', 'local')
+    assert.deepEqual(firstRoute.checkout, { mode: 'existing' })
+    assert.deepEqual(secondRoute.checkout, { mode: 'existing' })
+    assert.equal('path' in firstRoute.checkout || 'path' in secondRoute.checkout, false)
     assert.match(await readFile(join(home, 'sites/product/SITE.md'), 'utf8'), /repository: "github.com\/example\/product"/)
   } finally {
     await removeTree(temporary, { force: true })
@@ -509,7 +513,7 @@ test('the Checkout index reconciles reconstructible links without touching repos
     await mkdir(conflict, { recursive: true })
     await runtimeFailure(home, ['checkout', 'adopt', 'demo', repository, '--id', 'conflict'], 'checkout_index_conflict')
     assert.equal((await lstat(conflict)).isDirectory(), true)
-    assert.equal(await pathExists(join(home, '.desk/routes/demo/conflict.json')), false)
+    assert.equal(await pathExists(routeDocumentPath(home, 'demo', 'conflict')), false)
     await rm(conflict, { recursive: true })
     const direct = join(home, 'checkouts', 'demo', 'direct')
     await exec('git', ['clone', '--quiet', repository, direct])
@@ -714,31 +718,32 @@ test('a Site with only inactive Routes is unrouted until its unique parked Route
   }
 })
 
-test('v7 and v8 Route declarations have parity through Sites, HUD and Artifacts', async () => {
+test('v7 and v9 Route declarations preserve operational parity through Sites, HUD and Artifacts', async () => {
   const fixture = await siteFixture()
   try {
     const { home, repository } = fixture
-    const siteV8 = (await runtimeJson(home, ['list'])).sites[0].routes[0]
-    const hudV8 = (await runtimeJson(home, ['json'], 'hud')).sites[0].routes[0]
-    const artifactsV8 = await runtimeJson(home, ['list', '--json'], 'artifact')
-    assert.equal(siteV8.declaration, 'routes/demo/main.json')
+    const siteV9 = (await runtimeJson(home, ['list'])).sites[0].routes[0]
+    const hudV9 = (await runtimeJson(home, ['json'], 'hud')).sites[0].routes[0]
+    const artifactsV9 = await runtimeJson(home, ['list', '--json'], 'artifact')
+    assert.equal(siteV9.declaration, 'routes/demo/main/ROUTE.md')
 
-    await writeFile(join(home, '.desk/routes/demo/main.json'), `${JSON.stringify({
+    await writeLegacyRoute(join(home, '.desk/routes/demo/main.json'), {
       $schema: 'https://endroit.org/schema/v7/route.json',
       id: 'main',
       site: 'demo',
       mode: 'existing',
       path: await realpath(repository),
       branch: 'main',
-    }, null, 2)}\n`)
+    })
 
     const siteV7 = (await runtimeJson(home, ['list'])).sites[0].routes[0]
     const hudV7 = (await runtimeJson(home, ['json'], 'hud')).sites[0].routes[0]
     const artifactsV7 = await runtimeJson(home, ['list', '--json'], 'artifact')
-    assert.deepEqual(siteV7.declared, siteV8.declared)
-    assert.deepEqual(hudV7.declared, hudV8.declared)
-    assert.equal(siteV7.observed.repository.available, siteV8.observed.repository.available)
-    assert.deepEqual(artifactsV7.artifacts, artifactsV8.artifacts)
+    assert.equal(siteV7.declared.status, siteV9.declared.status)
+    assert.equal(siteV7.declared.checkout.mode, siteV9.declared.checkout.mode)
+    assert.equal(hudV7.declared.checkout.mode, hudV9.declared.checkout.mode)
+    assert.equal(siteV7.observed.repository.available, siteV9.observed.repository.available)
+    assert.deepEqual(artifactsV7.artifacts, artifactsV9.artifacts)
   } finally {
     await fixture.cleanup()
   }
@@ -760,6 +765,7 @@ test('Route migration derives explicit revisions for branchless v7 managed workt
         mode: 'managed-worktree',
         path: `checkouts/demo/${id}`,
       }, null, 2)}\n`)
+      await rm(join(home, `.desk/routes/demo/${id}`), { recursive: true, force: true })
       await writeFile(routePath, bytes)
       originals.set(id, { routePath, bytes, path })
     }
@@ -795,6 +801,7 @@ test('Route migration checks without effect and rollback preserves Git and index
       path: await realpath(repository),
       branch: 'main',
     }, null, 2)}\n`)
+    await rm(join(home, '.desk/routes/demo/main'), { recursive: true, force: true })
     await writeFile(routePath, original)
     await chmod(routePath, 0o640)
     await writeFile(join(repository, 'dirty.txt'), 'preserve me\n')
@@ -1135,10 +1142,19 @@ async function legacyRouteSet(home, repository) {
 }
 
 async function writeLegacyRoute(path, document, mode = 0o600) {
+  if (path.endsWith('.json')) await rm(path.slice(0, -5), { recursive: true, force: true })
   const bytes = Buffer.from(`${JSON.stringify(document, null, 2)}\n`)
   await writeFile(path, bytes)
   await chmod(path, mode)
   return bytes
+}
+
+function routeDocumentPath(home, site, route) {
+  return join(home, `.desk/routes/${site}/${route}/ROUTE.md`)
+}
+
+async function routeMetadata(home, site, route) {
+  return parseDocument(await readFile(routeDocumentPath(home, site, route), 'utf8'), { path: routeDocumentPath(home, site, route) }).metadata
 }
 
 async function migrationRun(home, runId) {

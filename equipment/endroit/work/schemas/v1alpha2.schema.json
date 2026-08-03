@@ -1,0 +1,164 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/work/v1alpha2.json",
+  "title": "Parsed Endroit WORK.md v1alpha2",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "$schema",
+    "kind",
+    "id",
+    "owner",
+    "contract",
+    "work_type",
+    "work_state",
+    "derived_from",
+    "objective",
+    "expected_effect",
+    "sources",
+    "claims",
+    "obligations",
+    "contradictions",
+    "assignments",
+    "verification",
+    "observed_result",
+    "review"
+  ],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/work/v1alpha2.json" },
+    "kind": { "const": "endroit/work:item" },
+    "id": { "$ref": "#/$defs/id" },
+    "owner": { "type": "string", "minLength": 1 },
+    "contract": { "const": "endroit/work/v1alpha2" },
+    "work_type": {
+      "type": ["string", "null"],
+      "pattern": "^[a-z0-9][a-z0-9._-]*/[a-z0-9][a-z0-9._-]*$"
+    },
+    "work_state": { "enum": ["active", "paused", "closed"] },
+    "derived_from": { "$ref": "#/$defs/refs" },
+    "objective": { "type": "string" },
+    "expected_effect": { "type": ["string", "null"] },
+    "sources": { "type": "array", "items": { "$ref": "#/$defs/source" } },
+    "claims": { "type": "array", "items": { "$ref": "#/$defs/claim" } },
+    "obligations": { "type": "array", "items": { "$ref": "#/$defs/obligation" } },
+    "contradictions": { "type": "array", "items": { "$ref": "#/$defs/contradiction" } },
+    "assignments": { "type": "array", "items": { "$ref": "#/$defs/assignment" } },
+    "verification": { "type": "array", "items": { "$ref": "#/$defs/verification" } },
+    "observed_result": { "anyOf": [{ "type": "null" }, { "$ref": "#/$defs/observed_result" }] },
+    "review": { "type": "array", "items": { "$ref": "#/$defs/review" } }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+    "ref": { "type": "string", "minLength": 1, "maxLength": 2048 },
+    "refs": { "type": "array", "items": { "$ref": "#/$defs/ref" } },
+    "source": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "ref", "role"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "ref": { "$ref": "#/$defs/ref" },
+        "role": { "enum": ["authority", "context", "constraint", "evidence"] }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "statement", "currentness", "maturity", "evidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "statement": { "type": "string", "minLength": 1 },
+        "currentness": { "enum": ["current", "superseded", "withdrawn"] },
+        "maturity": { "enum": ["proposed", "supported", "demonstrated"] },
+        "evidence": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "obligation": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "required", "status", "evidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "description": { "type": "string", "minLength": 1 },
+        "required": { "type": "boolean" },
+        "status": { "enum": ["open", "satisfied", "contradicted"] },
+        "evidence": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "contradiction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "sources", "status", "resolution", "evidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "description": { "type": "string", "minLength": 1 },
+        "sources": { "$ref": "#/$defs/refs" },
+        "status": { "enum": ["open", "resolved"] },
+        "resolution": { "type": ["string", "null"] },
+        "evidence": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "destination": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["owner", "site", "route"],
+      "properties": {
+        "owner": { "type": ["string", "null"] },
+        "site": { "type": ["string", "null"], "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+        "route": { "type": ["string", "null"], "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" }
+      }
+    },
+    "assignment": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "objective", "role", "sources", "destination", "expected_effect", "verification", "status"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "objective": { "type": "string", "minLength": 1 },
+        "role": { "type": "string", "minLength": 1 },
+        "sources": { "$ref": "#/$defs/refs" },
+        "destination": { "$ref": "#/$defs/destination" },
+        "expected_effect": { "type": ["string", "null"] },
+        "verification": { "type": "array", "items": { "$ref": "#/$defs/id" } },
+        "status": { "enum": ["planned", "active", "returned", "blocked"] }
+      }
+    },
+    "verification": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "description", "status", "evidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "description": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["not-run", "passed", "failed"] },
+        "evidence": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "observed_result": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "status", "summary", "evidence"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "status": { "enum": ["succeeded", "partial", "failed"] },
+        "summary": { "type": "string", "minLength": 1 },
+        "evidence": { "$ref": "#/$defs/refs" }
+      }
+    },
+    "review": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "label", "target_kind", "target", "question", "owner", "status", "note"],
+      "properties": {
+        "id": { "$ref": "#/$defs/id" },
+        "label": { "type": "string", "minLength": 1 },
+        "target_kind": { "enum": ["url", "file"] },
+        "target": { "type": "string", "minLength": 1 },
+        "question": { "type": "string", "minLength": 1 },
+        "owner": { "type": "string", "minLength": 1 },
+        "status": { "enum": ["pending", "accepted", "changes-requested", "blocked"] },
+        "note": { "type": ["string", "null"] }
+      }
+    }
+  }
+}

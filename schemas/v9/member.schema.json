@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v9/member.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "kind", "id", "owner", "name", "membership_state", "accounts"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v9/member.json" },
+    "kind": { "const": "endroit/member" },
+    "id": { "$ref": "#/$defs/id" },
+    "owner": { "type": "string", "pattern": "^member:[a-z0-9][a-z0-9._-]{0,127}$" },
+    "name": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "membership_state": { "enum": ["active", "inactive"] },
+    "accounts": {
+      "type": "array",
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["service", "scope", "identifier"],
+        "properties": {
+          "service": { "$ref": "#/$defs/id" },
+          "scope": { "$ref": "#/$defs/id" },
+          "identifier": { "type": "string", "minLength": 1, "maxLength": 500 },
+          "handle": { "type": "string", "minLength": 1, "maxLength": 240 }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" }
+  }
+}

@@ -1,64 +1,77 @@
 import { readFile } from 'node:fs/promises'
-import { basename, dirname, join, resolve } from 'node:path'
+import { basename, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { API, validateDocument } from './contracts.mjs'
+import { V9_API, renderDocument, validateDocumentV9 } from './documents.mjs'
 import { EndroitError } from './lib/errors.mjs'
-import { assertId, digest, readJson } from './lib/io.mjs'
+import { assertId, digest } from './lib/io.mjs'
+import { findWorkplace, loadWorkplace } from './workplace.mjs'
 
 const packageDocument = JSON.parse(await readFile(fileURLToPath(new URL('../package.json', import.meta.url)), 'utf8'))
-export const RUNTIME = `@endroit/cli@${packageDocument.version}`
+const workplaceTemplatePath = fileURLToPath(new URL('../templates/WORKPLACE.md', import.meta.url))
 
-export async function findHome(start = process.env.ENDROIT_HOME_PATH ?? process.cwd()) {
-  let current = resolve(start)
-  while (true) {
-    try {
-      await readFile(join(current, 'endroit.json'))
-      return current
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error
-    }
-    const parent = dirname(current)
-    if (parent === current) throw new EndroitError('home_not_found', 'No endroit.json found from the current directory.')
-    current = parent
-  }
-}
+export const RUNTIME = `@endroit/cli@${packageDocument.version}`
+export const WORKPLACE_INSTRUCTION = 'WORKPLACE.md'
+
+export const findHome = findWorkplace
 
 export async function loadHome(root) {
-  root ??= await findHome()
-  const document = await readJson(join(root, 'endroit.json'))
-  if (Object.hasOwn(document, 'mode')) {
-    throw new EndroitError('legacy_mode_unsupported', 'Endroit 0.8 removed mode: solo|team. Remove mode and configure the Desk with --desk tracked|separate|later.', { exitCode: 3 })
+  const declaration = await loadWorkplace(root)
+  const legacy = declaration.legacy_document ?? {}
+  return {
+    ...declaration.metadata,
+    name: declaration.id,
+    ...(declaration.metadata.emoji ?? legacy.emoji ? { emoji: declaration.metadata.emoji ?? legacy.emoji } : {}),
+    ...(declaration.metadata.prefix ?? legacy.prefix ? { prefix: declaration.metadata.prefix ?? legacy.prefix } : {}),
+    frontDoor: legacy.frontDoor ?? null,
+    budgets: legacy.budgets ?? {},
+    settings: declaration.metadata.settings ?? legacy.settings ?? {},
+    declaration,
+    legacy: declaration.legacy,
   }
-  const home = await validateDocument(document, 'home')
-  home.settings ??= {}
-  return home
 }
 
 export async function assertRuntime(root) {
-  const home = await loadHome(root)
-  if (home.runtime !== RUNTIME) {
-    throw new EndroitError('runtime_mismatch', `This Home requires ${home.runtime}; run node ./endroit.mjs instead.`, { exitCode: 3 })
+  const workplace = await loadHome(root)
+  if (workplace.runtime !== RUNTIME) {
+    throw new EndroitError('runtime_mismatch', `This Workplace requires ${workplace.runtime}; run node ./endroit.mjs instead.`, { exitCode: 3 })
   }
-  return home
+  return workplace
 }
 
-export function homeId(destination) {
+export function workplaceId(destination) {
   const name = basename(resolve(destination)).toLowerCase().replace(/[^a-z0-9._-]+/g, '-').replace(/^-|-$/g, '')
-  return assertId(name || `home-${digest(resolve(destination)).slice(7, 15)}`, 'Home id')
+  return assertId(name || `workplace-${digest(resolve(destination)).slice(7, 15)}`, 'Workplace id')
 }
 
-export function homeDocument(options = {}) {
-  const settings = options.settings ?? {}
-  const budgets = options.budgets ?? {}
+export const homeId = workplaceId
+
+export function workplaceDocument(options = {}) {
+  const id = assertId(options.id ?? options.name ?? workplaceId(options.destination ?? process.cwd()), 'Workplace id')
+  const owner = assertId(options.owner ?? options.memberId ?? 'owner', 'Member id')
   return {
-    $schema: API.home,
-    name: assertId(options.name ?? homeId(options.destination ?? process.cwd()), 'Home name'),
-    ...(options.emoji ? { emoji: options.emoji } : {}),
+    $schema: V9_API.workplace,
+    kind: 'endroit/workplace',
+    id,
+    owner: `member:${owner}`,
+    profile: 'endroit/0.10',
+    protocol: 'open-workplace/0.2-draft',
     runtime: RUNTIME,
     providers: [...new Set(options.providers ?? ['codex', 'claude'])],
-    ...(options.prefix ? { prefix: assertId(options.prefix, 'Home prefix') } : {}),
-    ...(options.frontDoor ? { frontDoor: options.frontDoor } : {}),
-    ...(Object.keys(budgets).length ? { budgets } : {}),
-    ...(Object.keys(settings).length ? { settings } : {}),
+    ...(options.prefix ? { prefix: assertId(options.prefix, 'Workplace prefix') } : {}),
+    ...(options.emoji ? { emoji: options.emoji } : {}),
+    ...(options.settings && Object.keys(options.settings).length ? { settings: options.settings } : {}),
   }
+}
+
+export const homeDocument = workplaceDocument
+
+export async function renderWorkplaceDocument(metadata, options = {}) {
+  await validateDocumentV9(metadata, 'workplace')
+  const template = await readFile(workplaceTemplatePath, 'utf8')
+  const body = template.match(/^---\r?\n[\s\S]*?\r?\n---\r?\n([\s\S]*)$/)?.[1]
+  if (!body) throw new EndroitError('workplace_template_invalid', 'WORKPLACE.md template must contain frontmatter and a body.')
+  return renderDocument({
+    metadata,
+    body: body.replaceAll('{{workplace.title}}', options.title ?? metadata.id),
+  })
 }

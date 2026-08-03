@@ -1,8 +1,9 @@
 # Work on a Site
 
-Use the bound Site and revalidate its selected Route immediately before any
-mutation. Keep the Site's repository, source, history, permissions and
-delivery lifecycle sovereign.
+Resolve the explicitly named `site:` or `route:` reference and revalidate the
+selected Route immediately before any mutation. Keep the Site's repository,
+source, history, permissions and delivery lifecycle sovereign.
 
-`deliver-this-to-<site>` requires explicit delivery authority for that Site.
-Never create a submodule, Snapshot, push or delivery merely by selecting it.
+Access is not authority. Never create a submodule, Checkout, commit, push or
+delivery merely by selecting a Site. Record delivery only after observing the
+requested effect in the sovereign Site.

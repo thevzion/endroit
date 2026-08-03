@@ -1,0 +1,15 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v9/profile.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "kind", "id", "owner", "version", "protocol"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v9/profile.json" },
+    "kind": { "const": "endroit/profile" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+    "owner": { "type": "string", "pattern": "^site:[a-z0-9][a-z0-9._-]{0,127}$" },
+    "version": { "const": "endroit/0.10" },
+    "protocol": { "const": "open-workplace/0.2-draft" }
+  }
+}
