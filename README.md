@@ -1,12 +1,13 @@
 # Endroit
 
-> WORKPLACE-FIRST SOFTWARE ENGINEERING
+> THE WORKPLACE-FIRST APPLICATION FRAMEWORK
 
-## From intent to verified effect.
+## Build the place where humans and agents work.
 
 Everyone is building better agents. We gave the work a place.
 
-**Resolved for agents. Readable by humans. Versioned with Git.**
+**Owned by places. Resolved for agents. Readable by humans. Versioned with
+Git.**
 
 > Know what is true. See what is missing. Prove what moves.
 
@@ -24,20 +25,22 @@ The provider Front Door exposes the Home Floor Plan and its routing rules. The
 agent can resolve the relevant Room or ask when the subject is ambiguous, then
 inspect retained Material, available Equipment and declared Sites.
 
-**The place layer for agentic work.**
+**The application framework around temporary agents.**
 
-Endroit is a lightweight, local-first framework for building and operating
-file-based [Open Workplaces](https://open-workplace.org/proposal/). It is also
-a local-first, headless, file-based implementation of the Open Workplace
-model.
+Endroit is a lightweight, local-first application framework for building and
+operating file-based [Open Workplaces](https://open-workplace.org/proposal/).
+It implements the Open Workplace model as owned sources, deterministic
+resolution, provider projections and optional operations.
 
 It gives human-agent work an owned place across sessions, tools and
 repositories without moving that work into a persistent agent, proprietary
 memory service or orchestration runtime.
 
-> **Alpha — usable, actively maintained and dogfooded.** Endroit is pre-1.0.
-> Its ownership and safety contracts are deliberate; its public grammar and
-> schemas may still change through explicit releases and migration notes.
+> **Alpha.2 release candidate — local and not yet published by this working
+> tree.** The candidate is usable, actively maintained and dogfooded, but the
+> last observed npm release remains `0.8.0-alpha.1`. Endroit is pre-1.0; its
+> public grammar and schemas may still change through explicit releases and
+> migration notes.
 
 At the end of the Meeting, the result stays ephemeral unless you choose to:
 

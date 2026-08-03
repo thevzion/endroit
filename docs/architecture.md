@@ -1,26 +1,41 @@
 # Architecture
 
-## Boundary
+## The framework boundary
 
-> Open Workplace defines the model. A Home owns one concrete workplace.
-> Equipment equips it. Sites keep their truth. Endroit resolves and projects
-> explicit sources.
+Endroit is the Workplace-first application framework. It builds the durable
+place around temporary agents; it does not replace the model, provider,
+harness or application repositories that enter that place.
 
-```mermaid
-flowchart TD
-  adopt["ADOPT.md · local pre-Home adoption candidate"] --> sources
-  sources["Home · Members · Desk · Rooms · Equipment · Sites · Routes"] --> kernel["Endroit Kernel"]
-  kernel --> plan["Resolved Home + Floor Plan"]
-  plan --> projections["Codex and Claude projections"]
-  upstream["open-workplace/0.1 · protocol"] --> protocol["WORKPLACE.md · endroit/0.8 local profile candidate"]
-  protocol --> projections
-  plan --> runtime["Approved optional Equipment runtimes"]
-  desk["Desk Routes"] --> sites["Sovereign Sites"]
-  projections --> meeting["Human-agent Meeting"]
-  runtime --> meeting
-  meeting --> material["Ephemeral or explicitly retained Material"]
-  material --> sites
+> Open Workplace defines the protocol. The Endroit Profile specializes it. A
+> Home instantiates it. Equipment equips it. Sites keep their truth. Endroit
+> resolves and projects the owned sources.
+
+```text
+open-workplace/0.1 protocol
+           ↓ specialized by
+WORKPLACE.md · endroit/0.8 Profile candidate
+           ↓ instantiated as
+Home · Members · Desk · Rooms · Equipment · Sites · Routes
+           ↓ resolved by
+Endroit Kernel → Floor Plan → Codex and Claude projections
+           ↓ used by
+human + temporary agent → Meeting → explicit lifecycle transition
+           ↓ reaches through
+Desk Route → sovereign Site
 ```
+
+The framework has four layers:
+
+1. **Profile:** the Endroit interpretation of the Open Workplace protocol.
+2. **Sources and Kernel:** owned files plus deterministic validation,
+   resolution and projection.
+3. **Equipment:** optional reusable methods and bounded runtimes that extend a
+   Home without owning their results.
+4. **Applications:** concrete Homes composed for real people, Rooms and Sites.
+
+Provider integrations and the HUD are projections over those layers. They are
+not the source of truth and are not required for the Workplace to remain
+legible.
 
 `@endroit/cli` is the only package. There is no daemon, registry service,
 public Core package, graph store or required SaaS.

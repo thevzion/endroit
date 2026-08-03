@@ -2,6 +2,9 @@
 
 ## 0.8.0-alpha.2
 
+- Position Endroit's implemented Home, resolver, Equipment and provider
+  projections as the Workplace-first application framework while keeping the
+  unpublished candidate and pre-1.0 boundaries explicit.
 - Add experimental `endroit/work:item` Artifacts with a public, versioned
   `WORK.json` contract for sources, claims, obligations, contradictions,
   Assignments, verification, observed results and human review.

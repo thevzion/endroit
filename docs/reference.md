@@ -1,9 +1,24 @@
 # Endroit 0.8 reference
 
-Endroit is a local-first, headless, file-based implementation of the Open
-Workplace model. This reference describes the local `0.8.0-alpha.2` candidate
-and labels its unobserved publication explicitly; the [migration
-guide](migration-0.8.md) is the only 0.7 → 0.8 vocabulary map.
+Endroit is the local-first, headless, file-based application framework for
+building and operating Open Workplaces. This reference describes the local
+`0.8.0-alpha.2` candidate and labels its unobserved publication explicitly;
+the [migration guide](migration-0.8.md) is the only 0.7 → 0.8 vocabulary map.
+
+## Framework contract
+
+The framework composes four independently owned concerns:
+
+- `open-workplace/0.1` defines the protocol;
+- `endroit/0.8` defines the Endroit Workplace Profile;
+- a Resolved Home instantiates that Profile from Home, Member, Desk, Room,
+  Equipment, Site and Route sources;
+- generated Front Doors and optional Equipment runtimes let humans and
+  temporary agents use the instance without becoming its owner.
+
+This is an application framework for the Workplace around agentic work. It is
+not a web framework, model runtime, agent registry or replacement for the
+sovereign applications represented as Sites.
 
 ## Requirements
 
@@ -294,6 +309,8 @@ orientation; its failure cannot remove the Floor Plan.
 
 ## Alpha boundaries
 
+- `0.8.0-alpha.2` is a local release candidate; registry availability is not
+  claimed until the exact artifact is observed;
 - schemas and grammar may still break before 1.0;
 - Codex and Claude are L1 Projection-qualified first-party targets; L2–L4 live
 runtime qualification remains unclaimed until provider-hosted smoke evidence;
