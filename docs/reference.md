@@ -1,8 +1,8 @@
-# Endroit 0.8 reference
+# Endroit 0.9 reference
 
 Endroit is the local-first, headless, file-based application framework for
 building and operating Open Workplaces. This reference describes the local
-`0.8.0-alpha.2` candidate and labels its unobserved publication explicitly;
+`0.9.0-alpha.0` candidate and labels its unobserved publication explicitly;
 the [migration guide](migration-0.8.md) is the only 0.7 → 0.8 vocabulary map.
 
 ## Framework contract
@@ -34,12 +34,12 @@ Workplace-centered continuity, temporary Occupants, owned objects, Front Door
 entry, sovereign Sites, explicit lifecycle transitions and a static file-based
 foundation. `endroit/workplace` injects its canonical Instruction once into
 both generated provider contracts and is included in the local
-`0.8.0-alpha.2` package candidate.
+`0.9.0-alpha.0` package candidate.
 
 ## Adoption guide
 
 The [ADOPT.md](../ADOPT.md) release candidate is the portable pre-Home
-entrypoint included in the local `0.8.0-alpha.2` package candidate.
+entrypoint included in the local `0.9.0-alpha.0` package candidate.
 It first detects an existing Home from an explicitly selected directory and
 its parents. Otherwise it guides **Start fresh** or **Bring what you have**.
 
@@ -69,7 +69,8 @@ Bundled foundation Equipment is available through the same console:
 ```text
 room create|list|inspect|doctor
 site add|list|inspect|doctor|remove
-route bind|clone|worktree|mount|unmount|list|inspect|remove
+route bind|clone|worktree|mount|unmount|park|activate|supersede|migrate|list|inspect|remove
+checkout list|inspect
 artifact <command>
 hud show|prompt|json|activity
 hygiene maintain|repair
@@ -84,7 +85,7 @@ node ./endroit.mjs doctor
 
 `--home <path>` selects a Home for direct CLI use. Core responses support
 `--json`; Equipment runtimes own their stdout, stderr and exit codes. Root
-`room`, `site` and `route` commands are façades over their foundation
+`room`, `site`, `route` and `checkout` commands are façades over their foundation
 Equipment runtimes, not duplicate Kernel implementations.
 
 ## Sources and projections
@@ -194,8 +195,9 @@ retain, accept, deliver, commit or push transition.
 
 ## Versioned contracts
 
-The 0.8 package validates offline from its bundled v7 schemas. Their immutable
-public identifiers are:
+The 0.9 package validates offline from its bundled schemas. Home, Desk,
+Equipment, Site and runtime contracts remain at their immutable v7 identifiers.
+The frozen v7 Route remains readable; new Route writes use v8:
 
 ```text
 https://endroit.org/schema/v7/home.json
@@ -206,6 +208,7 @@ https://endroit.org/schema/v7/site.json
 https://endroit.org/schema/v7/route.json
 https://endroit.org/schema/v7/runtime.json
 https://endroit.org/schema/v7/artifact.json
+https://endroit.org/schema/v8/route.json
 ```
 
 Equipment runtimes receive protocol `endroit.org/runtime/v2alpha1`. Public
@@ -246,13 +249,22 @@ A Route is a Desk-local JSON declaration:
 
 ```json
 {
-  "$schema": "https://endroit.org/schema/v7/route.json",
+  "$schema": "https://endroit.org/schema/v8/route.json",
   "id": "main",
   "site": "product",
-  "mode": "existing",
-  "path": "/absolute/local/checkout"
+  "status": "active",
+  "checkout": {
+    "mode": "existing",
+    "path": "/absolute/local/checkout",
+    "expectedBranch": "main"
+  }
 }
 ```
+
+A Checkout is addressed as `checkout:<site>/<route>`. It is an Endroit
+implementation object, not an additional Open Workplace object. `checkout
+list|inspect` is read-only and keeps the declared Route separate from observed
+Git and Mount evidence.
 
 Supported modes:
 
@@ -264,6 +276,16 @@ Supported modes:
 | `managed-worktree` | `checkouts/<site>/<route>/` | explicit `git worktree remove` |
 | `submodule` | user-managed submodule path | recognized, never lifecycle-managed |
 
+`embedded` resolves from the Home context. Managed modes derive
+`checkouts/<site>/<route>` and persist no path. Existing and submodule modes
+carry a path. `expectedBranch` is a declared expectation; HEAD, dirty state and
+other observations never enter Route metadata.
+
+`route park`, `activate` and `supersede` change metadata only. Parked and
+superseded Routes remain inspectable but are excluded from implicit and
+operational selection. A superseded Route names its same-Site successor with
+`supersededBy`.
+
 The Home Git repository owns a submodule's Gitlink commit pin and
 `.gitmodules` declaration. Checkout initialization and submodule lifecycle
 remain user-owned; the Route only records how the Desk addresses it.
@@ -271,8 +293,8 @@ remain user-owned; the Route only records how the Desk addresses it.
 An `existing` Route may be exposed at the same root address with `route mount`.
 The result is a rebuildable symlink called a Mount, not a new Route or owner.
 `route unmount` refuses non-symlink paths and removes only the Mount. Route
-removal is blocked while a Mount remains, and Doctor reports broken, invalid
-or mismatched Mounts.
+removal is blocked while a Mount remains, and Doctor reports direct, ready,
+broken, divergent or conflicting Mount state.
 
 `route worktree` uses only local refs. It never fetches, forces, copies working
 tree changes, deletes branches, prunes, repairs or unlocks Git metadata.
@@ -280,6 +302,10 @@ tree changes, deletes branches, prunes, repairs or unlocks Git metadata.
 `route remove --delete` is required for managed checkouts. Dirty, locked,
 prunable, unavailable or dependent worktrees block deletion. Existing,
 embedded and submodule Routes remove only their JSON declaration.
+
+Endroit reads v7 and v8 Route documents and writes v8 only. `route migrate
+--check` previews a zero-effect metadata cutover; `route migrate` applies it
+and returns an exact rollback run. See [Route v8 migration](migration-route-v8.md).
 
 ## Resolver and build
 
@@ -311,7 +337,7 @@ orientation; its failure cannot remove the Floor Plan.
 
 ## Alpha boundaries
 
-- `0.8.0-alpha.2` is a local release candidate; registry availability is not
+- `0.9.0-alpha.0` is a local release candidate; registry availability is not
   claimed until the exact artifact is observed;
 - schemas and grammar may still break before 1.0;
 - Codex and Claude are L1 Projection-qualified first-party targets; L2–L4 live
@@ -320,8 +346,8 @@ runtime qualification remains unclaimed until provider-hosted smoke evidence;
 - no daemon, semantic index, graph or persistent agent is required;
 - Work Resolution remains an experimental Endroit extension; see
   [Work Resolution](work-resolution.md);
-- no automatic environment scanner, automated 0.7 migration or submodule
-  manager ships in 0.8;
+- no automatic environment scanner, 0.7 Home migration or submodule manager
+  ships in 0.9; Route v7-to-v8 metadata migration is explicit and local;
 - Mounts are optional explicit views for `existing` Routes; Routes always
   resolve their source checkout directly;
 - Endroit never infers remote success or upgrades model intelligence.

@@ -49,7 +49,7 @@ try {
   assert.deepEqual(rooms.rooms.map(({ ref }) => ref), ['room:home/home'])
   const sites = JSON.parse((await exec(process.execPath, [...consoleArgs, 'site', 'list', '--json'], { cwd: home, maxBuffer: 20 * 1024 * 1024 })).stdout)
   assert.equal(sites.sites[0].routes[0].id, 'main')
-  assert.equal(JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')).runtime, '@endroit/cli@0.8.0-alpha.2')
+  assert.equal(JSON.parse(await readFile(join(home, 'endroit.json'), 'utf8')).runtime, '@endroit/cli@0.9.0-alpha.0')
   console.log(`packed lab passed (${home})`)
 } finally {
   await removeTree(temporary, { force: true })

@@ -57,7 +57,7 @@ export async function ensureDevelopmentHome(options = {}) {
   } else {
     const route = site.routes.find((entry) => entry.id === 'main')
     if (!route) await endroit(['route', 'bind', 'endroit', projectRoot, '--id', 'main', '--home', home])
-    else if (await realpath(route.path) !== projectRoot) throw new Error(`endroit/main points to ${route.path}, expected ${projectRoot}.`)
+    else if (await realpath(route.observed.path) !== projectRoot) throw new Error(`endroit/main points to ${route.observed.path}, expected ${projectRoot}.`)
   }
 
   if (!await exists(join(home, 'equipment', 'endroit', 'project', 'equipment.json'))) {

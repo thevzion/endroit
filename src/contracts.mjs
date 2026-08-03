@@ -41,7 +41,7 @@ export async function validateDocument(document, type) {
   if (expectedSchema?.startsWith('https://') && document?.$schema !== expectedSchema) {
     throw new EndroitError(
       'schema_version_mismatch',
-      `Unsupported ${type} schema ${document?.$schema ?? '(missing)'}; Endroit 0.8 requires ${expectedSchema}.`,
+      `Unsupported ${type} schema ${document?.$schema ?? '(missing)'}; Endroit 0.9 requires ${expectedSchema}.`,
       { exitCode: 3 },
     )
   }

@@ -13,8 +13,8 @@ direction without release dates.
 
 ## In progress
 
-The 0.8 Workplace-first reset is the current release line. Its baseline is one
-complete static journey:
+The 0.9 Checkout/Route v8 cutover is the current release line. It preserves the
+complete static Workplace-first journey:
 
 ```text
 create/init → enter → call/work-as/use
@@ -28,6 +28,11 @@ visible root-level checkouts and optional rebuildable Mounts for existing
 Routes. Local qualification, dogfood and a packed npm smoke test gate the
 alpha; cold reads and the first external Home feed the next alpha and gate
 beta.
+
+The cutover reads frozen v7 Route metadata, writes v8, separates declared
+Checkout configuration from observation and provides metadata-only migration
+with rollback. The `endroit/0.8` Workplace Profile remains the active protocol
+specialization; package and Profile versions are independent.
 
 ## Exploring
 

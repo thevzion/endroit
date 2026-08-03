@@ -1,6 +1,6 @@
 {
   "name": "@endroit/cli",
-  "version": "0.8.0-alpha.2",
+  "version": "0.9.0-alpha.0",
   "description": "A lightweight, local-first framework for building and operating file-based Open Workplaces.",
   "keywords": [
     "ai-agents",
@@ -51,11 +51,13 @@
     "equipment/endroit/hygiene/",
     "templates/",
     "schemas/v7/",
+    "schemas/v8/",
     "schemas/work/",
     "src/",
     "WORKPLACE.md",
     "ADOPT.md",
     "INSTALL.md",
+    "docs/migration-route-v8.md",
     "LICENSE",
     "README.md"
   ],

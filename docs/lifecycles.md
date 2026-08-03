@@ -126,6 +126,12 @@ route clone                      → managed-clone under checkouts/
 route worktree                   → managed-worktree under checkouts/
 route mount existing             → rebuildable symlink under checkouts/
 route unmount existing           → remove the symlink, preserve its target
+route park                       → active Route metadata becomes parked
+route activate                   → one parked Route becomes active
+route supersede --by <route>     → active Route names its active successor
+checkout list|inspect            → declared metadata + fresh observation, read-only
+route migrate --check            → preview v7 → v8 metadata only
+route migrate                    → v8 cutover + exact local rollback run
 route inspect                    → deterministic Git evidence
 route remove                     → metadata only
 route remove --delete            → guarded managed-checkout deletion
@@ -144,6 +150,10 @@ Managed removal refuses dirty, locked, prunable, unavailable or dependent
 checkouts. Endroit does not delete branches or manage submodule lifecycle.
 Removing a Route with a Mount is refused until the Mount is explicitly
 unmounted.
+
+Parked and superseded Routes remain declared and inspectable but are excluded
+from implicit or operational selection. Lifecycle writes, Route migration and
+rollback do not change a checkout, branch, HEAD, working tree or Mount.
 
 ## Build and Front Door
 

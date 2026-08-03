@@ -7,7 +7,7 @@
 - **Target protocol:** `open-workplace/0.1`
 - **Status:** alpha release candidate
 - **Release availability:** included in the local
-  `@endroit/cli@0.8.0-alpha.2` candidate; publication is not inferred
+  `@endroit/cli@0.9.0-alpha.0` candidate; publication is not inferred
 
 This self-contained Endroit Profile specializes the Open Workplace protocol for an
 Endroit Home. It defines the representation, discovery, resolution and
@@ -187,10 +187,19 @@ transcript or hidden reasoning into Workplace truth.
 ## Sites and Routes
 
 A Site declaration names external identity; it does not copy Site truth into
-the Home. A Desk Route names the Site, local path and access mode. Supported
-materializations are embedded repositories, existing checkouts, managed
-clones, managed worktrees, user-managed submodules and optional rebuildable
-Mounts. A remote-only Site has no local Route.
+the Home. A Desk Route names the Site, lifecycle and Checkout configuration.
+Supported materializations are embedded repositories, existing checkouts,
+managed clones, managed worktrees, user-managed submodules and optional
+rebuildable Mounts. A remote-only Site has no local Route. Checkout is an
+Endroit implementation object addressed as `checkout:<site>/<route>`, not an
+additional Open Workplace object.
+
+Endroit reads frozen v7 and current v8 Route metadata and writes v8 only.
+Declared status and configuration remain separate from observed path, Git and
+Mount evidence. Parked and superseded Routes remain inspectable but are not
+selected for implicit or operational effects. Explicit Route migration and
+rollback change only Desk metadata; they never persist HEAD or dirty state or
+modify a checkout or Mount.
 
 Immediately before a Site mutation, run the tracked Console's `route inspect`
 for the exact Site and Route. Stop on a path, repository, branch, worktree or

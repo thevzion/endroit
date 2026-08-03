@@ -15,6 +15,7 @@ const legacySchemaDigests = {
   'home.schema.json': '57bfae48f1288a684b60a56a73a82b79d6907c5ead7f968da316850e8bfa109b',
   'runtime.schema.json': 'c5dc6f9f772650cc645434d85f659b9874a47eb2bb51584326d1c757d3b6b251',
 }
+const frozenV7RouteDigest = '7afec4ac50bc0fe06726e89e0e79f114ad9a9bffdfbbb87ca31e6b041b3535b7'
 
 async function files(directory) {
   const values = []
@@ -32,6 +33,11 @@ assert.deepEqual(
   (await readdir(join(root, 'schemas/v7'))).sort(),
   schemaNames.map((name) => `${name}.schema.json`).sort(),
 )
+assert.deepEqual(await readdir(join(root, 'schemas/v8')), ['route.schema.json'])
+const routeV8 = JSON.parse(await readFile(join(root, 'schemas/v8/route.schema.json'), 'utf8'))
+assert.equal(routeV8.$id, 'https://endroit.org/schema/v8/route.json')
+assert.equal(routeV8.properties.$schema.const, routeV8.$id)
+assert.equal(createHash('sha256').update(await readFile(join(root, 'schemas/v7/route.schema.json'))).digest('hex'), frozenV7RouteDigest, 'v7 Route schema changed')
 const schemaIds = []
 for (const name of schemaNames) {
   const schema = JSON.parse(await readFile(join(root, 'schemas', 'v7', `${name}.schema.json`), 'utf8'))
@@ -55,7 +61,7 @@ for (const name of ['onboarding', 'hud', 'artifacts', 'sites', 'rooms', 'workpla
 await validateDocument({
   $schema: 'https://endroit.org/schema/v7/home.json',
   name: 'check',
-  runtime: '@endroit/cli@0.8.0-alpha.2',
+  runtime: '@endroit/cli@0.9.0-alpha.0',
   providers: ['codex'],
   frontDoor: { wakeUp: 'endroit/hud:prompt' },
 }, 'home')
@@ -67,10 +73,10 @@ assert.match(providersDocument, /\| Codex \| L1 \| Projection-qualified \|/)
 assert.match(providersDocument, /\| Claude \| L1 \| Projection-qualified \|/)
 assert.doesNotMatch(providersDocument, /\| (?:Codex|Claude) \| L[234] \| Qualified \|/)
 const releaseWorkflow = await readFile(join(root, '.github/workflows/release.yml'), 'utf8')
-assert.match(releaseWorkflow, /RELEASE_ARTIFACT: endroit-0\.8-release-candidate/)
+assert.match(releaseWorkflow, /RELEASE_ARTIFACT: endroit-0\.9-release-candidate/)
 assert.match(releaseWorkflow, /smoke-next:/)
 const installDocument = await readFile(join(root, 'INSTALL.md'), 'utf8')
-assert.match(installDocument, /@endroit\/cli@0\.8\.0-alpha\.2/)
+assert.match(installDocument, /@endroit\/cli@0\.9\.0-alpha\.0/)
 assert.match(installDocument, /The agent guides\. The CLI applies\. The human approves\./)
 assert.equal(
   await readFile(join(root, 'WORKPLACE.md'), 'utf8'),
@@ -98,7 +104,7 @@ for (const path of all) {
   if (!/\.(?:md|mjs|json|yml|yaml)$/.test(name)) continue
   const body = await readFile(path, 'utf8')
   assert.ok(!/AKIA[0-9A-Z]{16}|-----BEGIN (?:RSA |EC )?PRIVATE KEY/.test(body), `${name} contains secret-like material`)
-  if (!['CHANGELOG.md', 'docs/releases/0.7.0-alpha.0.md', 'docs/releases/0.7.0-alpha.1.md', 'docs/releases/0.8.0-alpha.0.md', 'docs/releases/0.8.0-alpha.1.md', 'docs/releases/0.8.0-alpha.2.md'].includes(name)) {
+  if (!['CHANGELOG.md', 'docs/releases/0.7.0-alpha.0.md', 'docs/releases/0.7.0-alpha.1.md', 'docs/releases/0.8.0-alpha.0.md', 'docs/releases/0.8.0-alpha.1.md', 'docs/releases/0.9.0-alpha.0.md'].includes(name)) {
     assert.doesNotMatch(body, legacyBrand, `${name} contains a legacy brand contract`)
   }
 }

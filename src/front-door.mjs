@@ -33,7 +33,8 @@ Kernel routes:
 - \`equipment validate|add|status|sync|remove|override|promote|catalog|trust\`
 - \`room create|list|inspect|doctor\`
 - \`site add|list|inspect|doctor|remove\`
-- \`route bind|clone|worktree|mount|unmount|list|inspect|remove\`
+- \`route bind|clone|worktree|mount|unmount|park|activate|supersede|migrate|list|inspect|remove\`
+- \`checkout list|inspect\`
 - \`validate\`, \`build\`, \`doctor\`
 
 Equipment runtime namespaces:

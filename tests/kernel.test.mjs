@@ -188,7 +188,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
   assert.deepEqual(await compileSchemas(), ['home', 'desk', 'member', 'equipment', 'site', 'route', 'runtime', 'artifact'])
   await assert.rejects(
     () => validateDocument({ $schema: 'https://example.invalid/schema/home.json' }, 'home'),
-    (error) => error.code === 'schema_version_mismatch' && /Endroit 0\.8 requires https:\/\/endroit\.org\/schema\/v7\/home\.json/.test(error.message),
+    (error) => error.code === 'schema_version_mismatch' && /Endroit 0\.9 requires https:\/\/endroit\.org\/schema\/v7\/home\.json/.test(error.message),
   )
   await assert.rejects(
     () => validateDocument({ $schema: 'https://endroit.org/schema/home.json' }, 'home'),
@@ -206,7 +206,7 @@ test('create builds a source-owned Home and tracks shared provider projections',
       $schema: 'https://endroit.org/schema/v7/home.json',
       name: 'home',
       emoji: '🏠',
-      runtime: '@endroit/cli@0.8.0-alpha.2',
+      runtime: '@endroit/cli@0.9.0-alpha.0',
       providers: ['codex', 'claude'],
       prefix: 'acme',
       frontDoor: { wakeUp: 'endroit/hud:prompt' },
@@ -440,7 +440,7 @@ process.stdout.write('<wake-up source="' + process.env.ENDROIT_RUNTIME_SOURCE + 
     assert.equal(npm.stdout, '<wake-up source="npm"/>\n')
     assert.deepEqual(JSON.parse(await readFile(argsPath, 'utf8')), [
       '--yes',
-      '@endroit/cli@0.8.0-alpha.2',
+      '@endroit/cli@0.9.0-alpha.0',
       'hud',
       'prompt',
     ])

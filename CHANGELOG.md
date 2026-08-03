@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.0-alpha.0
+
+- Add the v8 Route schema with nested Checkout configuration and explicit
+  active, parked and superseded lifecycle.
+- Resolve v7 and v8 Route declarations once in the Core while keeping v7
+  immutable and writing v8 only.
+- Add read-only `checkout list|inspect`, guarded lifecycle transitions and
+  metadata-only `route migrate` cutover with exact rollback.
+- Separate declared metadata from observed Git and Mount state across Sites,
+  HUD and Artifacts.
+
 ## 0.8.0-alpha.2
 
 - Position Endroit's implemented Home, resolver, Equipment and provider

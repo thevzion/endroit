@@ -19,7 +19,7 @@ Your way of working stays. Each agent adapts at the door.
 
 Say what you want to work on in normal conversation:
 
-> Continue the Endroit 0.8 launch.
+> Continue the Endroit 0.9 Checkout launch.
 
 The provider Front Door exposes the Home Floor Plan and its routing rules. The
 agent can resolve the relevant Room or ask when the subject is ambiguous, then
@@ -36,7 +36,7 @@ It gives human-agent work an owned place across sessions, tools and
 repositories without moving that work into a persistent agent, proprietary
 memory service or orchestration runtime.
 
-> **Alpha.2 release candidate — local and not yet published by this working
+> **0.9.0-alpha.0 release candidate — local and not yet published by this working
 > tree.** The candidate is usable, actively maintained and dogfooded, but the
 > last observed npm release remains `0.8.0-alpha.1`. Endroit is pre-1.0; its
 > public grammar and schemas may still change through explicit releases and
@@ -171,7 +171,7 @@ Projection-qualified surfaces for Codex and Claude.
 
 ### Install the alpha.2 candidate after publication
 
-The repository prepares the `0.8.0-alpha.2` installation contract below. Do
+The repository prepares the `0.9.0-alpha.0` installation contract below. Do
 not treat it as available until the npm artifact is observed; the last
 observed registry release remains `0.8.0-alpha.1`.
 
@@ -194,7 +194,7 @@ explains; the pinned Endroit CLI applies only the approved operation.
 Create a standalone Home:
 
 ```bash
-npx --yes --package @endroit/cli@0.8.0-alpha.2 endroit create my-home
+npx --yes --package @endroit/cli@0.9.0-alpha.0 endroit create my-home
 ```
 
 `create` adds a Home-owned Member and, by default, a Desk tracked with the
@@ -205,7 +205,7 @@ Or add a Home to an existing repository:
 
 ```bash
 cd my-existing-repository
-npx --yes --package @endroit/cli@0.8.0-alpha.2 endroit init .
+npx --yes --package @endroit/cli@0.9.0-alpha.0 endroit init .
 ```
 
 `init` defaults to a separate Desk repository under ignored `.desk/`. Both
@@ -319,7 +319,7 @@ for the `open-workplace/0.1` protocol. The existing
 Claude Front Doors in this working tree. It tells a temporary Agent how to
 enter, resolve ownership, work through Workplace objects and preserve explicit
 lifecycle boundaries. It is deliberately separate from adoption and is
-included in the local `0.8.0-alpha.2` package candidate.
+included in the local `0.9.0-alpha.0` package candidate.
 
 Endroit does not make the agent smarter. It makes the situation clearer.
 
@@ -429,6 +429,12 @@ Local, ignored access declarations stay with the Desk:
 .desk/routes/<site>/<route>.json
 ```
 
+Endroit 0.9 reads frozen v7 and current v8 Route documents and writes v8 only.
+The v8 document owns `active|parked|superseded` lifecycle and a nested
+`checkout` configuration. A Checkout is addressed as
+`checkout:<site>/<route>` and is inspectable as declared metadata plus fresh
+observation; it is not another Open Workplace object.
+
 For an `existing` Route, `route mount` can create a rebuildable symlink at
 `checkouts/<site>/<route>/`; `route unmount` removes only that symlink. A Mount
 is never the identity of the Site or Route and never grants new permissions.
@@ -445,8 +451,14 @@ node ./endroit.mjs route clone product --id main
 node ./endroit.mjs route worktree product --id feature --from main --new-branch feature
 node ./endroit.mjs route bind product ../product --id existing
 node ./endroit.mjs route mount product --id existing
+node ./endroit.mjs checkout inspect checkout:product/main --json
+node ./endroit.mjs route migrate product --check --json
 node ./endroit.mjs site doctor
 ```
+
+Parked and superseded Routes are excluded from operational and implicit
+selection. Route v7-to-v8 migration and rollback are metadata-only; see the
+[migration guide](docs/migration-route-v8.md).
 
 ## Explicit Workplace gestures
 

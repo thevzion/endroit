@@ -10,7 +10,7 @@ Profile](https://endroit.org/WORKPLACE.md) defines the semantic contract used
 after entry. This file applies only after a Home destination and operation have
 been selected.
 
-The commands below target the local `@endroit/cli@0.8.0-alpha.2` release
+The commands below target the local `@endroit/cli@0.9.0-alpha.0` release
 candidate, which includes `ADOPT.md` and `WORKPLACE.md`. Do not run the npm
 commands until that exact registry artifact has been observed. The last
 observed published release is `0.8.0-alpha.1`.
@@ -53,13 +53,13 @@ ends the installation without effects.
 Use the pinned alpha package:
 
 ```bash
-npx --yes --package @endroit/cli@0.8.0-alpha.2 endroit create <directory> --desk tracked
+npx --yes --package @endroit/cli@0.9.0-alpha.0 endroit create <directory> --desk tracked
 ```
 
 or, from the existing repository:
 
 ```bash
-npx --yes --package @endroit/cli@0.8.0-alpha.2 endroit init . --desk separate
+npx --yes --package @endroit/cli@0.9.0-alpha.0 endroit init . --desk separate
 ```
 
 Change arguments only when the human approved the corresponding destination,

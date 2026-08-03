@@ -50,10 +50,11 @@ targeting the `open-workplace/0.1` protocol for an existing Home. It is owned as
 Instruction by `endroit/workplace`, so the existing build mechanism injects it
 once into each generated `AGENTS.md` and `CLAUDE.md`. No Kernel branch,
 parallel injection system or provider-specific copy implements this behavior.
-It is included in the local `0.8.0-alpha.2` package candidate; publication is a
+It is included in the local `0.9.0-alpha.0` package candidate; publication is a
 separate observed effect.
 
-Git owns the 0.8 contract sources under `schemas/v7/`; the npm package carries
+Git owns the frozen contracts under `schemas/v7/` and the v8 Route contract
+under `schemas/v8/`; the npm package carries
 the same files for offline validation; `endroit.org/schema/v7/` gives them
 stable public addresses. Runtime dispatch uses
 `endroit.org/runtime/v2alpha1`. The CLI never downloads a schema to operate.
@@ -132,6 +133,13 @@ touches its target. A Route must be re-observed before mutation.
 For a submodule, the Home Git repository owns the Gitlink commit pin and
 `.gitmodules` declaration. Checkout initialization and submodule lifecycle
 remain user-owned; the Route only addresses the checkout.
+
+The Core loads v7 and v8 Route declarations once into the Resolved Home. A
+resolved Checkout has a stable `checkout:<site>/<route>` address, declared
+lifecycle/configuration and separately observed Git/Mount evidence. Checkout
+is an Endroit implementation object, not an Open Workplace object. Writers use
+v8 only; explicit migration changes Desk metadata and carries metadata-only
+rollback material under `.endroit/`.
 
 ## Equipment trust
 
