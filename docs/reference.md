@@ -304,7 +304,9 @@ orientation; its failure cannot remove the Floor Plan.
   Room-owned Work Items;
 - `endroit/hygiene`: read-only `maintain-the-home` inspection and one exactly
   approved bounded repair;
-- `endroit/research`, `planning`, `publishing`, `scratch`: optional methods;
+- `endroit/publishing`: optional `list|inspect|validate` Work graph operations
+  plus the explicit `editorial-work-v1` migration;
+- `endroit/research`, `planning`, `scratch`: optional methods;
 - `endroit/project`: Endroit's own maintenance method.
 
 ## Alpha boundaries

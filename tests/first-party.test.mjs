@@ -426,7 +426,7 @@ test('Publishing keeps exact local content and observable Handles instruction-on
     ], created.io), 0, created.stderr())
     const publication = JSON.parse(created.stdout())
     assert.equal(await readFile(join(home, publication.path, 'content.md'), 'utf8'), '# Draft\n')
-    assert.equal((await resolveHome(home)).runtimes.some((entry) => entry.namespace === 'publishing'), false)
+    assert.equal((await resolveHome(home)).runtimes.some((entry) => entry.namespace === 'publishing'), true)
     const contract = await readFile(join(home, 'equipment/endroit/publishing/capabilities/publish.md'), 'utf8')
     assert.match(contract, /exact content, equipment,\s+links, account, destination/)
     assert.match(contract, /Do not create the Handle/)

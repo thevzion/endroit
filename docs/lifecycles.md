@@ -164,3 +164,21 @@ create/import in Room → validate → promote to broader Room or Site
 
 Promotion records lineage and never deletes the source. Remote publication is
 complete only after an external result is observed.
+
+## Publishing Work migration
+
+```text
+resolved Rooms → discover editorial-work-v1 mapping.json files
+               → inspect → prepare → apply → verify → cutover
+                                             └──────→ rollback
+```
+
+The migration derives its Rooms, scopes and counts from the resolved Home and
+the discovered mappings. `prepare` snapshots only mapped Publications and the
+Handles that point to them. Unmapped legacy Publications and their Handles are
+reported as retained and are neither rejected nor modified. `rollback`
+restores the mapped snapshot and removes only paths recorded by the migration.
+
+`publishing list|inspect|validate` exposes the resulting Work, Candidate and
+Publication graph. These local operations do not grant publication consent or
+claim an external effect.

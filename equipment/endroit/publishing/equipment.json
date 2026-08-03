@@ -9,7 +9,12 @@
     "capabilities/prepare.md",
     "capabilities/publish.md",
     "capabilities/revalidate.md",
+    "runtime.mjs",
+    "schemas/work.schema.json",
+    "schemas/candidate.schema.json",
     "schemas/publication.schema.json",
+    "templates/work.md",
+    "templates/candidate.md",
     "templates/publication.md",
     "templates/content.md",
     "templates/handle.md"
@@ -67,6 +72,13 @@
   ],
   "artifactKinds": [
     {
+      "id": "work",
+      "schema": "schemas/work.schema.json",
+      "template": "templates/work.md",
+      "owners": ["desk", "home"],
+      "states": ["draft", "active", "paused", "complete"]
+    },
+    {
       "id": "publication",
       "schema": "schemas/publication.schema.json",
       "template": "templates/publication.md",
@@ -74,5 +86,27 @@
       "states": ["outline", "draft", "ready", "published", "superseded"],
       "requiredFiles": ["templates/content.md"]
     }
-  ]
+  ],
+  "runtime": {
+    "namespace": "publishing",
+    "entry": "runtime.mjs",
+    "commands": [
+      {
+        "name": "list",
+        "description": "List Works and optionally their Candidates, Publications or compatibility tree."
+      },
+      {
+        "name": "inspect",
+        "description": "Inspect one Work, Candidate or Publication reference."
+      },
+      {
+        "name": "validate",
+        "description": "Validate the Work, Candidate and Publication graph."
+      },
+      {
+        "name": "migrate",
+        "description": "Run one explicit editorial-work-v1 migration phase."
+      }
+    ]
+  }
 }

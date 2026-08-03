@@ -26,6 +26,12 @@
     "audience": { "type": "string" },
     "language": { "type": "string" },
     "channel": { "type": "string" },
+    "work": { "type": "string" },
+    "candidate": { "type": "string" },
+    "candidate_revision": { "type": "integer", "minimum": 1 },
+    "candidate_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" },
+    "destination": { "type": "string" },
+    "handles": { "type": "array", "items": { "type": "string" } },
     "responsibility": { "type": "string" },
     "stability": {
       "enum": ["living", "release-aligned", "dated", "historical"]
@@ -45,6 +51,8 @@
     "superseded_by": {
       "type": ["string", "null"]
     },
+    "migrated_from": { "type": "string" },
+    "migrated_to": { "type": "string" },
     "derived_from": { "type": "array", "items": { "type": "string" } }
   }
 }

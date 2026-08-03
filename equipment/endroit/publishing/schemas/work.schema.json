@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "id",
+    "kind",
+    "owner",
+    "status",
+    "created_at",
+    "updated_at",
+    "derived_from",
+    "intent",
+    "thesis",
+    "audience",
+    "continuity",
+    "selected_candidate"
+  ],
+  "properties": {
+    "kind": { "const": "endroit/publishing:work" },
+    "owner": { "type": "string" },
+    "status": { "enum": ["draft", "active", "paused", "complete"] },
+    "intent": { "type": "string" },
+    "thesis": { "type": "string" },
+    "audience": { "type": "string" },
+    "continuity": { "type": "string" },
+    "selected_candidate": { "type": ["string", "null"] },
+    "derived_from": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "required": [
+    "id",
+    "kind",
+    "owner",
+    "work",
+    "status",
+    "lineage",
+    "derived_from",
+    "sources",
+    "revision",
+    "content_digest"
+  ],
+  "properties": {
+    "kind": { "const": "publishing-candidate" },
+    "owner": { "type": "string" },
+    "work": { "type": "string" },
+    "status": { "enum": ["draft", "in_review", "selected", "declined", "superseded"] },
+    "lineage": { "enum": ["root", "iteration", "alternative", "synthesis"] },
+    "derived_from": { "type": "array", "items": { "type": "string" } },
+    "sources": { "type": "array", "items": { "type": "string" } },
+    "revision": { "type": "integer", "minimum": 1 },
+    "content_digest": { "type": "string", "pattern": "^sha256:[0-9a-f]{64}$" }
+  }
+}
