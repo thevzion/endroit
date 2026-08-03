@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/v8/route.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "id", "site", "status", "checkout"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/v8/route.json" },
+    "id": { "$ref": "#/$defs/id" },
+    "site": { "$ref": "#/$defs/id" },
+    "status": { "enum": ["active", "parked", "superseded"] },
+    "supersededBy": { "$ref": "#/$defs/id" },
+    "checkout": {
+      "oneOf": [
+        { "$ref": "#/$defs/contextCheckout" },
+        { "$ref": "#/$defs/pathCheckout" }
+      ]
+    }
+  },
+  "allOf": [
+    {
+      "if": {
+        "properties": { "status": { "const": "superseded" } },
+        "required": ["status"]
+      },
+      "then": { "required": ["supersededBy"] },
+      "else": { "not": { "required": ["supersededBy"] } }
+    }
+  ],
+  "$defs": {
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+    "expectedBranch": { "type": "string", "minLength": 1 },
+    "contextCheckout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": { "enum": ["embedded", "managed-clone", "managed-worktree"] },
+        "expectedBranch": { "$ref": "#/$defs/expectedBranch" }
+      }
+    },
+    "pathCheckout": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["mode", "path"],
+      "properties": {
+        "mode": { "enum": ["existing", "submodule"] },
+        "path": { "type": "string", "minLength": 1 },
+        "expectedBranch": { "$ref": "#/$defs/expectedBranch" }
+      }
+    }
+  }
+}
