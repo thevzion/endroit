@@ -34,7 +34,6 @@
           "id": { "$ref": "#/$defs/id" },
           "schema": { "$ref": "#/$defs/path" },
           "template": { "$ref": "#/$defs/path" },
-          "document": { "type": "string", "pattern": "^[A-Z][A-Z0-9_-]*\\.md$" },
           "owners": {
             "type": "array",
             "minItems": 1,
