@@ -126,7 +126,7 @@ function extraFields(entries) {
 }
 
 async function listArtifacts(input) {
-  return input.artifacts ?? []
+  return input.inspection?.artifacts ?? []
 }
 
 async function inspectArtifact(input, selector) {

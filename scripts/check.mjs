@@ -15,7 +15,16 @@ const legacySchemaDigests = {
   'home.schema.json': '57bfae48f1288a684b60a56a73a82b79d6907c5ead7f968da316850e8bfa109b',
   'runtime.schema.json': 'c5dc6f9f772650cc645434d85f659b9874a47eb2bb51584326d1c757d3b6b251',
 }
-const frozenV7RouteDigest = '7afec4ac50bc0fe06726e89e0e79f114ad9a9bffdfbbb87ca31e6b041b3535b7'
+const frozenV7SchemaDigests = {
+  'artifact.schema.json': '560e0d62ac8646cf61488ec88298a0af4e7b87cef42e2cfe24a2c9e3b2c29535',
+  'desk.schema.json': '66ce6ab3dc01cb63afad47d14041511ef849336034657a6decb0fb0601bb5af8',
+  'equipment.schema.json': 'c2e8378f20ceb1e83b0c2b7d92ca94964f12d142e7a0dd607fc54a8c5c39936a',
+  'home.schema.json': '7ae8d40ea516938902695549191388fe2510badf65ded5341227cced2f0a5a55',
+  'member.schema.json': 'b12d957ee00a823eae1766e0941d0a3c7da100701e6545d8afb8b7d4769503e1',
+  'route.schema.json': '7afec4ac50bc0fe06726e89e0e79f114ad9a9bffdfbbb87ca31e6b041b3535b7',
+  'runtime.schema.json': '7f95cf78217d0a94219cb0d9dd6f0b952fb854ac95c8e91ec1dd8367830e8799',
+  'site.schema.json': '1b6392fec0b66407739f7537567e74af0c3ba439d85c071b8682897175e336ac',
+}
 
 async function files(directory) {
   const values = []
@@ -37,7 +46,9 @@ assert.deepEqual(await readdir(join(root, 'schemas/v8')), ['route.schema.json'])
 const routeV8 = JSON.parse(await readFile(join(root, 'schemas/v8/route.schema.json'), 'utf8'))
 assert.equal(routeV8.$id, 'https://endroit.org/schema/v8/route.json')
 assert.equal(routeV8.properties.$schema.const, routeV8.$id)
-assert.equal(createHash('sha256').update(await readFile(join(root, 'schemas/v7/route.schema.json'))).digest('hex'), frozenV7RouteDigest, 'v7 Route schema changed')
+for (const [name, digest] of Object.entries(frozenV7SchemaDigests)) {
+  assert.equal(createHash('sha256').update(await readFile(join(root, 'schemas/v7', name))).digest('hex'), digest, `v7 ${name} changed`)
+}
 const schemaIds = []
 for (const name of schemaNames) {
   const schema = JSON.parse(await readFile(join(root, 'schemas', 'v7', `${name}.schema.json`), 'utf8'))
@@ -47,7 +58,9 @@ for (const name of schemaNames) {
   schemaIds.push(schema.$id)
 }
 assert.equal(new Set(schemaIds).size, schemaNames.length)
-assert.equal(JSON.parse(await readFile(join(root, 'schemas/v7/runtime.schema.json'), 'utf8')).properties.protocol.const, 'endroit.org/runtime/v2alpha1')
+const runtimeV7 = JSON.parse(await readFile(join(root, 'schemas/v7/runtime.schema.json'), 'utf8'))
+assert.equal(runtimeV7.properties.protocol.const, 'endroit.org/runtime/v2alpha1')
+assert.equal(Object.hasOwn(runtimeV7.properties, 'artifacts'), false)
 assert.equal(
   await readFile(join(root, 'schemas/v7/artifact.schema.json'), 'utf8'),
   await readFile(join(root, 'equipment/endroit/artifacts/schemas/artifact.schema.json'), 'utf8'),

@@ -143,7 +143,7 @@ async function loadWork(input, selector) {
 }
 
 function selectWorkArtifact(input, selector) {
-  const candidates = (input.artifacts ?? []).filter((entry) => entry.kind === KIND)
+  const candidates = (input.inspection?.artifacts ?? []).filter((entry) => entry.kind === KIND)
   if (selector === undefined) {
     if (!candidates.length) throw failure('work_missing', 'No Work Items were found.')
     if (candidates.length > 1) throw failure('work_ambiguous', 'Several Work Items exist; pass an explicit selector.', 2)

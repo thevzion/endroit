@@ -135,7 +135,7 @@ test('external runtimes stay pending until their exact digest is approved', asyn
         commands: [{ name: 'show', description: 'Echo the runtime input.' }],
       },
     }), {
-      'runtime.mjs': "import { writeFileSync } from 'node:fs'; import { join } from 'node:path'; let body=''; for await (const chunk of process.stdin) body += chunk; const input=JSON.parse(body); writeFileSync(join(input.homeRoot,'runtime-ran'),'yes\\n'); process.stdout.write(JSON.stringify({protocol:input.protocol,argv:input.argv,home:input.resolvedHome.home.name,equipmentRoot:input.equipmentRoot,invoke:input.kernel.invoke,invocation:input.invocation}));\n",
+      'runtime.mjs': "import { writeFileSync } from 'node:fs'; import { join } from 'node:path'; let body=''; for await (const chunk of process.stdin) body += chunk; const input=JSON.parse(body); writeFileSync(join(input.homeRoot,'runtime-ran'),'yes\\n'); process.stdout.write(JSON.stringify({protocol:input.protocol,argv:input.argv,home:input.resolvedHome.home.name,equipmentRoot:input.equipmentRoot,invoke:input.kernel.invoke,invocation:input.invocation,rootArtifacts:Object.hasOwn(input,'artifacts'),inspection:input.inspection??null}));\n",
     })
     await addEquipment(home, [runtime])
     await assert.rejects(readFile(join(home, 'runtime-ran')), (error) => error.code === 'ENOENT')
@@ -169,6 +169,8 @@ test('external runtimes stay pending until their exact digest is approved', asyn
       equipmentRoot: join(home, 'equipment/endroit/echo'),
       invoke: 'node ./endroit.mjs',
       invocation: { kind: 'command' },
+      rootArtifacts: false,
+      inspection: null,
     })
     assert.equal(await readFile(join(home, 'runtime-ran'), 'utf8'), 'yes\n')
 

@@ -64,6 +64,7 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
   const invocationProvider = ['codex', 'claude'].includes(process.env.ENDROIT_INVOCATION_PROVIDER)
     ? process.env.ENDROIT_INVOCATION_PROVIDER
     : undefined
+  const inventoryConsumer = ['endroit/artifacts', 'endroit/work'].includes(runtime.owner)
   const trustStates = []
   for (const candidate of plan.runtimes) {
     try {
@@ -89,11 +90,11 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
       kind: invocationKind,
       ...(invocationProvider ? { provider: invocationProvider } : {}),
     },
-    ...(runtime.owner === 'endroit/hygiene' ? {
-      inspection: { homeDoctor: await (await import('./doctor.mjs')).doctorHome(root) },
-    } : {}),
-    ...(['endroit/artifacts', 'endroit/work'].includes(runtime.owner) ? {
-      artifacts: await listArtifacts(homeRoot, deskRoot, plan),
+    ...(runtime.owner === 'endroit/hygiene' || inventoryConsumer ? {
+      inspection: {
+        ...(runtime.owner === 'endroit/hygiene' ? { homeDoctor: await (await import('./doctor.mjs')).doctorHome(root) } : {}),
+        ...(inventoryConsumer ? { artifacts: await listArtifacts(homeRoot, deskRoot, plan) } : {}),
+      },
     } : {}),
   }
   await validateDocument(input, 'runtime')
