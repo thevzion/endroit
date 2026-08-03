@@ -22,12 +22,13 @@ run ID. Endroit stores the exact original bytes, file modes and digests under
 `.endroit/migrations/checkout-v8/<run-id>/`. The journal contains Route
 metadata only; it persists no observed HEAD, branch status or dirty state.
 One local exclusive Route-writer lock serializes migration, rollback and every
-other Route or Mount mutation. The writer refreshes the lock mtime every five
-seconds. A lock is active only while its PID is live and its heartbeat is at
-most 30 seconds old; stale recovery is itself serialized by a distinct
-exclusive reaper lock and revalidates the writer token and file identity. The
-journal moves through `prepared`, `applying` and `applied`; every Route records
-its progress atomically after its v8 bytes are durably verified.
+other Route or Mount mutation. The lock is created exclusively and has no
+lease expiry: Endroit never steals it from a live writer. A lock owned by a
+stopped process is reported as `route_writer_lock_stale` and left untouched;
+inspect that process and `.endroit/locks/routes.lock` before removing it and
+retrying. The journal moves through `prepared`, `applying` and `applied`;
+every Route records its progress atomically after its v8 bytes are durably
+verified.
 
 Rollback the exact run:
 
@@ -44,8 +45,8 @@ second rollback of a `rolled-back` run is a current, zero-effect operation.
 Rollback fails closed if any Route has a third digest, if an original no longer
 matches its recorded bytes, or if a declaration, ancestor, journal or original
 is replaced by a symlink. Inspect and reconcile that drift explicitly instead
-of overwriting it. A stale lock left by a terminated process is recovered by
-the next migration command; a live concurrent migration remains blocked.
+of overwriting it. A stale or live concurrent writer lock remains blocked
+until its ownership is reconciled explicitly.
 
 The v8 declaration separates lifecycle and Checkout configuration:
 

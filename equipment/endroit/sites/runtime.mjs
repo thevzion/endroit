@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -32,10 +32,6 @@ const CHECKOUT_HELP = {
   inspect: 'endroit checkout inspect checkout:<site>/<route> [--json]',
 }
 let routeWriterLockDepth = 0
-// A writer refreshes mtime every 5 seconds; only a live PID with a heartbeat no
-// older than 30 seconds is active. Expiry is deliberately conservative.
-const ROUTE_WRITER_HEARTBEAT_MS = 5_000
-const ROUTE_WRITER_STALE_MS = 30_000
 
 try {
   const input = JSON.parse(await stdin())
@@ -1025,39 +1021,22 @@ async function withRouteWriterLock(input, operation) {
   await ensureSafeDirectories(input.homeRoot, root)
   const lockPath = join(root, 'routes.lock')
   const lock = await acquireRouteWriterLock(lockPath)
-  let heartbeatTask
-  const heartbeat = setInterval(() => {
-    if (heartbeatTask) return
-    heartbeatTask = refreshRouteWriterLock(lockPath, lock).catch(() => {}).finally(() => { heartbeatTask = undefined })
-  }, ROUTE_WRITER_HEARTBEAT_MS)
-  heartbeat.unref()
   routeWriterLockDepth += 1
   try {
+    if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_HOLD_ROUTE_WRITER_MS) {
+      await new Promise((resolve) => setTimeout(resolve, Number(process.env.ENDROIT_TEST_HOLD_ROUTE_WRITER_MS)))
+    }
     return await operation()
   } finally {
     routeWriterLockDepth -= 1
-    clearInterval(heartbeat)
-    await heartbeatTask
     await lock.handle.close().catch(() => {})
     await releaseOwnedLock(lockPath, lock, root)
   }
 }
 
-async function acquireRouteWriterLock(path, retry = true) {
+async function acquireRouteWriterLock(path) {
   try {
-    const handle = await open(path, 'wx', 0o600)
-    const token = randomUUID()
-    try {
-      await handle.writeFile(`${JSON.stringify({ token, pid: process.pid, startedAt: new Date().toISOString() })}\n`)
-      await handle.sync()
-      await syncDirectory(dirname(path))
-      const { dev, ino } = await handle.stat()
-      return { handle, dev, ino, token }
-    } catch (error) {
-      await handle.close().catch(() => {})
-      await rm(path, { force: true }).catch(() => {})
-      throw error
-    }
+    return await createOwnedLock(path)
   } catch (error) {
     if (error.code !== 'EEXIST') throw error
     await assertRegularFile(path, 'route_writer_lock_invalid')
@@ -1065,52 +1044,16 @@ async function acquireRouteWriterLock(path, retry = true) {
     if (observed.isSymbolicLink() || !observed.isFile()) throw failure('route_writer_lock_invalid', 'Route writer lock must be a regular file.')
     let owner
     try { owner = JSON.parse(await readFile(path, 'utf8')) } catch {
-      if (freshHeartbeat(observed)) throw failure('route_writer_locked', 'Route writer lock is being initialized.')
+      if (Date.now() - observed.mtimeMs <= 1_000) throw failure('route_writer_locked', 'Route writer lock is being initialized.')
       throw failure('route_writer_lock_invalid', 'Route writer lock is invalid.')
     }
     assertLockOwner(owner, 'route_writer_lock_invalid')
-    if (activeRouteWriter(owner, observed)) throw failure('route_writer_locked', `Route mutation is locked by process ${owner.pid}.`)
-    if (!retry) throw failure('route_writer_locked', 'Route writer lock could not be recovered.')
-    await reapStaleRouteWriterLock(path, observed, owner)
-    return acquireRouteWriterLock(path, false)
-  }
-}
-
-async function refreshRouteWriterLock(path, lock) {
-  const current = await lstat(path)
-  if (current.dev !== lock.dev || current.ino !== lock.ino) throw failure('route_writer_lock_lost', 'Route writer lock identity changed.')
-  const owner = JSON.parse(await readFile(path, 'utf8'))
-  if (owner.token !== lock.token) throw failure('route_writer_lock_lost', 'Route writer lock token changed.')
-  const now = new Date()
-  await utimes(path, now, now)
-}
-
-async function reapStaleRouteWriterLock(path, observed, owner) {
-  const reaperPath = `${path}.reaper`
-  let reaper
-  try { reaper = await createOwnedLock(reaperPath) } catch (error) {
-    if (error.code === 'EEXIST') throw failure('route_writer_locked', 'Another process is recovering the Route writer lock.')
-    throw error
-  }
-  try {
-    if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_REAPER_REPLACE_LOCK === '1') {
-      await rm(path)
-      await writeFile(path, `${JSON.stringify({ token: 'replacement-writer', pid: process.pid, startedAt: new Date().toISOString() })}\n`, { flag: 'wx', mode: 0o600 })
-    }
-    await assertRegularFile(path, 'route_writer_lock_invalid')
-    const current = await lstat(path)
-    let currentOwner
-    try { currentOwner = JSON.parse(await readFile(path, 'utf8')) } catch { throw failure('route_writer_lock_invalid', 'Route writer lock is invalid.') }
-    assertLockOwner(currentOwner, 'route_writer_lock_invalid')
-    if (current.dev !== observed.dev || current.ino !== observed.ino || current.mtimeMs !== observed.mtimeMs || currentOwner.token !== owner.token) {
-      throw failure('route_writer_locked', 'Route writer lock changed during stale recovery.')
-    }
-    if (activeRouteWriter(currentOwner, current)) throw failure('route_writer_locked', `Route mutation is locked by process ${currentOwner.pid}.`)
-    await rm(path)
-    await syncDirectory(dirname(path))
-  } finally {
-    await reaper.handle.close().catch(() => {})
-    await releaseOwnedLock(reaperPath, reaper, dirname(path))
+    const alive = processAlive(owner.pid)
+    const code = alive ? 'route_writer_locked' : 'route_writer_lock_stale'
+    const detail = alive
+      ? `Route mutation is locked by process ${owner.pid}.`
+      : `Route writer lock belongs to stopped process ${owner.pid}; inspect and remove ${path} before retrying.`
+    throw failure(code, detail)
   }
 }
 
@@ -1145,12 +1088,6 @@ function assertLockOwner(owner, code) {
     throw failure(code, 'Route writer lock metadata is invalid.')
   }
 }
-
-function activeRouteWriter(owner, info) {
-  return processAlive(owner.pid) && freshHeartbeat(info)
-}
-
-function freshHeartbeat(info) { return Math.max(0, Date.now() - info.mtimeMs) <= ROUTE_WRITER_STALE_MS }
 
 function processAlive(pid) {
   if (!Number.isInteger(pid) || pid < 1) return false

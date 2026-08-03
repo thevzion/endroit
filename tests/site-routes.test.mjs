@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto'
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { setTimeout as delay } from 'node:timers/promises'
+import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
 import test from 'node:test'
 import { createHome } from '../src/create.mjs'
@@ -13,6 +15,7 @@ import { dispatchRuntime } from '../src/runtime.mjs'
 import { captureIo } from './helpers.mjs'
 
 const exec = promisify(execFile)
+const cliPath = fileURLToPath(new URL('../bin/endroit.mjs', import.meta.url))
 
 test('Site worktrees are created, classified, discovered and adopted explicitly', async () => {
   const fixture = await siteFixture()
@@ -599,36 +602,15 @@ test('Route migration rollback resumes prepared, applying and rolling-back multi
     await rm(lockPath)
 
     await writeFile(lockPath, `${JSON.stringify({ token: 'stale-test-lock', pid: 2147483647, startedAt: new Date().toISOString() })}\n`, { flag: 'wx' })
-    const staleRecovered = await runtimeJson(home, ['route', 'migrate', 'demo'])
-    assert.equal(staleRecovered.status, 'migrated')
-    await runtimeJson(home, ['route', 'migrate', '--rollback', staleRecovered.runId])
+    await runtimeFailure(home, ['route', 'migrate', 'demo'], 'route_writer_lock_stale')
+    assert.equal(JSON.parse(await readFile(lockPath, 'utf8')).token, 'stale-test-lock')
+    await rm(lockPath)
 
     const expired = new Date(Date.now() - 60_000)
     await writeFile(lockPath, `${JSON.stringify({ token: 'recycled-pid-lock', pid: process.pid, startedAt: expired.toISOString() })}\n`, { flag: 'wx' })
     await utimes(lockPath, expired, expired)
-    const recycledRecovered = await runtimeJson(home, ['route', 'migrate', 'demo'])
-    assert.equal(recycledRecovered.status, 'migrated')
-    await runtimeJson(home, ['route', 'migrate', '--rollback', recycledRecovered.runId])
-
-    const reaperPath = `${lockPath}.reaper`
-    await writeFile(lockPath, `${JSON.stringify({ token: 'double-reap-lock', pid: process.pid, startedAt: expired.toISOString() })}\n`, { flag: 'wx' })
-    await utimes(lockPath, expired, expired)
-    await writeFile(reaperPath, 'reaper in progress\n', { flag: 'wx' })
     await runtimeFailure(home, ['route', 'migrate', 'demo'], 'route_writer_locked')
-    assert.equal(JSON.parse(await readFile(lockPath, 'utf8')).token, 'double-reap-lock')
-    await rm(reaperPath)
-    const previousNodeEnv = process.env.NODE_ENV
-    process.env.NODE_ENV = 'test'
-    process.env.ENDROIT_TEST_REAPER_REPLACE_LOCK = '1'
-    try {
-      await runtimeFailure(home, ['route', 'migrate', 'demo'], 'route_writer_locked')
-    } finally {
-      delete process.env.ENDROIT_TEST_REAPER_REPLACE_LOCK
-      if (previousNodeEnv === undefined) delete process.env.NODE_ENV
-      else process.env.NODE_ENV = previousNodeEnv
-    }
-    assert.equal(JSON.parse(await readFile(lockPath, 'utf8')).token, 'replacement-writer')
-    assert.equal(await pathExists(reaperPath), false)
+    assert.equal(JSON.parse(await readFile(lockPath, 'utf8')).token, 'recycled-pid-lock')
     await rm(lockPath)
 
     const corrupt = await runtimeJson(home, ['route', 'migrate', 'demo'])
@@ -766,12 +748,17 @@ test('concurrent supersede and replacement removal cannot leave a dangling Route
   try {
     const { home } = fixture
     await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'replacement', '--from', 'main', '--new-branch', 'replacement'])
-    const [supersede, remove] = await Promise.all([
-      runtimeResult(home, ['route', 'supersede', 'demo', '--id', 'main', '--by', 'replacement']),
-      runtimeResult(home, ['route', 'remove', 'demo', '--id', 'replacement', '--delete']),
-    ])
-    assert.equal([supersede, remove].filter(({ code }) => code === 0).length, 1)
-    assert.match([supersede, remove].find(({ code }) => code !== 0).stderr, /route_writer_locked|route_supersession_target|route_missing/)
+    const lockPath = join(home, '.endroit/locks/routes.lock')
+    const supersedePromise = cliResult(home, ['route', 'supersede', 'demo', '--id', 'main', '--by', 'replacement'], {
+      NODE_ENV: 'test',
+      ENDROIT_TEST_HOLD_ROUTE_WRITER_MS: '250',
+    })
+    await waitForPath(lockPath)
+    const remove = await cliResult(home, ['route', 'remove', 'demo', '--id', 'replacement', '--delete'])
+    const supersede = await supersedePromise
+    assert.equal(supersede.code, 0, supersede.stderr)
+    assert.notEqual(remove.code, 0)
+    assert.match(remove.stderr, /route_writer_locked/)
     const listed = await runtimeJson(home, ['route', 'list', 'demo'])
     for (const route of listed.routes.filter((entry) => entry.declared.status === 'superseded')) {
       assert.equal(listed.routes.some((entry) => entry.id === route.declared.supersededBy), true)
@@ -889,12 +876,20 @@ async function runtimeJson(home, args, namespace = 'site') {
   return JSON.parse(output.stdout())
 }
 
-async function runtimeResult(home, args) {
-  const output = captureIo()
-  let code
-  try { code = await dispatchRuntime(home, 'site', args.includes('--json') ? args : [...args, '--json'], output.io) }
-  catch (error) { return { code: error.exitCode ?? 4, stderr: `${error.code}: ${error.message}` } }
-  return { code, stdout: output.stdout(), stderr: output.stderr() }
+async function cliResult(home, args, environment = {}) {
+  try {
+    const { stdout, stderr } = await exec(process.execPath, [cliPath, ...args, '--home', home, '--json'], {
+      cwd: home,
+      env: { ...process.env, ...environment },
+    })
+    return { code: 0, stdout, stderr }
+  } catch (error) {
+    return {
+      code: typeof error.code === 'number' ? error.code : 4,
+      stdout: error.stdout ?? '',
+      stderr: error.stderr ?? error.message,
+    }
+  }
 }
 
 async function runtimeFailure(home, args, code) {
@@ -938,6 +933,15 @@ async function pathExists(path) {
     if (error.code === 'ENOENT') return false
     throw error
   }
+}
+
+async function waitForPath(path, timeout = 2_000) {
+  const deadline = Date.now() + timeout
+  while (Date.now() < deadline) {
+    if (await pathExists(path)) return
+    await delay(10)
+  }
+  assert.fail(`Timed out waiting for ${path}`)
 }
 
 async function checkoutInvariant(repository, mount) {
