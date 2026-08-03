@@ -3,6 +3,7 @@ import { execFile } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import { collectVersionedSchemas } from './lib/release-schemas.mjs'
 
 const exec = promisify(execFile)
 const projectRoot = new URL('../', import.meta.url).pathname
@@ -10,6 +11,7 @@ const outputRoot = resolve(process.argv[2] ?? join(projectRoot, 'release'))
 const sources = ['.']
 const packages = []
 const schemaNames = ['home', 'desk', 'member', 'equipment', 'site', 'route', 'runtime', 'artifact']
+const schemaV8Names = ['route']
 const legacySchemaNames = ['home', 'desk', 'asset', 'runtime', 'artifact']
 
 const { stdout: status } = await exec('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: projectRoot })
@@ -38,14 +40,8 @@ for (const source of sources) {
 }
 
 const { stdout: commit } = await exec('git', ['rev-parse', 'HEAD'], { cwd: projectRoot })
-const schemas = []
-for (const name of schemaNames) {
-  const source = `schemas/v7/${name}.schema.json`
-  const content = await readFile(join(projectRoot, source))
-  const url = `https://endroit.org/schema/v7/${name}.json`
-  if (JSON.parse(content).$id !== url) throw new Error(`${source} must use $id ${url}.`)
-  schemas.push({ name, source, url, sha256: createHash('sha256').update(content).digest('hex') })
-}
+const schemas = await collectVersionedSchemas(projectRoot, 'v7', schemaNames)
+const schemasV8 = await collectVersionedSchemas(projectRoot, 'v8', schemaV8Names)
 const legacySchemas = []
 for (const name of legacySchemaNames) {
   const source = `schemas/v6/${name}.schema.json`
@@ -59,6 +55,7 @@ const manifest = {
   tag: 'next',
   packages,
   schemas,
+  schemasV8,
   legacySchemas,
 }
 await writeFile(join(outputRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)

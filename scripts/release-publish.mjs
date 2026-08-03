@@ -5,6 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 import { comparePackedTrees } from './lib/pack.mjs'
+import { verifyVersionedSchemas } from './lib/release-schemas.mjs'
 
 const exec = promisify(execFile)
 const projectRoot = new URL('../', import.meta.url).pathname
@@ -15,6 +16,7 @@ const releaseRoot = dirname(manifestPath)
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
 const expectedOrder = ['@endroit/cli']
 const expectedSchemas = ['home', 'desk', 'member', 'equipment', 'site', 'route', 'runtime', 'artifact']
+const expectedSchemasV8 = ['route']
 const expectedLegacySchemas = ['home', 'desk', 'asset', 'runtime', 'artifact']
 
 if (JSON.stringify(manifest.packages.map((entry) => entry.name)) !== JSON.stringify(expectedOrder)) {
@@ -22,7 +24,8 @@ if (JSON.stringify(manifest.packages.map((entry) => entry.name)) !== JSON.string
 }
 const { stdout: commit } = await exec('git', ['rev-parse', 'HEAD'], { cwd: projectRoot })
 if (manifest.commit !== commit.trim()) throw new Error(`Release manifest belongs to ${manifest.commit}, not ${commit.trim()}.`)
-await verifySchemas(manifest.schemas)
+await verifyVersionedSchemas(manifest.schemas, 'v7', expectedSchemas, verifyPublicSchema)
+await verifyVersionedSchemas(manifest.schemasV8, 'v8', expectedSchemasV8, verifyPublicSchema)
 await verifyLegacySchemas(manifest.legacySchemas)
 
 for (const entry of manifest.packages) {
@@ -43,17 +46,6 @@ for (const entry of manifest.packages) {
   await exec('npm', args, { cwd: projectRoot, maxBuffer: 20 * 1024 * 1024 })
   process.stdout.write(`${dryRun ? 'qualified' : 'published'} ${entry.name}@${entry.version}\n`)
   if (!dryRun) await verifyRegistry(entry, manifest.tag, tarball)
-}
-
-async function verifySchemas(schemas) {
-  if (JSON.stringify(schemas?.map((entry) => entry.name)) !== JSON.stringify(expectedSchemas)) {
-    throw new Error(`Release schemas must be ${expectedSchemas.join(', ')}.`)
-  }
-  for (const entry of schemas) {
-    const expectedUrl = `https://endroit.org/schema/v7/${entry.name}.json`
-    if (entry.url !== expectedUrl) throw new Error(`${entry.name} schema URL must be ${expectedUrl}.`)
-    await verifyPublicSchema(entry)
-  }
 }
 
 async function verifyLegacySchemas(schemas) {
