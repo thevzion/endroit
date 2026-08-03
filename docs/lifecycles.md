@@ -27,7 +27,7 @@ moves existing Site sources or checkouts merely to match the proposed map.
 ```text
 standalone: create <directory> → Git → Member → tracked Desk → Equipment → build → doctor → commit
 embedded:   init [repository]  → Member → separate Desk → Site self/Route embedded:. → build → doctor
-deferred:   init --desk later  → Member → Site self → desk init → explicit Route bind → build
+deferred:   init --desk later  → Member → Site self → desk init → explicit checkout adopt → build
 ```
 
 `create` refuses an existing destination. `init` requires an existing Git
@@ -47,7 +47,7 @@ workstation/context, not the person. Desk paths are never promoted to Home
 settings.
 
 An embedded Route is Desk-owned, so `init --desk later` cannot create it.
-After `desk init`, bind it explicitly with `route bind self . --id embedded`.
+After `desk init`, adopt it explicitly with `checkout adopt self . --id embedded`.
 
 ## Equipment
 
@@ -121,20 +121,20 @@ periodic cleanup is created.
 ```text
 site add remote                  → remote-only Site
 site add existing checkout       → Site + existing Route main
-route bind                       → existing | embedded | submodule
-route clone                      → managed-clone under checkouts/
-route worktree                   → managed-worktree under checkouts/
-route mount existing             → rebuildable symlink under checkouts/
-route unmount existing           → remove the symlink, preserve its target
+checkout adopt                   → existing | embedded | submodule
+checkout clone                   → managed-clone under checkouts/
+checkout worktree                → managed-worktree under checkouts/
+checkout reconcile --check       → preview the physical index
+checkout reconcile --apply       → reconcile owned symlinks only
 route park                       → active Route metadata becomes parked
 route activate                   → one parked Route becomes active
 route supersede --by <route>     → active Route names its active successor
-checkout list|inspect            → declared metadata + fresh observation, read-only
+checkout list|inspect|resolve    → declared metadata + fresh Git observation
 route migrate --check            → preview v7 → v8 metadata only
 route migrate                    → v8 cutover + exact local rollback run
 route inspect                    → deterministic Git evidence
 route remove                     → metadata only
-route remove --delete            → guarded managed-checkout deletion
+checkout delete --approve        → guarded managed-checkout deletion
 site remove                      → only after all Routes are gone
 ```
 
@@ -148,12 +148,12 @@ branch and HEAD. It never fetches or copies dirty source changes.
 
 Managed removal refuses dirty, locked, prunable, unavailable or dependent
 checkouts. Endroit does not delete branches or manage submodule lifecycle.
-Removing a Route with a Mount is refused until the Mount is explicitly
-unmounted.
+Removing a Route removes only its generated index link; an unknown path is
+never touched.
 
 Parked and superseded Routes remain declared and inspectable but are excluded
 from implicit or operational selection. Lifecycle writes, Route migration and
-rollback do not change a checkout, branch, HEAD, working tree or Mount.
+rollback do not change a checkout, branch, HEAD, working tree or repository.
 
 ## Build and Front Door
 

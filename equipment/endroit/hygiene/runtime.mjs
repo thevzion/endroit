@@ -51,7 +51,10 @@ async function maintain(input) {
     const category = issue.code === 'room_id_duplicate' ? 'ambiguities' : issue.code.startsWith('legacy_') ? 'legacy' : 'confirmed'
     add(category, issue.code, issue.message ?? JSON.stringify(issue), issue.path)
   }
-  for (const limit of siteDoctor.limits ?? []) add('confirmed', 'site-doctor', limit)
+  for (const limit of siteDoctor.limits ?? []) {
+    if (limit === 'checkout-index-stale') add('confirmed', 'checkout-index-stale', 'The reconstructible Checkout index differs from declared Routes and observed worktrees.')
+    else add('confirmed', 'site-doctor', limit, limit)
+  }
   for (const artifact of materialInventory.artifacts ?? []) {
     if (artifact.legacy) add('legacy', 'legacy-artifact', 'Material remains in a pre-0.8 read-only location.', relative(input.homeRoot, artifact.path))
     if (artifact.invalid) add('ambiguities', 'material-invalid', artifact.invalid, relative(input.homeRoot, artifact.path))
@@ -113,10 +116,11 @@ async function repair(input, flags) {
   if (flags.approve !== finding) fail('repair_approval_required', `Pass --approve ${finding} to approve exactly this repair.`, 6)
   const before = await maintain(input)
   if (!before.findings.some((entry) => entry.id === finding)) fail('finding_missing', `${finding} is not present in the current inspection.`)
-  if (finding !== 'projections-stale') fail('repair_unsupported', `${finding} has no automatic repair; use the named existing operation explicitly.`)
-  await exec(process.execPath, [join(input.homeRoot, 'endroit.mjs'), 'build'], { cwd: input.homeRoot })
+  if (!['projections-stale', 'checkout-index-stale'].includes(finding)) fail('repair_unsupported', `${finding} has no automatic repair; use the named existing operation explicitly.`)
+  const operation = finding === 'checkout-index-stale' ? ['checkout', 'reconcile', '--apply'] : ['build']
+  await exec(process.execPath, [join(input.homeRoot, 'endroit.mjs'), ...operation], { cwd: input.homeRoot })
   const { stdout } = await exec(process.execPath, [join(input.homeRoot, 'endroit.mjs'), 'hygiene', 'maintain', '--json'], { cwd: input.homeRoot, maxBuffer: 20 * 1024 * 1024 })
-  return { status: 'repaired', finding, operation: 'endroit build', after: JSON.parse(stdout) }
+  return { status: 'repaired', finding, operation: `endroit ${operation.join(' ')}`, after: JSON.parse(stdout) }
 }
 
 async function component(input, id, argv) {

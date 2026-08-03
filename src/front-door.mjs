@@ -14,7 +14,7 @@ export function renderFloorPlan(plan) {
 - Providers: ${plan.home.providers.map((provider) => `\`${provider}\``).join(', ')}
 - Home sources: \`endroit.json\`, \`HOME.md\`, \`members/\`, \`equipment/\`, \`rooms/\`
 - Desk sources: \`.desk/DESK.md\`, \`.desk/equipment/\`, \`.desk/rooms/\`, \`.desk/routes/\`
-- Local Site checkouts and Mounts: \`checkouts/\` (ignored)
+- Local Checkout index and managed worktrees: \`checkouts/\` (ignored)
 - Local rebuildable state: \`.endroit/\`
 
 The Home owns its constitution, shared Rooms and projections. The Desk
@@ -33,8 +33,8 @@ Kernel routes:
 - \`equipment validate|add|status|sync|remove|override|promote|catalog|trust\`
 - \`room create|list|inspect|doctor\`
 - \`site add|list|inspect|doctor|remove\`
-- \`route bind|clone|worktree|mount|unmount|park|activate|supersede|migrate|list|inspect|remove\`
-- \`checkout list|inspect\`
+- \`route list|inspect|park|activate|supersede|migrate|remove\`
+- \`checkout list|inspect|resolve|adopt|clone|worktree|reconcile|delete\`
 - \`validate\`, \`build\`, \`doctor\`
 
 Equipment runtime namespaces:

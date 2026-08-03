@@ -462,7 +462,7 @@ test('Sites separate deterministic inspection from agent-authored Map Artifacts'
     const second = join(temporary, 'site-worktree')
     await exec('git', ['worktree', 'add', '--quiet', '--detach', second, 'HEAD'], { cwd: site })
     const bound = captureIo()
-    assert.equal(await dispatchRuntime(home, 'site', ['route', 'bind', 'demo', second, '--id', 'experiment'], bound.io), 0, bound.stderr())
+    assert.equal(await dispatchRuntime(home, 'site', ['checkout', 'adopt', 'demo', second, '--id', 'experiment'], bound.io), 0, bound.stderr())
     const ambiguous = captureIo()
     assert.equal(await dispatchRuntime(home, 'site', ['route', 'inspect', 'demo'], ambiguous.io), 4)
     assert.match(ambiguous.stderr(), /route_ambiguous/)

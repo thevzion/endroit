@@ -32,7 +32,7 @@ test('create and init choose explicit Desk Git boundaries around Home-owned Memb
     assert.equal(await gitRoot(join(tracked, '.desk')), await realpath(tracked))
     assert.match((await exec('git', ['ls-files'], { cwd: tracked })).stdout, /^members\/alexis\/MEMBER\.md$/m)
     assert.match(await readFile(join(tracked, '.gitignore'), 'utf8'), /^\/checkouts\/$/m)
-    assert.match(await readFile(join(tracked, 'AGENTS.md'), 'utf8'), /Local Site checkouts and Mounts: `checkouts\/`/)
+    assert.match(await readFile(join(tracked, 'AGENTS.md'), 'utf8'), /Local Checkout index and managed worktrees: `checkouts\/`/)
 
     const embedded = join(temporary, 'embedded')
     await exec('git', ['init', '--quiet', '--initial-branch=main', embedded])
@@ -63,12 +63,12 @@ test('create and init choose explicit Desk Git boundaries around Home-owned Memb
     assert.equal(await runCli(['desk', 'init', '--id', 'later', '--home', deferred, '--json'], desk.io), 0, desk.stderr())
     assert.equal(JSON.parse(desk.stdout()).repository, 'separate')
     const resumed = captureIo()
-    assert.equal(await runCli(['route', 'bind', 'self', deferred, '--id', 'embedded', '--home', deferred, '--json'], resumed.io), 0, resumed.stderr())
+    assert.equal(await runCli(['checkout', 'adopt', 'self', deferred, '--id', 'embedded', '--home', deferred, '--json'], resumed.io), 0, resumed.stderr())
     assert.equal(JSON.parse(resumed.stdout()).mode, 'embedded')
     const embeddedRoute = JSON.parse(await readFile(join(deferred, '.desk/routes/self/embedded.json'), 'utf8'))
     assert.equal(embeddedRoute.$schema, 'https://endroit.org/schema/v8/route.json')
     assert.equal(embeddedRoute.status, 'active')
-    assert.deepEqual(embeddedRoute.checkout, { mode: 'embedded', expectedBranch: 'main' })
+    assert.deepEqual(embeddedRoute.checkout, { mode: 'embedded' })
     assert.equal('path' in embeddedRoute, false)
   } finally {
     await removeTree(temporary, { force: true })

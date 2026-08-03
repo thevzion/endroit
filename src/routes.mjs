@@ -80,6 +80,7 @@ export async function routeV8Document(route) {
     status: route.status ?? 'active',
     ...(route.supersededBy ? { supersededBy: route.supersededBy } : {}),
     checkout,
+    ...(route.revision ? { revision: { ...route.revision } } : legacyRevision(route, checkout)),
   }
   return validateRouteDocument(document)
 }
@@ -88,8 +89,13 @@ function legacyCheckout(route) {
   return {
     mode: route.mode,
     ...(['existing', 'submodule'].includes(route.mode) && route.path !== undefined ? { path: route.path } : {}),
-    ...(route.branch ? { expectedBranch: route.branch } : {}),
   }
+}
+
+function legacyRevision(route, checkout) {
+  return checkout.mode === 'managed-worktree' && route.branch
+    ? { revision: { kind: 'branch', name: route.branch } }
+    : {}
 }
 
 function declaredV8(document) {
@@ -97,6 +103,7 @@ function declaredV8(document) {
     status: document.status,
     ...(document.supersededBy ? { supersededBy: document.supersededBy } : {}),
     checkout: { ...document.checkout },
+    ...(document.revision ? { revision: { ...document.revision } } : {}),
   }
 }
 
@@ -112,8 +119,8 @@ function declaredV7(homeRoot, document) {
     checkout: {
       mode: document.mode,
       ...(['existing', 'submodule'].includes(document.mode) ? { path: document.path } : {}),
-      ...(document.branch ? { expectedBranch: document.branch } : {}),
     },
+    ...(document.mode === 'managed-worktree' && document.branch ? { revision: { kind: 'branch', name: document.branch } } : {}),
   }
 }
 

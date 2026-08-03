@@ -413,7 +413,7 @@ Endroit supports several physical arrangements without changing ownership:
 | Embedded | the current repository also contains the Home |
 | Managed clone | real checkout under `checkouts/<site>/<route>/` |
 | Managed worktree | real linked worktree under `checkouts/<site>/<route>/` |
-| Existing checkout | repository kept in place, with an optional Mount under `checkouts/` |
+| Existing checkout | repository kept in place, indexed by symlink under `checkouts/` |
 | Submodule | user-managed submodule addressed by a Route |
 | Remote-only | declared Site with no local checkout |
 
@@ -430,14 +430,21 @@ Local, ignored access declarations stay with the Desk:
 ```
 
 Endroit 0.9 reads frozen v7 and current v8 Route documents and writes v8 only.
-The v8 document owns `active|parked|superseded` lifecycle and a nested
-`checkout` configuration. A Checkout is addressed as
+The v8 document owns `active|parked|superseded` lifecycle, a nested `checkout`
+configuration and an optional branch or commit `revision`. A Checkout is addressed as
 `checkout:<site>/<route>` and is inspectable as declared metadata plus fresh
 observation; it is not another Open Workplace object.
 
-For an `existing` Route, `route mount` can create a rebuildable symlink at
-`checkouts/<site>/<route>/`; `route unmount` removes only that symlink. A Mount
-is never the identity of the Site or Route and never grants new permissions.
+`checkouts/` is the conventional physical index of every non-embedded local
+Checkout. Existing repositories stay in place and appear through generated
+symlinks; provider-created worktrees may appear under `_observed/` without
+becoming Routes. `.endroit/checkout-index.json` records only generated links,
+so reconciliation never removes an unknown path.
+
+`settings.endroit/sites.pinnedSites` opts individual Sites into a Home-owned
+submodule composition. `settings.endroit/sites.observedWorktrees` on the Desk
+chooses `report` or `_observed/` symlink surfaces. Endroit validates both and
+never initializes or updates a submodule implicitly.
 
 For a submodule, the Home Git repository owns the Gitlink commit pin and its
 `.gitmodules` declaration. Checkout initialization and submodule lifecycle
@@ -447,10 +454,10 @@ Example guarded operations:
 
 ```bash
 node ./endroit.mjs site add https://github.com/acme/product.git --id product
-node ./endroit.mjs route clone product --id main
-node ./endroit.mjs route worktree product --id feature --from main --new-branch feature
-node ./endroit.mjs route bind product ../product --id existing
-node ./endroit.mjs route mount product --id existing
+node ./endroit.mjs checkout clone product --id main
+node ./endroit.mjs checkout worktree product --id feature --from main --new-branch feature
+node ./endroit.mjs checkout adopt product ../product --id existing
+node ./endroit.mjs checkout reconcile --check
 node ./endroit.mjs checkout inspect checkout:product/main --json
 node ./endroit.mjs route migrate product --check --json
 node ./endroit.mjs site doctor

@@ -122,13 +122,13 @@ edits are divergence, not source changes.
 ```text
 sites/product/SITE.md                 shared identity and orientation
 .desk/routes/product/main.json        ignored local access declaration
-checkouts/product/main/               ignored checkout or rebuildable Mount
+checkouts/product/main/               ignored checkout or generated index link
 ```
 
 Site identity never depends on a symlink. Route metadata never depends on the
-physical checkout surviving. For an `existing` Route, a Mount is an optional
-rebuildable symlink at the conventional checkout address; removing it never
-touches its target. A Route must be re-observed before mutation.
+physical checkout surviving. For an `existing` Route, a generated symlink
+provides the conventional checkout address; removing it never touches its
+target. A Route must be re-observed before mutation.
 
 For a submodule, the Home Git repository owns the Gitlink commit pin and
 `.gitmodules` declaration. Checkout initialization and submodule lifecycle
@@ -136,7 +136,7 @@ remain user-owned; the Route only addresses the checkout.
 
 The Core loads v7 and v8 Route declarations once into the Resolved Home. A
 resolved Checkout has a stable `checkout:<site>/<route>` address, declared
-lifecycle/configuration and separately observed Git/Mount evidence. Checkout
+lifecycle/configuration and separately observed Git/index evidence. Checkout
 is an Endroit implementation object, not an Open Workplace object. Writers use
 v8 only; explicit migration changes Desk metadata and carries metadata-only
 rollback material under `.endroit/`.

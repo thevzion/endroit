@@ -323,6 +323,12 @@ async function hud(input) {
       if (!route.observed.git?.available) attention.push(item('blocking', `site:${site.id}/${route.id}`, 'site-broken', 'Route is not a usable Git checkout.'))
       else if (route.observed.git.conflicts) attention.push(item('blocking', `site:${site.id}/${route.id}`, 'site-conflicts', `Route has ${route.observed.git.conflicts} conflict(s).`))
       else if (!route.observed.git.clean) attention.push(item('advisory', `site:${site.id}/${route.id}`, 'site-dirty', `Route has ${route.observed.git.changes} change(s).`))
+      if (!['direct', 'linked'].includes(route.observed.index)) attention.push(item('warning', `site:${site.id}/${route.id}`, `checkout-index-${route.observed.index}`, `Checkout index is ${route.observed.index}.`))
+      if (!revisionMatches(route.declared.revision, route.observed.git)) attention.push(item('blocking', `site:${site.id}/${route.id}`, 'site-revision-divergent', 'Observed HEAD does not satisfy the Route revision.'))
+    }
+    for (const worktree of site.worktrees.filter((entry) => !entry.route)) {
+      if (!worktree.clean || worktree.conflicts || worktree.operation) attention.push(item('blocking', `site:${site.id}`, 'site-worktree-blocking', `${worktree.path} is dirty, conflicted or in a Git operation.`))
+      else if (worktree.locked || worktree.prunable) attention.push(item('warning', `site:${site.id}`, 'site-worktree-metadata', `${worktree.path} is ${worktree.locked ? 'locked' : 'prunable'}.`))
     }
   }
   for (const runtime of trust.runtimes.filter((entry) => entry.trust === 'pending')) {
@@ -509,6 +515,8 @@ function siteItem(site) {
       observed: {
         state: route.observed.git?.available ? route.observed.git.clean ? 'clean' : 'dirty' : 'broken',
         path: route.observed.path,
+        address: route.observed.address,
+        index: route.observed.index,
         head: route.observed.git?.head ?? null,
       },
     })),
@@ -519,6 +527,9 @@ function siteItem(site) {
       route: worktree.route,
       locked: Boolean(worktree.locked),
       prunable: Boolean(worktree.prunable),
+      clean: worktree.clean,
+      conflicts: worktree.conflicts,
+      operation: worktree.operation,
     })),
     map: site.map,
     ...(metadataError ? { metadataError } : {}),
@@ -541,6 +552,7 @@ async function scanSites(sites, declaredRoutes, homeRoot, deskRoot, artifacts) {
     const routes = []
     for (const route of declaredRoutes.filter((entry) => entry.site === site.id)) {
       const resolved = await realpath(route.declaredPath).catch(() => null)
+      const address = route.declared.checkout.mode === 'embedded' ? homeRoot : join(homeRoot, 'checkouts', route.site, route.id)
       routes.push({
         id: route.id,
         ref: route.ref,
@@ -548,6 +560,8 @@ async function scanSites(sites, declaredRoutes, homeRoot, deskRoot, artifacts) {
         declaration: deskRoot ? relative(deskRoot, route.documentPath) : route.documentPath,
         observed: {
           path: resolved,
+          address,
+          index: await checkoutIndexStatus(address, route.declaredPath, route.declared.checkout.mode),
           git: resolved ? await gitProbe(resolved) : { available: false, error: 'Broken Route.' },
           observedAt: new Date().toISOString(),
         },
@@ -660,7 +674,7 @@ async function gitProbe(root) {
     for (const parsed of parseWorktrees(worktreeOutput)) {
       const path = await realpath(parsed.path).catch(() => resolve(parsed.path))
       const worktreeStatus = await run(['status', '--porcelain=v2', '--branch', '--untracked-files=all'], path).catch(() => '')
-      worktrees.push({ ...parsed, path, ...parseStatus(worktreeStatus), current: path === top })
+      worktrees.push({ ...parsed, path, ...parseStatus(worktreeStatus), operation: await gitOperation(path), current: path === top })
     }
     return {
       available: true,
@@ -686,7 +700,23 @@ function parseStatus(status) {
     conflicts: changes.filter((line) => line.startsWith('u ')).length,
     ahead: divergence ? Number(divergence[1]) : 0,
     behind: divergence ? Number(divergence[2]) : 0,
+    upstream: status.match(/^# branch\.upstream (.+)$/m)?.[1] ?? null,
   }
+}
+
+async function checkoutIndexStatus(address, target, mode) {
+  if (mode === 'embedded') return 'direct'
+  const expected = await realpath(target).catch(() => resolve(target))
+  let info
+  try { info = await lstat(address) } catch (error) { return error.code === 'ENOENT' ? 'missing' : 'conflict' }
+  const observed = await realpath(address).catch(() => null)
+  if (!info.isSymbolicLink()) return observed === expected ? 'direct' : 'conflict'
+  return !observed ? 'broken' : observed === expected ? 'linked' : 'divergent'
+}
+
+function revisionMatches(revision, git) {
+  if (!revision || !git?.available) return true
+  return revision.kind === 'branch' ? git.branch === revision.name : git.head === revision.sha
 }
 
 function parseWorktrees(value) {

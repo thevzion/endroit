@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { setTimeout as delay } from 'node:timers/promises'
 import { fileURLToPath } from 'node:url'
 import { promisify } from 'node:util'
@@ -25,7 +25,7 @@ test('Site worktrees are created, classified, discovered and adopted explicitly'
     await writeFile(join(repository, 'dirty.txt'), 'source-only\n')
     await git(repository, ['branch', 'existing', 'starting-point'])
 
-    const existing = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'existing-route', '--from', 'main', '--branch', 'existing'])
+    const existing = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'existing-route', '--from', 'main', '--branch', 'existing'])
     assert.deepEqual(select(existing, ['site', 'route', 'branch', 'head', 'mode', 'checkout']), {
       site: 'demo',
       route: 'existing-route',
@@ -35,12 +35,12 @@ test('Site worktrees are created, classified, discovered and adopted explicitly'
       checkout: 'linked-worktree',
     })
 
-    const created = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'new-route', '--from', 'main', '--new-branch', 'new-work', '--json'])
+    const created = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'new-route', '--from', 'main', '--new-branch', 'new-work', '--json'])
     assert.equal(created.head, sourceHead)
     assert.equal(created.path, join(await realpath(home), 'checkouts', 'demo', 'new-route'))
     assert.equal(await exists(join(created.path, 'dirty.txt')), false)
 
-    const fromRef = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'ref-route', '--from', 'main', '--new-branch', 'from-ref', '--start-point', 'starting-point'])
+    const fromRef = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'ref-route', '--from', 'main', '--new-branch', 'from-ref', '--start-point', 'starting-point'])
     assert.equal(fromRef.head, await git(repository, ['rev-parse', 'starting-point']))
 
     const listed = await runtimeJson(home, ['list'])
@@ -63,6 +63,9 @@ test('Site worktrees are created, classified, discovered and adopted explicitly'
       select(beforeRoute.sites[0].worktrees.find((worktree) => worktree.branch === 'external-work'), ['registered', 'locked', 'prunable']),
       { registered: false, locked: false, prunable: false },
     )
+    const humanList = captureIo()
+    assert.equal(await dispatchRuntime(home, 'site', ['checkout', 'list', 'demo', '--all'], humanList.io), 0, humanList.stderr())
+    assert.match(humanList.stdout(), /worktree:demo\/[a-f0-9]{12} · observed · linked-worktree · available/)
     const doctor = await runtimeJson(home, ['doctor'])
     assert.ok(doctor.limits.includes('site-worktrees-unrouted:demo:1'))
 
@@ -70,7 +73,7 @@ test('Site worktrees are created, classified, discovered and adopted explicitly'
     assert.equal(hud.attention.advisory.filter(({ code }) => code === 'site-worktrees-unrouted').length, 1)
     assert.match(hud.attention.advisory.find(({ code }) => code === 'site-worktrees-unrouted').message, /1 Git worktree/)
 
-    const adopted = await runtimeJson(home, ['route', 'bind', 'demo', external, '--id', 'external'])
+    const adopted = await runtimeJson(home, ['checkout', 'adopt', 'demo', external, '--id', 'external'])
     assert.equal(adopted.mode, 'existing')
     assert.equal(adopted.checkout, 'linked-worktree')
     const afterRoute = await runtimeJson(home, ['list'])
@@ -79,7 +82,7 @@ test('Site worktrees are created, classified, discovered and adopted explicitly'
     assert.equal(await exists(external), true)
 
     for (const route of ['existing-route', 'new-route', 'ref-route']) {
-      await runtimeJson(home, ['route', 'remove', 'demo', '--id', route, '--delete'])
+      await deleteManaged(home, 'demo', route)
     }
     assert.equal(await localBranch(repository, 'existing'), true)
     assert.equal(await localBranch(repository, 'new-work'), true)
@@ -93,24 +96,24 @@ test('Site worktree validation rejects ambiguous or unsafe creation without impl
   const fixture = await siteFixture()
   try {
     const { home, repository } = fixture
-    await runtimeFailure(home, ['route', 'worktree', 'demo', '--id', 'none'], 'site_worktree_branch_mode')
-    await runtimeFailure(home, ['route', 'worktree', 'demo', '--id', 'both', '--branch', 'main', '--new-branch', 'other'], 'site_worktree_branch_mode')
-    await runtimeFailure(home, ['route', 'worktree', 'demo', '--id', 'missing', '--branch', 'missing'], 'site_branch_missing')
-    await runtimeFailure(home, ['route', 'worktree', 'demo', '--id', 'used', '--branch', 'main'], 'site_branch_in_use')
-    await runtimeFailure(home, ['route', 'worktree', 'demo', '--id', 'bad-start', '--new-branch', 'bad-start', '--start-point', 'unknown-local-ref'], 'site_start_point_missing')
+    await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', 'none'], 'site_worktree_branch_mode')
+    await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', 'both', '--branch', 'main', '--new-branch', 'other'], 'site_worktree_branch_mode')
+    await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', 'missing', '--from', 'main', '--branch', 'missing'], 'site_branch_missing')
+    await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', 'used', '--from', 'main', '--branch', 'main'], 'site_branch_in_use')
+    await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', 'bad-start', '--from', 'main', '--new-branch', 'bad-start', '--start-point', 'unknown-local-ref'], 'site_start_point_missing')
     assert.equal(await localBranch(repository, 'bad-start'), false)
 
     const occupied = join(home, 'checkouts', 'demo', 'occupied')
     await mkdir(occupied, { recursive: true })
-    await runtimeFailure(home, ['route', 'worktree', 'demo', '--id', 'occupied', '--from', 'main', '--new-branch', 'occupied-branch'], 'route_checkout_exists')
+    await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', 'occupied', '--from', 'main', '--new-branch', 'occupied-branch'], 'route_checkout_exists')
     assert.equal(await localBranch(repository, 'occupied-branch'), false)
     await removeTree(occupied)
 
-    await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'second', '--new-branch', 'second', '--from', 'main'])
-    await runtimeFailure(home, ['route', 'worktree', 'demo', '--id', 'ambiguous', '--new-branch', 'ambiguous'], 'route_ambiguous')
+    await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'second', '--new-branch', 'second', '--from', 'main'])
+    await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', 'ambiguous', '--new-branch', 'ambiguous'], 'usage')
     assert.equal(await localBranch(repository, 'ambiguous'), false)
-    await runtimeFailure(home, ['route', 'worktree', 'demo', '--id', 'existing-new', '--from', 'main', '--new-branch', 'second'], 'site_branch_exists')
-    await runtimeJson(home, ['route', 'remove', 'demo', '--id', 'second', '--delete'])
+    await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', 'existing-new', '--from', 'main', '--new-branch', 'second'], 'site_branch_exists')
+    await deleteManaged(home, 'demo', 'second')
 
     const forged = join(home, '.desk', 'routes', 'demo', 'forged.json')
     await writeFile(forged, `${JSON.stringify({
@@ -120,8 +123,123 @@ test('Site worktree validation rejects ambiguous or unsafe creation without impl
       mode: 'managed-clone',
       path: repository,
     }, null, 2)}\n`)
-    await runtimeFailure(home, ['route', 'remove', 'demo', '--id', 'forged', '--delete'], 'route_path_invalid')
+    await runtimeFailure(home, ['checkout', 'delete', 'checkout:demo/forged', '--approve', 'checkout:demo/forged'], 'route_path_invalid')
     assert.equal(await exists(join(repository, 'README.md')), true)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Checkout revisions are explicit and detached worktrees persist only their commit constraint', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository, temporary } = fixture
+    const detached = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'detached', '--from', 'main', '--detach', 'starting-point'])
+    const document = JSON.parse(await readFile(join(home, '.desk/routes/demo/detached.json'), 'utf8'))
+    assert.equal(detached.detached, true)
+    assert.equal(detached.branch, null)
+    assert.deepEqual(document.checkout, { mode: 'managed-worktree' })
+    assert.deepEqual(document.revision, { kind: 'commit', sha: await git(repository, ['rev-parse', 'starting-point']) })
+
+    const external = join(temporary, 'external-revision')
+    await git(repository, ['worktree', 'add', '-b', 'explicit-revision', external, 'HEAD'])
+    await runtimeJson(home, ['checkout', 'adopt', 'demo', external, '--id', 'unconstrained'])
+    assert.equal('revision' in JSON.parse(await readFile(join(home, '.desk/routes/demo/unconstrained.json'), 'utf8')), false)
+    await runtimeJson(home, ['route', 'remove', 'demo', '--id', 'unconstrained'])
+    await runtimeFailure(home, ['checkout', 'adopt', 'demo', external, '--id', 'wrong', '--branch', 'other'], 'route_revision_divergent')
+    assert.equal(await pathExists(join(home, '.desk/routes/demo/wrong.json')), false)
+    await runtimeJson(home, ['checkout', 'adopt', 'demo', external, '--id', 'constrained', '--branch', 'explicit-revision'])
+    assert.deepEqual(JSON.parse(await readFile(join(home, '.desk/routes/demo/constrained.json'), 'utf8')).revision, { kind: 'branch', name: 'explicit-revision' })
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('unrouted worktrees have stable technical selectors and optional reconstructible surfaces', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository, temporary } = fixture
+    const external = join(temporary, 'provider-worktree')
+    await git(repository, ['worktree', 'add', '-b', 'provider/session', external, 'HEAD'])
+    const listed = await runtimeJson(home, ['checkout', 'list', 'demo', '--all'])
+    const observed = listed.checkouts.find((entry) => entry.ref.startsWith('worktree:demo/'))
+    assert.ok(observed)
+    assert.equal((await runtimeJson(home, ['checkout', 'inspect', observed.ref])).observed.path, await realpath(external))
+    assert.equal((await runtimeJson(home, ['checkout', 'resolve', external])).source, 'checkout:demo/main')
+
+    const deskPath = join(home, '.desk/desk.json')
+    const desk = JSON.parse(await readFile(deskPath, 'utf8'))
+    desk.settings = { ...(desk.settings ?? {}), 'endroit/sites': { observedWorktrees: 'surface' } }
+    await writeFile(deskPath, `${JSON.stringify(desk, null, 2)}\n`)
+    await runtimeJson(home, ['checkout', 'reconcile', '--apply'])
+    const surfaced = (await runtimeJson(home, ['checkout', 'inspect', observed.ref])).observed.address
+    assert.equal((await lstat(surfaced)).isSymbolicLink(), true)
+    assert.equal(await realpath(surfaced), await realpath(external))
+
+    const manifestPath = join(home, '.endroit/checkout-index.json')
+    const manifestBefore = await readFile(manifestPath)
+    desk.settings['endroit/sites'].observedWorktrees = 'report'
+    await writeFile(deskPath, `${JSON.stringify(desk, null, 2)}\n`)
+    const previousNodeEnv = process.env.NODE_ENV
+    try {
+      process.env.NODE_ENV = 'test'
+      process.env.ENDROIT_TEST_FAULT_AFTER_CHECKOUT_INDEX_ACTION = 'remove'
+      await runtimeFailure(home, ['checkout', 'reconcile', '--apply'], 'checkout_index_fault')
+    } finally {
+      delete process.env.ENDROIT_TEST_FAULT_AFTER_CHECKOUT_INDEX_ACTION
+      if (previousNodeEnv === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = previousNodeEnv
+    }
+    assert.equal((await lstat(surfaced)).isSymbolicLink(), true)
+    assert.equal(await realpath(surfaced), await realpath(external))
+    assert.deepEqual(await readFile(manifestPath), manifestBefore)
+
+    const concurrentMarker = join(temporary, 'reconcile-concurrent-ready')
+    const foreignPath = 'checkouts/demo/foreign-owner'
+    const foreignTarget = await realpath(repository)
+    const concurrentManifest = Buffer.from(`${JSON.stringify({
+      version: 1,
+      links: [{
+        path: foreignPath,
+        target: foreignTarget,
+        ref: 'checkout:demo/foreign-owner',
+        digest: createHash('sha256').update(`${foreignPath}\0${foreignTarget}`).digest('hex'),
+      }],
+    }, null, 2)}\n`)
+    const rollbackMarker = join(temporary, 'reconcile-rollback-links-ready')
+    const rollbackWindowReconcile = cliResult(home, ['checkout', 'reconcile', '--apply'], {
+      NODE_ENV: 'test',
+      ENDROIT_TEST_FAULT_AFTER_CHECKOUT_INDEX_ACTION: 'remove',
+      ENDROIT_TEST_CHECKOUT_INDEX_ROLLBACK_LINKS_READY_FILE: rollbackMarker,
+      ENDROIT_TEST_HOLD_CHECKOUT_INDEX_ROLLBACK_MS: '300',
+    })
+    await waitForPath(rollbackMarker)
+    await writeFile(manifestPath, concurrentManifest)
+    const rollbackWindowResult = await rollbackWindowReconcile
+    assert.notEqual(rollbackWindowResult.code, 0)
+    assert.match(rollbackWindowResult.stderr, /manifest changed concurrently; it and the failed apply link state were preserved/)
+    assert.deepEqual(await readFile(manifestPath), concurrentManifest)
+    assert.equal((await lstat(surfaced)).isSymbolicLink(), true)
+    assert.equal(await realpath(surfaced), await realpath(external))
+
+    await writeFile(manifestPath, manifestBefore)
+    const concurrentReconcile = cliResult(home, ['checkout', 'reconcile', '--apply'], {
+      NODE_ENV: 'test',
+      ENDROIT_TEST_FAULT_AFTER_CHECKOUT_INDEX_ACTION: 'remove',
+      ENDROIT_TEST_CHECKOUT_INDEX_FAULT_READY_FILE: concurrentMarker,
+      ENDROIT_TEST_HOLD_CHECKOUT_INDEX_FAULT_MS: '300',
+    })
+    await waitForPath(concurrentMarker)
+    await writeFile(manifestPath, concurrentManifest)
+    const concurrentResult = await concurrentReconcile
+    assert.notEqual(concurrentResult.code, 0)
+    assert.match(concurrentResult.stderr, /manifest changed concurrently; it and the failed apply link state were preserved/)
+    assert.deepEqual(await readFile(manifestPath), concurrentManifest)
+    assert.equal(await exists(surfaced), false)
+
+    await writeFile(join(external, 'dirty.txt'), 'dirty\n')
+    await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', 'blocked', '--from', 'main', '--new-branch', 'blocked'], 'checkout_family_blocked')
+    assert.equal(await localBranch(repository, 'blocked'), false)
   } finally {
     await fixture.cleanup()
   }
@@ -132,19 +250,127 @@ test('managed clone and worktree deletion refuse symlink escapes and preserve ex
   try {
     const { home, temporary } = fixture
     const routes = [
-      await runtimeJson(home, ['route', 'clone', 'demo', '--id', 'escaped-clone']),
-      await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'escaped-worktree', '--from', 'main', '--new-branch', 'escaped-worktree']),
+      await runtimeJson(home, ['checkout', 'clone', 'demo', '--id', 'escaped-clone']),
+      await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'escaped-worktree', '--from', 'main', '--new-branch', 'escaped-worktree']),
     ]
     for (const route of routes) {
       const external = join(temporary, `external-${route.route}`)
       await rename(route.path, external)
       await symlink(external, route.path, 'dir')
 
-      await runtimeFailure(home, ['route', 'remove', 'demo', '--id', route.route, '--delete'], 'route_checkout_symlink')
+      await runtimeFailure(home, ['checkout', 'delete', `checkout:demo/${route.route}`, '--approve', `checkout:demo/${route.route}`], 'route_checkout_symlink')
       assert.equal(await readFile(join(external, 'README.md'), 'utf8'), '# second\n')
       assert.equal((await lstat(route.path)).isSymbolicLink(), true)
       assert.equal(await exists(join(home, `.desk/routes/demo/${route.route}.json`)), true)
     }
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('managed clone deletion refuses an inode race and restores its Route', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, temporary } = fixture
+    const cloned = await runtimeJson(home, ['checkout', 'clone', 'demo', '--id', 'race'])
+    const marker = join(temporary, 'delete-ready')
+    const preserved = join(temporary, 'preserved-clone')
+    const deletion = cliResult(home, ['checkout', 'delete', 'checkout:demo/race', '--approve', 'checkout:demo/race'], {
+      NODE_ENV: 'test',
+      ENDROIT_TEST_CHECKOUT_DELETE_READY_FILE: marker,
+      ENDROIT_TEST_HOLD_CHECKOUT_DELETE_MS: '300',
+    })
+    await waitForPath(marker)
+    await rename(cloned.path, preserved)
+    await mkdir(cloned.path)
+    await writeFile(join(cloned.path, 'valuable.txt'), 'preserve\n')
+    const result = await deletion
+    assert.notEqual(result.code, 0)
+    assert.match(result.stderr, /route_checkout_changed/)
+    assert.equal(await readFile(join(cloned.path, 'valuable.txt'), 'utf8'), 'preserve\n')
+    assert.equal(await exists(join(preserved, 'README.md')), true)
+    assert.equal(await exists(join(home, '.desk/routes/demo/race.json')), true)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('managed clone deletion revalidates its staged inode immediately before recursive removal', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, temporary } = fixture
+    const cloned = await runtimeJson(home, ['checkout', 'clone', 'demo', '--id', 'staged-race'])
+    const marker = join(temporary, 'clone-staged-ready')
+    const preserved = join(temporary, 'preserved-staged-clone')
+    const deletion = cliResult(home, ['checkout', 'delete', 'checkout:demo/staged-race', '--approve', 'checkout:demo/staged-race'], {
+      NODE_ENV: 'test',
+      ENDROIT_TEST_CLONE_STAGED_READY_FILE: marker,
+      ENDROIT_TEST_HOLD_CLONE_STAGED_MS: '300',
+    })
+    await waitForPath(marker)
+    const stagedPath = await readFile(marker, 'utf8')
+    await rename(stagedPath, preserved)
+    await mkdir(stagedPath)
+    await writeFile(join(stagedPath, 'valuable.txt'), 'preserve replacement\n')
+    const result = await deletion
+    assert.notEqual(result.code, 0)
+    assert.match(result.stderr, /route_checkout_changed/)
+    assert.match(result.stderr, /Route backup retained/)
+    assert.equal(await readFile(join(stagedPath, 'valuable.txt'), 'utf8'), 'preserve replacement\n')
+    assert.equal(await exists(join(preserved, 'README.md')), true)
+    assert.equal(await exists(join(home, '.desk/routes/demo/staged-race.json')), false)
+    assert.ok((await readdir(join(home, '.desk/routes/demo'))).some((entry) => entry.startsWith('staged-race.json.') && entry.endsWith('.delete')))
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('managed deletion preserves a concurrently recreated canonical Route', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, temporary } = fixture
+    const cloned = await runtimeJson(home, ['checkout', 'clone', 'demo', '--id', 'route-race'])
+    const marker = join(temporary, 'route-staged-ready')
+    const routePath = join(home, '.desk/routes/demo/route-race.json')
+    const concurrent = 'concurrent route replacement\n'
+    const deletion = cliResult(home, ['checkout', 'delete', 'checkout:demo/route-race', '--approve', 'checkout:demo/route-race'], {
+      NODE_ENV: 'test',
+      ENDROIT_TEST_ROUTE_STAGED_READY_FILE: marker,
+      ENDROIT_TEST_HOLD_ROUTE_STAGED_MS: '300',
+    })
+    await waitForPath(marker)
+    await writeFile(routePath, concurrent)
+    const result = await deletion
+    assert.notEqual(result.code, 0)
+    assert.match(result.stderr, /route_delete_drift/)
+    assert.match(result.stderr, /was replaced while restoring its Route/)
+    assert.equal(await readFile(routePath, 'utf8'), concurrent)
+    assert.equal(await exists(join(cloned.path, 'README.md')), true)
+    assert.ok((await readdir(dirname(routePath))).some((entry) => entry.startsWith('route-race.json.') && entry.endsWith('.delete')))
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('managed clone deletion reports a recoverable partial state after its destructive boundary', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home } = fixture
+    const cloned = await runtimeJson(home, ['checkout', 'clone', 'demo', '--id', 'partial'])
+    const result = await cliResult(home, ['checkout', 'delete', 'checkout:demo/partial', '--approve', 'checkout:demo/partial'], {
+      NODE_ENV: 'test',
+      ENDROIT_TEST_FAULT_AFTER_DESTRUCTIVE_BOUNDARY: 'checkout:demo/partial',
+    })
+    assert.notEqual(result.code, 0)
+    assert.match(result.stderr, /checkout_partial_deletion/)
+    assert.match(result.stderr, /Route recovery:/)
+    assert.match(result.stderr, /Checkout recovery:/)
+    assert.equal(await exists(cloned.path), false)
+    assert.equal(await exists(join(home, '.desk/routes/demo/partial.json')), false)
+    const stagedCheckout = (await readdir(join(home, 'checkouts/demo'))).find((entry) => entry.startsWith('.partial.') && entry.endsWith('.delete'))
+    assert.ok(stagedCheckout)
+    assert.equal(await exists(join(home, 'checkouts/demo', stagedCheckout, 'README.md')), true)
+    assert.ok((await readdir(join(home, '.desk/routes/demo'))).some((entry) => entry.startsWith('partial.json.') && entry.endsWith('.delete')))
   } finally {
     await fixture.cleanup()
   }
@@ -155,37 +381,37 @@ test('Site unbind preserves dirty, locked, prunable, dependent and submodule wor
   try {
     const { home, repository, temporary } = fixture
 
-    const dirty = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'dirty', '--new-branch', 'dirty-work'])
+    const dirty = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'dirty', '--from', 'main', '--new-branch', 'dirty-work'])
     await writeFile(join(dirty.path, 'change.txt'), 'dirty\n')
     assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('route-dirty:demo:dirty'))
-    await runtimeFailure(home, ['route', 'remove', 'demo', '--id', 'dirty', '--delete'], 'route_dirty')
+    await runtimeFailure(home, ['checkout', 'delete', 'checkout:demo/dirty', '--approve', 'checkout:demo/dirty'], 'route_dirty')
     assert.equal(await exists(dirty.path), true)
     await rm(join(dirty.path, 'change.txt'))
-    await runtimeJson(home, ['route', 'remove', 'demo', '--id', 'dirty', '--delete'])
+    await deleteManaged(home, 'demo', 'dirty')
     assert.equal(await localBranch(repository, 'dirty-work'), true)
 
-    const locked = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'locked', '--new-branch', 'locked-work'])
+    const locked = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'locked', '--from', 'main', '--new-branch', 'locked-work'])
     await git(repository, ['worktree', 'lock', locked.path])
-    await runtimeFailure(home, ['route', 'remove', 'demo', '--id', 'locked', '--delete'], 'site_worktree_locked')
+    await runtimeFailure(home, ['checkout', 'delete', 'checkout:demo/locked', '--approve', 'checkout:demo/locked'], 'site_worktree_locked')
     assert.ok((await runtimeJson(home, ['doctor'])).limits.some((limit) => limit.startsWith('site-worktree-locked:demo:')))
     assert.match(await git(repository, ['worktree', 'list', '--porcelain']), /locked/)
     await git(repository, ['worktree', 'unlock', locked.path])
-    await runtimeJson(home, ['route', 'remove', 'demo', '--id', 'locked', '--delete'])
+    await deleteManaged(home, 'demo', 'locked')
 
-    const cloned = await runtimeJson(home, ['route', 'clone', 'demo', '--id', 'clone'])
+    const cloned = await runtimeJson(home, ['checkout', 'clone', 'demo', '--id', 'clone'])
     assert.equal(cloned.checkout, 'main')
-    await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'clone-worktree', '--from', 'clone', '--new-branch', 'clone-work'])
-    await runtimeFailure(home, ['route', 'remove', 'demo', '--id', 'clone', '--delete'], 'site_clone_has_worktrees')
-    await runtimeJson(home, ['route', 'remove', 'demo', '--id', 'clone-worktree', '--delete'])
-    await runtimeJson(home, ['route', 'remove', 'demo', '--id', 'clone', '--delete'])
+    await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'clone-worktree', '--from', 'clone', '--new-branch', 'clone-work'])
+    await runtimeFailure(home, ['checkout', 'delete', 'checkout:demo/clone', '--approve', 'checkout:demo/clone'], 'site_clone_has_worktrees')
+    await deleteManaged(home, 'demo', 'clone-worktree')
+    await deleteManaged(home, 'demo', 'clone')
 
-    const prunable = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'prunable', '--new-branch', 'prunable-work'])
+    const prunable = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'prunable', '--from', 'main', '--new-branch', 'prunable-work'])
     await removeTree(prunable.path)
     const doctor = await runtimeJson(home, ['doctor'])
     assert.ok(doctor.limits.some((limit) => limit.startsWith('site-worktree-prunable:demo:')))
     assert.equal((await runtimeJson(home, ['list'])).sites[0].worktrees.find((worktree) => worktree.branch === 'prunable-work').prunable, true)
     assert.match(await git(repository, ['worktree', 'list', '--porcelain']), /prunable/)
-    await runtimeFailure(home, ['route', 'remove', 'demo', '--id', 'prunable', '--delete'], 'route_broken')
+    await runtimeFailure(home, ['checkout', 'delete', 'checkout:demo/prunable', '--approve', 'checkout:demo/prunable'], 'route_broken')
     await git(repository, ['worktree', 'prune'])
 
     const module = join(temporary, 'module')
@@ -194,10 +420,11 @@ test('Site unbind preserves dirty, locked, prunable, dependent and submodule wor
     await commit(module, 'module')
     await exec('git', ['-c', 'protocol.file.allow=always', 'submodule', 'add', '--quiet', module, 'modules/demo'], { cwd: repository })
     await commit(repository, 'add submodule')
-    const submodule = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'submodule', '--from', 'main', '--new-branch', 'submodule-work'])
+    const submodule = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'submodule', '--from', 'main', '--new-branch', 'submodule-work'])
     await exec('git', ['-c', 'protocol.file.allow=always', 'submodule', 'update', '--init', '--quiet'], { cwd: submodule.path })
-    await runtimeFailure(home, ['route', 'remove', 'demo', '--id', 'submodule', '--delete'], 'git_failed')
+    await runtimeFailure(home, ['checkout', 'delete', 'checkout:demo/submodule', '--approve', 'checkout:demo/submodule'], 'git_failed')
     assert.equal(await exists(submodule.path), true)
+    assert.equal(await exists(join(home, '.desk/routes/demo/submodule.json')), true)
     await git(repository, ['worktree', 'remove', '--force', submodule.path])
   } finally {
     await fixture.cleanup()
@@ -223,12 +450,12 @@ test('Sites can stay remote-only while different Desks own independent Routes', 
     await runtimeJson(home, ['add', 'https://github.com/example/product.git', '--id', 'product'])
     assert.equal((await runtimeJson(home, ['list'])).sites[0].state, 'declared')
     await initDesk(home, { id: 'one', member: 'owner', repository: 'tracked' })
-    await runtimeJson(home, ['route', 'bind', 'product', first, '--id', 'local'])
+    await runtimeJson(home, ['checkout', 'adopt', 'product', first, '--id', 'local'])
     const firstDesk = join(temporary, 'desk-one')
     await rename(join(home, '.desk'), firstDesk)
 
     await initDesk(home, { id: 'two', member: 'owner', repository: 'tracked' })
-    await runtimeJson(home, ['route', 'bind', 'product', second, '--id', 'local'])
+    await runtimeJson(home, ['checkout', 'adopt', 'product', second, '--id', 'local'])
     assert.equal(JSON.parse(await readFile(join(firstDesk, 'routes/product/local.json'), 'utf8')).checkout.path, await realpath(first))
     assert.equal(JSON.parse(await readFile(join(home, '.desk/routes/product/local.json'), 'utf8')).checkout.path, await realpath(second))
     assert.match(await readFile(join(home, 'sites/product/SITE.md'), 'utf8'), /repository: "github.com\/example\/product"/)
@@ -237,7 +464,7 @@ test('Sites can stay remote-only while different Desks own independent Routes', 
   }
 })
 
-test('an existing Route can expose and remove a reconstructible Mount without touching its checkout', async () => {
+test('the Checkout index reconciles reconstructible links without touching repositories', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-site-mount-'))
   const home = join(temporary, 'home')
   const repository = join(temporary, 'repository')
@@ -249,34 +476,47 @@ test('an existing Route can expose and remove a reconstructible Mount without to
     await commit(repository, 'mounted')
     await runtimeJson(home, ['add', repository, '--id', 'demo'])
 
-    const mounted = await runtimeJson(home, ['route', 'mount', 'demo'])
-    assert.equal(mounted.path, join(await realpath(home), 'checkouts', 'demo', 'main'))
-    assert.equal((await lstat(mounted.path)).isSymbolicLink(), true)
-    assert.equal(await realpath(mounted.path), await realpath(repository))
-    assert.equal((await runtimeJson(home, ['route', 'mount', 'demo'])).status, 'mounted')
-    assert.equal((await runtimeJson(home, ['doctor'])).limits.some((limit) => limit.startsWith('route-mount-')), false)
-    await runtimeFailure(home, ['route', 'remove', 'demo'], 'route_mount_exists')
+    const address = join(await realpath(home), 'checkouts', 'demo', 'main')
+    assert.equal((await lstat(address)).isSymbolicLink(), true)
+    assert.equal(await realpath(address), await realpath(repository))
+    assert.equal((await runtimeJson(home, ['checkout', 'reconcile', '--check'])).status, 'current')
+    assert.equal((await runtimeJson(home, ['doctor'])).limits.some((limit) => limit.startsWith('checkout-index-')), false)
+
+    const manifestPath = join(home, '.endroit/checkout-index.json')
+    await rm(manifestPath)
+    assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('checkout-index-stale'))
+    await runtimeJson(home, ['checkout', 'reconcile', '--apply'])
+    const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    const stalePath = 'checkouts/demo/stale'
+    manifest.links.push({
+      path: stalePath,
+      target: await realpath(repository),
+      ref: 'checkout:demo/stale',
+      digest: createHash('sha256').update(`${stalePath}\0${await realpath(repository)}`).digest('hex'),
+    })
+    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+    assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('checkout-index-stale'))
+    await runtimeJson(home, ['checkout', 'reconcile', '--apply'])
+    assert.equal((await runtimeJson(home, ['doctor'])).limits.includes('checkout-index-stale'), false)
 
     await rename(repository, moved)
-    assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('route-mount-broken:demo:main'))
-    await runtimeJson(home, ['route', 'unmount', 'demo'])
-    assert.equal(await pathExists(mounted.path), false)
+    assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('checkout-index-broken:demo:main'))
+    await runtimeJson(home, ['route', 'remove', 'demo'])
+    assert.equal(await pathExists(address), false)
     assert.equal(await exists(join(moved, 'README.md')), true)
-    await mkdir(join(home, 'checkouts', 'demo'), { recursive: true })
-    await symlink(moved, mounted.path, 'dir')
-    assert.equal((await runtimeJson(home, ['checkout', 'inspect', 'checkout:demo/main'])).observed.mount.status, 'divergent')
-    await rm(mounted.path)
-    await mkdir(mounted.path)
-    assert.equal((await runtimeJson(home, ['checkout', 'inspect', 'checkout:demo/main'])).observed.mount.status, 'conflict')
-    await rm(mounted.path, { recursive: true })
     await rename(moved, repository)
+    const conflict = join(home, 'checkouts/demo/conflict')
+    await mkdir(conflict, { recursive: true })
+    await runtimeFailure(home, ['checkout', 'adopt', 'demo', repository, '--id', 'conflict'], 'checkout_index_conflict')
+    assert.equal((await lstat(conflict)).isDirectory(), true)
+    assert.equal(await pathExists(join(home, '.desk/routes/demo/conflict.json')), false)
+    await rm(conflict, { recursive: true })
     const direct = join(home, 'checkouts', 'demo', 'direct')
     await exec('git', ['clone', '--quiet', repository, direct])
-    await runtimeJson(home, ['route', 'bind', 'demo', direct, '--id', 'direct'])
-    assert.equal((await runtimeJson(home, ['checkout', 'inspect', 'checkout:demo/direct'])).observed.mount.status, 'direct')
+    await runtimeJson(home, ['checkout', 'adopt', 'demo', direct, '--id', 'direct'])
+    assert.equal((await runtimeJson(home, ['checkout', 'inspect', 'checkout:demo/direct'])).observed.index, 'direct')
     await runtimeJson(home, ['route', 'remove', 'demo', '--id', 'direct'])
     await removeTree(direct)
-    await runtimeJson(home, ['route', 'remove', 'demo'])
     assert.equal(await exists(join(repository, 'README.md')), true)
   } finally {
     await removeTree(temporary, { force: true })
@@ -288,7 +528,7 @@ test('Doctor diagnoses conflicted Checkouts without treating lifecycle as routab
   try {
     const { home, repository } = fixture
     await git(repository, ['branch', 'conflict-work'])
-    const route = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'conflict', '--from', 'main', '--branch', 'conflict-work'])
+    const route = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'conflict', '--from', 'main', '--branch', 'conflict-work'])
     await writeFile(join(repository, 'README.md'), '# main change\n')
     await commit(repository, 'main change')
     await writeFile(join(route.path, 'README.md'), '# route change\n')
@@ -324,7 +564,7 @@ test('a submodule is recognized as a Route without Endroit managing its lifecycl
     const submodule = join(parent, 'sites', 'child')
     await git(submodule, ['remote', 'set-url', 'origin', 'https://github.com/example/child.git'])
     await runtimeJson(home, ['add', 'https://github.com/example/child.git', '--id', 'child'])
-    const route = await runtimeJson(home, ['route', 'bind', 'child', submodule, '--id', 'module'])
+    const route = await runtimeJson(home, ['checkout', 'adopt', 'child', submodule, '--id', 'module'])
     assert.equal(route.mode, 'submodule')
     await exec('git', ['submodule', 'deinit', '--force', 'sites/child'], { cwd: parent })
     await rm(submodule, { recursive: true, force: true })
@@ -341,11 +581,54 @@ test('a submodule is recognized as a Route without Endroit managing its lifecycl
   }
 })
 
+test('pinnedSites validates an initialized canonical gitlink without updating it', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-pinned-site-'))
+  const home = join(temporary, 'home')
+  const child = join(temporary, 'child')
+  try {
+    await createHome(home)
+    await gitInit(home)
+    await gitInit(child)
+    await writeFile(join(child, 'README.md'), '# child\n')
+    await commit(child, 'child')
+    await runtimeJson(home, ['add', child, '--id', 'child'])
+    await runtimeJson(home, ['route', 'remove', 'child'])
+    await exec('git', ['-c', 'protocol.file.allow=always', 'submodule', 'add', '--force', '--quiet', child, 'checkouts/child/main'], { cwd: home })
+    await runtimeJson(home, ['checkout', 'adopt', 'child', join(home, 'checkouts/child/main'), '--id', 'main'])
+    const homePath = join(home, 'endroit.json')
+    const declaration = JSON.parse(await readFile(homePath, 'utf8'))
+    declaration.settings = { ...(declaration.settings ?? {}), 'endroit/sites': { pinnedSites: ['child'] } }
+    await writeFile(homePath, `${JSON.stringify(declaration, null, 2)}\n`)
+    assert.equal((await runtimeJson(home, ['doctor'])).limits.some((limit) => limit.startsWith('site-gitlink-')), false)
+
+    const checkout = join(home, 'checkouts/child/main')
+    await writeFile(join(checkout, 'next.txt'), 'next\n')
+    await commit(checkout, 'next')
+    assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('site-gitlink-commit-divergent:child'))
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
+test('Doctor reports pinnedSites entries that do not name a declared Site', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home } = fixture
+    const homePath = join(home, 'endroit.json')
+    const declaration = JSON.parse(await readFile(homePath, 'utf8'))
+    declaration.settings = { ...(declaration.settings ?? {}), 'endroit/sites': { pinnedSites: ['missing-site'] } }
+    await writeFile(homePath, `${JSON.stringify(declaration, null, 2)}\n`)
+    assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('site-gitlink-site-missing:missing-site'))
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
 test('Route lifecycle changes only metadata and inactive Checkouts leave implicit selection', async () => {
   const fixture = await siteFixture()
   try {
     const { home, repository } = fixture
-    const secondary = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'feature--checkout-v8', '--from', 'main', '--new-branch', 'feature/checkout-v8'])
+    const secondary = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'feature--checkout-v8', '--from', 'main', '--new-branch', 'feature/checkout-v8'])
     const before = {
       path: await realpath(repository),
       inode: (await lstat(repository)).ino,
@@ -357,15 +640,14 @@ test('Route lifecycle changes only metadata and inactive Checkouts leave implici
     assert.equal((await runtimeJson(home, ['route', 'park', 'demo', '--id', 'main'])).status, 'parked')
     const implicit = await runtimeJson(home, ['route', 'inspect', 'demo'])
     assert.equal(implicit.route, 'feature--checkout-v8')
-    await runtimeFailure(home, ['route', 'worktree', 'demo', '--id', 'inactive-source', '--from', 'main', '--new-branch', 'inactive/source'], 'route_inactive')
-    await runtimeFailure(home, ['route', 'mount', 'demo', '--id', 'main'], 'route_inactive')
+    await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', 'inactive-source', '--from', 'main', '--new-branch', 'inactive/source'], 'route_inactive')
     assert.equal((await runtimeJson(home, ['route', 'activate', 'demo'])).route, 'main')
     await runtimeFailure(home, ['route', 'inspect', 'demo'], 'route_ambiguous')
     assert.equal((await runtimeJson(home, ['route', 'supersede', 'demo', '--id', 'main', '--by', 'feature--checkout-v8'])).status, 'superseded')
-    await runtimeFailure(home, ['route', 'remove', 'demo', '--id', 'feature--checkout-v8', '--delete'], 'route_supersession_target')
+    await runtimeFailure(home, ['checkout', 'delete', 'checkout:demo/feature--checkout-v8', '--approve', 'checkout:demo/feature--checkout-v8'], 'route_supersession_target')
 
-    const listed = await runtimeJson(home, ['checkout', 'list', 'demo'])
-    assert.deepEqual(listed.checkouts.map(({ ref, declared }) => [ref, declared.status]), [
+    const listed = await runtimeJson(home, ['checkout', 'list', 'demo', '--all'])
+    assert.deepEqual(listed.checkouts.filter(({ declared }) => declared).map(({ ref, declared }) => [ref, declared.status]), [
       ['checkout:demo/feature--checkout-v8', 'active'],
       ['checkout:demo/main', 'superseded'],
     ])
@@ -391,15 +673,25 @@ test('Checkout observation rejects duplicate gitDir but permits a shared commonG
   const fixture = await siteFixture()
   try {
     const { home, repository } = fixture
-    await runtimeFailure(home, ['route', 'bind', 'demo', repository, '--id', 'duplicate'], 'checkout_duplicate_git_dir')
+    await runtimeFailure(home, ['checkout', 'adopt', 'demo', repository, '--id', 'duplicate'], 'checkout_duplicate_git_dir')
     const aliasRoot = join(home, 'sites', 'alias')
     await mkdir(aliasRoot)
     await writeFile(join(aliasRoot, 'SITE.md'), (await readFile(join(home, 'sites/demo/SITE.md'), 'utf8')).replace('id: "demo"', 'id: "alias"').replace('# demo', '# alias'))
-    await runtimeFailure(home, ['route', 'bind', 'alias', repository, '--id', 'main'], 'checkout_duplicate_git_dir')
-    await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'review--shared', '--from', 'main', '--new-branch', 'review/shared'])
+    await runtimeFailure(home, ['checkout', 'adopt', 'alias', repository, '--id', 'main'], 'checkout_duplicate_git_dir')
+    await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'review--shared', '--from', 'main', '--new-branch', 'review/shared'])
     const checkouts = (await runtimeJson(home, ['checkout', 'list', 'demo'])).checkouts
     assert.equal(new Set(checkouts.map((entry) => entry.observed.repository.gitDir)).size, 2)
     assert.equal(new Set(checkouts.map((entry) => entry.observed.repository.commonGitDir)).size, 1)
+
+    await writeFile(join(home, '.desk/routes/demo/duplicate.json'), `${JSON.stringify({
+      $schema: 'https://endroit.org/schema/v8/route.json',
+      id: 'duplicate',
+      site: 'demo',
+      status: 'active',
+      checkout: { mode: 'existing', path: await realpath(repository) },
+    }, null, 2)}\n`)
+    const doctor = await runtimeJson(home, ['doctor'])
+    assert.ok(doctor.limits.some((limit) => limit.startsWith('duplicate-git-dir:') && limit.includes('checkout:demo/duplicate') && limit.includes('checkout:demo/main')))
   } finally {
     await fixture.cleanup()
   }
@@ -452,7 +744,45 @@ test('v7 and v8 Route declarations have parity through Sites, HUD and Artifacts'
   }
 })
 
-test('Route migration checks without effect and rollback preserves Git and Mount invariants', async () => {
+test('Route migration derives explicit revisions for branchless v7 managed worktrees without effects during check', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home } = fixture
+    const branch = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'branchless', '--from', 'main', '--new-branch', 'branchless'])
+    const detached = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'detached-branchless', '--from', 'main', '--detach', 'starting-point'])
+    const originals = new Map()
+    for (const [id, path] of [['branchless', branch.path], ['detached-branchless', detached.path]]) {
+      const routePath = join(home, `.desk/routes/demo/${id}.json`)
+      const bytes = Buffer.from(`${JSON.stringify({
+        $schema: 'https://endroit.org/schema/v7/route.json',
+        id,
+        site: 'demo',
+        mode: 'managed-worktree',
+        path: `checkouts/demo/${id}`,
+      }, null, 2)}\n`)
+      await writeFile(routePath, bytes)
+      originals.set(id, { routePath, bytes, path })
+    }
+
+    const checked = await runtimeJson(home, ['route', 'migrate', 'demo', '--check'])
+    assert.equal(checked.readOnly, true)
+    assert.equal(checked.changes, 2)
+    for (const { routePath, bytes } of originals.values()) assert.deepEqual(await readFile(routePath), bytes)
+
+    const migrated = await runtimeJson(home, ['route', 'migrate', 'demo'])
+    assert.deepEqual(JSON.parse(await readFile(originals.get('branchless').routePath, 'utf8')).revision, { kind: 'branch', name: 'branchless' })
+    assert.deepEqual(JSON.parse(await readFile(originals.get('detached-branchless').routePath, 'utf8')).revision, {
+      kind: 'commit',
+      sha: await git(detached.path, ['rev-parse', 'HEAD']),
+    })
+    await runtimeJson(home, ['route', 'migrate', '--rollback', migrated.runId])
+    for (const { routePath, bytes } of originals.values()) assert.deepEqual(await readFile(routePath), bytes)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Route migration checks without effect and rollback preserves Git and index invariants', async () => {
   const fixture = await siteFixture()
   try {
     const { home, repository } = fixture
@@ -468,8 +798,9 @@ test('Route migration checks without effect and rollback preserves Git and Mount
     await writeFile(routePath, original)
     await chmod(routePath, 0o640)
     await writeFile(join(repository, 'dirty.txt'), 'preserve me\n')
-    const mounted = await runtimeJson(home, ['route', 'mount', 'demo'])
-    const invariant = await checkoutInvariant(repository, mounted.path)
+    await runtimeJson(home, ['checkout', 'reconcile', '--apply'])
+    const address = join(home, 'checkouts/demo/main')
+    const invariant = await checkoutInvariant(repository, address)
     const migrationsRoot = join(home, '.endroit/migrations/checkout-v8')
 
     const checked = await runtimeJson(home, ['route', 'migrate', 'demo', '--check'])
@@ -478,7 +809,7 @@ test('Route migration checks without effect and rollback preserves Git and Mount
     assert.equal(checked.changes, 1)
     assert.deepEqual(await readFile(routePath), original)
     assert.equal(await pathExists(migrationsRoot), false)
-    assert.deepEqual(await checkoutInvariant(repository, mounted.path), invariant)
+    assert.deepEqual(await checkoutInvariant(repository, address), invariant)
 
     const migrated = await runtimeJson(home, ['route', 'migrate', 'demo'])
     assert.equal(migrated.status, 'migrated')
@@ -486,14 +817,15 @@ test('Route migration checks without effect and rollback preserves Git and Mount
     assert.equal((await lstat(routePath)).mode & 0o777, 0o640)
     const v8 = JSON.parse(await readFile(routePath, 'utf8'))
     assert.equal(v8.$schema, 'https://endroit.org/schema/v8/route.json')
-    assert.deepEqual(v8.checkout, { mode: 'existing', path: await realpath(repository), expectedBranch: 'main' })
+    assert.deepEqual(v8.checkout, { mode: 'existing', path: await realpath(repository) })
+    assert.equal('revision' in v8, false)
     assert.equal('sourceRoute' in v8, false)
     const journalPath = join(migrationsRoot, migrated.runId, 'journal.json')
     const journal = await readFile(journalPath, 'utf8')
     assert.doesNotMatch(journal, /"(?:head|dirty|clean|gitDir|commonGitDir)"/)
     assert.equal(JSON.parse(journal).status, 'applied')
     assert.deepEqual(JSON.parse(journal).routes.map(({ progress }) => progress), ['after'])
-    assert.deepEqual(await checkoutInvariant(repository, mounted.path), invariant)
+    assert.deepEqual(await checkoutInvariant(repository, address), invariant)
     await runtimeFailure(home, ['route', 'migrate', 'demo', '--rollback', migrated.runId], 'usage')
 
     const appliedBytes = await readFile(routePath)
@@ -515,7 +847,7 @@ test('Route migration checks without effect and rollback preserves Git and Mount
       await runtimeJson(home, ['route', 'migrate', '--rollback', migrated.runId]),
       { status: 'current', runId: migrated.runId, changes: 0, routes: [] },
     )
-    assert.deepEqual(await checkoutInvariant(repository, mounted.path), invariant)
+    assert.deepEqual(await checkoutInvariant(repository, address), invariant)
   } finally {
     await fixture.cleanup()
   }
@@ -548,7 +880,8 @@ test('Route migration filters one Site or Route and drops legacy worktree source
     const migrated = await runtimeJson(home, ['route', 'migrate', 'demo', '--id', legacy.worktree.id])
     assert.equal(migrated.changes, 1)
     const worktreeV8 = JSON.parse(await readFile(legacy.worktree.path, 'utf8'))
-    assert.deepEqual(worktreeV8.checkout, { mode: 'managed-worktree', expectedBranch: legacy.worktree.branch })
+    assert.deepEqual(worktreeV8.checkout, { mode: 'managed-worktree' })
+    assert.deepEqual(worktreeV8.revision, { kind: 'branch', name: legacy.worktree.branch })
     assert.equal('path' in worktreeV8.checkout, false)
     assert.equal('sourceRoute' in worktreeV8, false)
     assert.equal(JSON.parse(await readFile(legacy.main.path, 'utf8')).$schema, 'https://endroit.org/schema/v7/route.json')
@@ -747,14 +1080,14 @@ test('concurrent supersede and replacement removal cannot leave a dangling Route
   const fixture = await siteFixture()
   try {
     const { home } = fixture
-    await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'replacement', '--from', 'main', '--new-branch', 'replacement'])
+    await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'replacement', '--from', 'main', '--new-branch', 'replacement'])
     const lockPath = join(home, '.endroit/locks/routes.lock')
     const supersedePromise = cliResult(home, ['route', 'supersede', 'demo', '--id', 'main', '--by', 'replacement'], {
       NODE_ENV: 'test',
       ENDROIT_TEST_HOLD_ROUTE_WRITER_MS: '250',
     })
     await waitForPath(lockPath)
-    const remove = await cliResult(home, ['route', 'remove', 'demo', '--id', 'replacement', '--delete'])
+    const remove = await cliResult(home, ['checkout', 'delete', 'checkout:demo/replacement', '--approve', 'checkout:demo/replacement'])
     const supersede = await supersedePromise
     assert.equal(supersede.code, 0, supersede.stderr)
     assert.notEqual(remove.code, 0)
@@ -769,7 +1102,7 @@ test('concurrent supersede and replacement removal cannot leave a dangling Route
 })
 
 async function legacyRouteSet(home, repository) {
-  await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'legacy-worktree', '--from', 'main', '--new-branch', 'legacy-worktree'])
+  await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'legacy-worktree', '--from', 'main', '--new-branch', 'legacy-worktree'])
   const main = {
     id: 'main',
     path: join(home, '.desk/routes/demo/main.json'),
@@ -874,6 +1207,11 @@ async function runtimeJson(home, args, namespace = 'site') {
   const argv = namespace === 'site' && !args.includes('--json') ? [...args, '--json'] : args
   assert.equal(await dispatchRuntime(home, namespace, argv, output.io), 0, output.stderr())
   return JSON.parse(output.stdout())
+}
+
+async function deleteManaged(home, site, route) {
+  const ref = `checkout:${site}/${route}`
+  return runtimeJson(home, ['checkout', 'delete', ref, '--approve', ref])
 }
 
 async function cliResult(home, args, environment = {}) {

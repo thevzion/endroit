@@ -69,8 +69,8 @@ Bundled foundation Equipment is available through the same console:
 ```text
 room create|list|inspect|doctor
 site add|list|inspect|doctor|remove
-route bind|clone|worktree|mount|unmount|park|activate|supersede|migrate|list|inspect|remove
-checkout list|inspect
+route list|inspect|park|activate|supersede|migrate|remove
+checkout list|inspect|resolve|adopt|clone|worktree|reconcile|delete
 artifact <command>
 hud show|prompt|json|activity
 hygiene maintain|repair
@@ -117,7 +117,7 @@ CLAUDE.md
 checkouts/<site>/<route>/
 ```
 
-`checkouts/` contains ignored managed Git checkouts and optional Mounts. It is
+`checkouts/` contains ignored managed Git checkouts and generated index links. It is
 physical access, not Route metadata or Site identity.
 
 ## Home, Member and Desk
@@ -143,7 +143,7 @@ to a separate nested Git repository under ignored `.desk/`. Either accepts
 `--desk tracked|separate|later`; `later` creates the Member but no Desk.
 Machine paths stay Desk-owned in every topology. For embedded `init --desk
 later`, Site `self` is declared immediately but its embedded Route is deferred;
-after `desk init`, bind it explicitly with `route bind self . --id embedded`.
+after `desk init`, adopt it explicitly with `checkout adopt self . --id embedded`.
 
 ## Rooms and Meetings
 
@@ -255,16 +255,31 @@ A Route is a Desk-local JSON declaration:
   "status": "active",
   "checkout": {
     "mode": "existing",
-    "path": "/absolute/local/checkout",
-    "expectedBranch": "main"
-  }
+    "path": "/absolute/local/checkout"
+  },
+  "revision": { "kind": "branch", "name": "main" }
 }
 ```
 
 A Checkout is addressed as `checkout:<site>/<route>`. It is an Endroit
 implementation object, not an additional Open Workplace object. `checkout
-list|inspect` is read-only and keeps the declared Route separate from observed
-Git and Mount evidence.
+list|inspect|resolve` keeps the declared Route separate from observed Git and
+physical-index evidence.
+
+Home settings may opt specific Sites into Git-owned composition:
+
+```json
+{ "settings": { "endroit/sites": { "pinnedSites": ["product"] } } }
+```
+
+Each pinned Site must be an initialized `submodule` Route at
+`checkouts/<site>/main` whose gitlink, remote and commit match. Endroit validates
+that state but never runs `submodule add|init|update`. Desk settings choose
+whether unrouted worktrees are only reported or surfaced as generated links:
+
+```json
+{ "settings": { "endroit/sites": { "observedWorktrees": "surface" } } }
+```
 
 Supported modes:
 
@@ -278,8 +293,10 @@ Supported modes:
 
 `embedded` resolves from the Home context. Managed modes derive
 `checkouts/<site>/<route>` and persist no path. Existing and submodule modes
-carry a path. `expectedBranch` is a declared expectation; HEAD, dirty state and
-other observations never enter Route metadata.
+carry a path. `revision` optionally constrains a branch or exact commit;
+managed worktrees require it and submodules forbid it because the parent
+gitlink owns their pin. HEAD, dirty state and other observations never enter
+Route metadata.
 
 `route park`, `activate` and `supersede` change metadata only. Parked and
 superseded Routes remain inspectable but are excluded from implicit and
@@ -290,18 +307,19 @@ The Home Git repository owns a submodule's Gitlink commit pin and
 `.gitmodules` declaration. Checkout initialization and submodule lifecycle
 remain user-owned; the Route only records how the Desk addresses it.
 
-An `existing` Route may be exposed at the same root address with `route mount`.
-The result is a rebuildable symlink called a Mount, not a new Route or owner.
-`route unmount` refuses non-symlink paths and removes only the Mount. Route
-removal is blocked while a Mount remains, and Doctor reports direct, ready,
-broken, divergent or conflicting Mount state.
+Every non-embedded Checkout has the conventional address
+`checkouts/<site>/<route>`. Existing repositories are exposed there through a
+rebuildable symlink. `checkout reconcile` is read-only by default; `--apply`
+changes only links recorded in `.endroit/checkout-index.json`. Doctor reports
+direct, linked, missing, broken, divergent or conflicting index state.
 
-`route worktree` uses only local refs. It never fetches, forces, copies working
+`checkout worktree` uses only local refs. It never fetches, forces, copies working
 tree changes, deletes branches, prunes, repairs or unlocks Git metadata.
 
-`route remove --delete` is required for managed checkouts. Dirty, locked,
+`checkout delete <ref> --approve <ref>` is required for managed checkouts. Dirty, locked,
 prunable, unavailable or dependent worktrees block deletion. Existing,
-embedded and submodule Routes remove only their JSON declaration.
+embedded and submodule Routes remove only their JSON declaration and generated
+index link through `route remove`.
 
 Endroit reads v7 and v8 Route documents and writes v8 only. `route migrate
 --check` previews a zero-effect metadata cutover; `route migrate` applies it
@@ -348,6 +366,6 @@ runtime qualification remains unclaimed until provider-hosted smoke evidence;
   [Work Resolution](work-resolution.md);
 - no automatic environment scanner, 0.7 Home migration or submodule manager
   ships in 0.9; Route v7-to-v8 metadata migration is explicit and local;
-- Mounts are optional explicit views for `existing` Routes; Routes always
-  resolve their source checkout directly;
+- generated index links are rebuildable views for `existing` Routes; Routes
+  always resolve their source checkout directly;
 - Endroit never infers remote success or upgrades model intelligence.

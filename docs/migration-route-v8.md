@@ -2,7 +2,7 @@
 
 Endroit 0.9 reads frozen v7 Route documents and v8 Route documents, but every
 new Route write uses v8. The migration changes only Desk metadata. It does not
-move, initialize, modify or delete a Git checkout or Mount.
+move, initialize, modify or delete a Git checkout or index link.
 
 Preview every v7 Route without writing:
 
@@ -22,7 +22,7 @@ run ID. Endroit stores the exact original bytes, file modes and digests under
 `.endroit/migrations/checkout-v8/<run-id>/`. The journal contains Route
 metadata only; it persists no observed HEAD, branch status or dirty state.
 One local exclusive Route-writer lock serializes migration, rollback and every
-other Route or Mount mutation. The lock is created exclusively and has no
+other Route or Checkout topology mutation. The lock is created exclusively and has no
 lease expiry: Endroit never steals it from a live writer. A lock owned by a
 stopped process is reported as `route_writer_lock_stale` and left untouched;
 inspect that process and `.endroit/locks/routes.lock` before removing it and
@@ -57,9 +57,11 @@ The v8 declaration separates lifecycle and Checkout configuration:
   "site": "product",
   "status": "active",
   "checkout": {
-    "mode": "existing",
-    "path": "/absolute/local/checkout",
-    "expectedBranch": "main"
+    "mode": "managed-worktree"
+  },
+  "revision": {
+    "kind": "branch",
+    "name": "feature/topology"
   }
 }
 ```
@@ -67,4 +69,6 @@ The v8 declaration separates lifecycle and Checkout configuration:
 `embedded` resolves from the Home context. `managed-clone` and
 `managed-worktree` derive `checkouts/<site>/<route>` and therefore persist no
 path. `existing` and `submodule` persist their path. v8 has no `sourceRoute`
-and never stores observed Git state.
+and never stores observed Git state. A legacy `branch` becomes a branch
+`revision` only for `managed-worktree`; it is discarded as observation for
+every other mode. Rollback restores exact v7 bytes.

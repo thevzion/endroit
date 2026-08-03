@@ -15,5 +15,8 @@ broad, orphaned Material and ambiguous delivery destinations.
 
 Never repair from `maintain`. A repair requires one exact finding ID and a
 matching explicit approval, uses an existing Endroit operation, then reruns
-the inspection. Never move, delete, archive, push or deliver implicitly. This
+the inspection. The only Git topology repair is the exact
+`checkout-index-stale` finding through `checkout reconcile --apply`; adoption,
+deletion, parking, supersession and submodule operations remain explicit.
+Never move, delete, archive, push or deliver implicitly. This
 Equipment creates no daemon, schedule, hidden memory or periodic cleanup.

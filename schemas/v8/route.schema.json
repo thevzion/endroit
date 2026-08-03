@@ -10,6 +10,7 @@
     "site": { "$ref": "#/$defs/id" },
     "status": { "enum": ["active", "parked", "superseded"] },
     "supersededBy": { "$ref": "#/$defs/id" },
+    "revision": { "$ref": "#/$defs/revision" },
     "checkout": {
       "oneOf": [
         { "$ref": "#/$defs/contextCheckout" },
@@ -25,18 +26,52 @@
       },
       "then": { "required": ["supersededBy"] },
       "else": { "not": { "required": ["supersededBy"] } }
+    },
+    {
+      "if": {
+        "properties": { "checkout": { "type": "object", "properties": { "mode": { "const": "managed-worktree" } }, "required": ["mode"] } },
+        "required": ["checkout"]
+      },
+      "then": { "required": ["revision"] }
+    },
+    {
+      "if": {
+        "properties": { "checkout": { "type": "object", "properties": { "mode": { "const": "submodule" } }, "required": ["mode"] } },
+        "required": ["checkout"]
+      },
+      "then": { "not": { "required": ["revision"] } }
     }
   ],
   "$defs": {
     "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
-    "expectedBranch": { "type": "string", "minLength": 1 },
+    "revision": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "name"],
+          "properties": {
+            "kind": { "const": "branch" },
+            "name": { "type": "string", "minLength": 1 }
+          }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["kind", "sha"],
+          "properties": {
+            "kind": { "const": "commit" },
+            "sha": { "type": "string", "pattern": "^[a-fA-F0-9]{40,64}$" }
+          }
+        }
+      ]
+    },
     "contextCheckout": {
       "type": "object",
       "additionalProperties": false,
       "required": ["mode"],
       "properties": {
-        "mode": { "enum": ["embedded", "managed-clone", "managed-worktree"] },
-        "expectedBranch": { "$ref": "#/$defs/expectedBranch" }
+        "mode": { "enum": ["embedded", "managed-clone", "managed-worktree"] }
       }
     },
     "pathCheckout": {
@@ -45,8 +80,7 @@
       "required": ["mode", "path"],
       "properties": {
         "mode": { "enum": ["existing", "submodule"] },
-        "path": { "type": "string", "minLength": 1 },
-        "expectedBranch": { "$ref": "#/$defs/expectedBranch" }
+        "path": { "type": "string", "minLength": 1 }
       }
     }
   }

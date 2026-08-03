@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile, readlink, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -16,20 +16,21 @@ const SITE_HELP = {
 const ROUTE_HELP = {
   list: 'endroit route list [site] [--json]',
   inspect: 'endroit route inspect <site> [--id <route>] [--json]',
-  bind: 'endroit route bind <site> <repository-path> [--id <route>] [--json]',
-  clone: 'endroit route clone <site> [--id <route>] [--json]',
-  worktree: 'endroit route worktree <site> --id <route> [--from <route>] (--branch <existing> | --new-branch <name> [--start-point <ref>]) [--json]',
-  mount: 'endroit route mount <site> [--id <route>] [--json]',
-  unmount: 'endroit route unmount <site> [--id <route>] [--json]',
   park: 'endroit route park <site> [--id <route>] [--json]',
   activate: 'endroit route activate <site> [--id <route>] [--json]',
   supersede: 'endroit route supersede <site> --id <route> --by <route> [--json]',
   migrate: 'endroit route migrate [site] [--id <route>] [--check | --rollback <run-id>] [--json]',
-  remove: 'endroit route remove <site> [--id <route>] [--delete] [--json]',
+  remove: 'endroit route remove <site> [--id <route>] [--json]',
 }
 const CHECKOUT_HELP = {
-  list: 'endroit checkout list [site] [--json]',
-  inspect: 'endroit checkout inspect checkout:<site>/<route> [--json]',
+  list: 'endroit checkout list [site] [--all] [--json]',
+  inspect: 'endroit checkout inspect <checkout:<site>/<route>|worktree:<site>/<id>> [--json]',
+  resolve: 'endroit checkout resolve <path> [--json]',
+  adopt: 'endroit checkout adopt <site> <path> --id <route> [--branch <name> | --commit <sha>] [--json]',
+  clone: 'endroit checkout clone <site> --id <route> [--branch <name>] [--json]',
+  worktree: 'endroit checkout worktree <site> --id <route> --from <route> (--branch <existing> | --new-branch <name> | --detach <ref>) [--json]',
+  reconcile: 'endroit checkout reconcile [--check | --apply] [--json]',
+  delete: 'endroit checkout delete <checkout-ref> --approve <checkout-ref> [--json]',
 }
 let routeWriterLockDepth = 0
 
@@ -65,11 +66,6 @@ async function routeCommand(input, command, args, flags) {
   const execute = async () => {
     if (command === 'list') return { status: 'listed', routes: await listRoutes(input, args[0]) }
     if (command === 'inspect') return inspectRoute(input, required(args[0], 'Site id'), flags.id)
-    if (command === 'bind') return bindRoute(input, required(args[0], 'Site id'), required(args[1], 'Repository path'), flags.id)
-    if (command === 'clone') return cloneRoute(input, required(args[0], 'Site id'), flags.id)
-    if (command === 'worktree') return createWorktree(input, required(args[0], 'Site id'), flags)
-    if (command === 'mount') return mountRoute(input, required(args[0], 'Site id'), flags.id)
-    if (command === 'unmount') return unmountRoute(input, required(args[0], 'Site id'), flags.id)
     if (command === 'park') return transitionRoute(input, required(args[0], 'Site id'), flags.id, 'parked')
     if (command === 'activate') return transitionRoute(input, required(args[0], 'Site id'), flags.id, 'active')
     if (command === 'supersede') return supersedeRoute(input, required(args[0], 'Site id'), required(flags.id, 'Route id'), required(flags.by, 'Replacement Route id'))
@@ -79,40 +75,49 @@ async function routeCommand(input, command, args, flags) {
       return flags.rollback ? rollbackRouteMigration(input, flags.rollback, flags) : migrateRoutes(input, args[0], flags)
     }
     if (command === 'remove') return removeRoute(input, required(args[0], 'Site id'), flags.id, flags)
-    throw failure('usage', 'endroit route bind|clone|worktree|mount|unmount|park|activate|supersede|migrate|list|inspect|remove', 2)
+    throw failure('usage', 'endroit route list|inspect|park|activate|supersede|migrate|remove', 2)
   }
-  const mutations = ['bind', 'clone', 'worktree', 'mount', 'unmount', 'park', 'activate', 'supersede', 'migrate', 'remove']
+  const mutations = ['park', 'activate', 'supersede', 'migrate', 'remove']
   if (!mutations.includes(command) || command === 'migrate' && (truthy(flags.check) && !flags.rollback || flags.rollback === true)) return execute()
   return withRouteWriterLock(input, execute)
 }
 
 async function checkoutCommand(input, command, args, flags) {
-  if (command === 'list') return { status: 'listed', checkouts: await listCheckouts(input, args[0]) }
-  if (command === 'inspect') return inspectCheckout(input, required(args[0], 'Checkout ref'), flags.id)
-  throw failure('usage', 'endroit checkout list|inspect', 2)
+  const execute = async () => {
+    if (command === 'list') return { status: 'listed', checkouts: await listCheckouts(input, args[0], { all: truthy(flags.all) }) }
+    if (command === 'inspect') return inspectCheckout(input, required(args[0], 'Checkout ref'))
+    if (command === 'resolve') return resolveCheckoutPath(input, required(args[0], 'Path'))
+    if (command === 'adopt') return bindRoute(input, required(args[0], 'Site id'), required(args[1], 'Repository path'), required(flags.id, 'Route id'), undefined, flags)
+    if (command === 'clone') return cloneRoute(input, required(args[0], 'Site id'), required(flags.id, 'Route id'), flags)
+    if (command === 'worktree') return createWorktree(input, required(args[0], 'Site id'), flags)
+    if (command === 'reconcile') return reconcileCheckouts(input, flags)
+    if (command === 'delete') return deleteCheckout(input, required(args[0], 'Checkout ref'), flags)
+    throw failure('usage', 'endroit checkout list|inspect|resolve|adopt|clone|worktree|reconcile|delete', 2)
+  }
+  const mutations = ['adopt', 'clone', 'worktree', 'delete']
+  if (command === 'reconcile' && truthy(flags.apply)) return withRouteWriterLock(input, execute)
+  if (mutations.includes(command)) return withRouteWriterLock(input, execute)
+  return execute()
 }
 
-async function listSites(input, siteId) {
+async function listSites(input, siteId, options = {}) {
   const listed = await Promise.all(declarations(input).filter((site) => !siteId || site.id === siteId).map(async (site) => {
     const routes = await routesFor(input, site.id)
     const inspected = await Promise.all(routes.map((route) => observeRoute(input, site, route)))
-    const registered = new Map(inspected.filter((route) => route.observed.path).map((route) => [route.observed.path, route.id]))
+    const registered = new Map(inspected.filter((route) => route.observed.realpath).map((route) => [route.observed.realpath, route.id]))
     const worktrees = new Map()
     for (const route of inspected.filter((entry) => entry.observed.matches && entry.observed.repository.available)) {
-      for (const worktree of route.observed.repository.worktrees) worktrees.set(worktree.path, {
-        ...worktree,
-        route: registered.get(worktree.path) ?? null,
-        registered: registered.has(worktree.path),
-      })
+      for (const worktree of route.observed.repository.worktrees) worktrees.set(worktree.path, worktree)
     }
+    const observedWorktrees = await Promise.all([...worktrees.values()].map((worktree) => observeWorktree(input, site.id, worktree, registered.get(worktree.path) ?? null)))
     return {
       ...site,
       state: routes.some((route) => route.declared.status === 'active') ? 'routed' : routes.length ? 'unrouted' : 'declared',
       routes: inspected,
-      worktrees: [...worktrees.values()].sort((left, right) => left.path.localeCompare(right.path)),
+      worktrees: observedWorktrees.sort((left, right) => left.path.localeCompare(right.path)),
     }
   }))
-  if (!siteId) assertDistinctGitDirs(listed.flatMap((site) => site.routes))
+  if (!siteId && !options.allowDuplicateGitDirs) assertDistinctGitDirs(listed.flatMap((site) => site.routes))
   return listed
 }
 
@@ -136,6 +141,7 @@ async function inspectRoute(input, id, routeId) {
   const site = declaration(input, id)
   const route = await selectRoute(input, id, routeId, '--id', { allowInactive: true })
   const evidence = await inspectRepository(await routeRepositoryPath(input, route))
+  const currentWorktree = evidence.worktrees.find((worktree) => worktree.path === evidence.root)
   assertSiteMatches(site, evidence)
   const trackedFiles = (await git(['ls-files'], route.path)).split('\n').filter(Boolean).sort()
   const files = trackedFiles.slice(0, 5000)
@@ -155,13 +161,21 @@ async function inspectRoute(input, id, routeId) {
     declaration: relative(input.deskRoot, route.documentPath),
     repository: site.repository ?? null,
     observed: {
-      path: evidence.root,
+      address: checkoutAddress(input, route),
+      target: route.declaredPath,
+      realpath: evidence.root,
+      remote: evidence.remotes[0]?.repository ?? null,
       head: evidence.head,
       branch: evidence.branch,
+      detached: evidence.detached,
       checkout: evidence.checkout,
       gitDir: evidence.gitDir,
       commonGitDir: evidence.commonGitDir,
-      mount: await inspectMount(input, route),
+      upstream: evidence.upstream,
+      divergence: evidence.divergence,
+      locked: Boolean(currentWorktree?.locked),
+      prunable: Boolean(currentWorktree?.prunable),
+      index: (await inspectCheckoutIndex(input, route)).status,
       workingTree: {
         clean: evidence.clean,
         changes: evidence.changes.length,
@@ -184,44 +198,79 @@ async function inspectRoute(input, id, routeId) {
   }
 }
 
-async function listCheckouts(input, siteId) {
+async function listCheckouts(input, siteId, options = {}) {
   if (siteId) declaration(input, siteId)
   const sites = siteId ? [declaration(input, siteId)] : declarations(input)
   const values = []
   for (const site of sites) {
-    for (const route of await routesFor(input, site.id)) values.push(await observeRoute(input, site, route))
+    const listed = (await listSites(input, site.id))[0]
+    values.push(...listed.routes.filter((route) => options.all || route.declared.status === 'active'))
+    if (options.all) values.push(...listed.worktrees.filter((worktree) => !worktree.registered).map((worktree) => observedCheckout(site.id, worktree)))
   }
   assertDistinctGitDirs(values)
   return values.sort((left, right) => left.site.localeCompare(right.site) || left.id.localeCompare(right.id))
 }
 
-async function inspectCheckout(input, selector, routeId) {
-  const parsed = parseCheckoutRef(selector, routeId)
-  const site = declaration(input, parsed.site)
-  const route = await selectRoute(input, parsed.site, parsed.id, '--id', { allowInactive: true })
-  const checkout = await observeRoute(input, site, route)
-  assertDistinctGitDirs(await listCheckouts(input, parsed.site))
-  return { status: 'inspected', ...checkout }
+async function inspectCheckout(input, selector) {
+  const parsed = parseCheckoutRef(selector)
+  if (parsed.kind === 'checkout') {
+    const site = declaration(input, parsed.site)
+    const route = await selectRoute(input, parsed.site, parsed.id, '--id', { allowInactive: true })
+    const checkout = await observeRoute(input, site, route)
+    assertDistinctGitDirs(await listCheckouts(input, parsed.site, { all: true }))
+    return { status: 'inspected', ...checkout }
+  }
+  const [site] = await listSites(input, parsed.site)
+  const worktree = site.worktrees.find((entry) => entry.ref === selector && !entry.registered)
+  if (!worktree) throw failure('checkout_missing', `${selector} does not identify an observed worktree.`)
+  return { status: 'inspected', ...observedCheckout(parsed.site, worktree) }
+}
+
+async function resolveCheckoutPath(input, path) {
+  const target = await canonicalPath(resolve(path))
+  const sites = await listSites(input)
+  const exact = sites.flatMap((site) => site.routes).filter((route) => route.observed.realpath === target || route.observed.address === target)
+  if (exact.length === 1) return { status: 'resolved', selector: exact[0].ref, checkout: exact[0] }
+  if (exact.length > 1) throw failure('checkout_origin_ambiguous', `${target} matches multiple Routes.`)
+  const observed = sites.flatMap((site) => site.worktrees.map((worktree) => ({ site, worktree }))).find(({ worktree }) => worktree.path === target)
+  if (!observed) throw failure('checkout_family_unknown', `${target} is not in a declared Git family.`)
+  if (observed.worktree.registered) return { status: 'resolved', selector: `checkout:${observed.site.id}/${observed.worktree.route}` }
+  const origins = observed.site.routes.filter((route) => route.declared.status === 'active' && route.observed.repository.commonGitDir === observed.worktree.commonGitDir)
+  if (!origins.length) throw failure('checkout_origin_missing', `${observed.worktree.ref} has no active Route of origin.`)
+  if (origins.length > 1) throw failure('checkout_origin_ambiguous', `${observed.worktree.ref} has multiple active Routes of origin.`)
+  return { status: 'resolved', selector: observed.worktree.ref, source: origins[0].ref, checkout: observedCheckout(observed.site.id, observed.worktree) }
 }
 
 async function doctorSites(input) {
-  const sites = await listSites(input)
+  const sites = await listSites(input, undefined, { allowDuplicateGitDirs: true })
   const limits = []
+  const duplicateGitDirs = findDuplicateGitDirs(sites.flatMap((site) => site.routes))
+  for (const duplicate of duplicateGitDirs) limits.push(`duplicate-git-dir:${duplicate.first}:${duplicate.second}`)
   for (const site of sites) {
     for (const route of site.routes) {
       if (route.declared.status === 'active' && !route.observed.repository.available) limits.push(`route-broken:${site.id}:${route.id}`)
       else if (route.declared.status === 'active' && !route.observed.matches) limits.push(`route-site-mismatch:${site.id}:${route.id}`)
       if (route.observed.repository.available && !route.observed.repository.clean) limits.push(`route-dirty:${site.id}:${route.id}`)
       if (route.observed.repository.conflicts) limits.push(`route-conflicts:${site.id}:${route.id}`)
-      if (route.declared.status === 'active' && route.observed.mount && !['ready', 'direct'].includes(route.observed.mount.status)) limits.push(`route-mount-${route.observed.mount.status}:${site.id}:${route.id}`)
+      if (route.declared.status === 'active' && !['direct', 'linked'].includes(route.observed.index)) limits.push(`checkout-index-${route.observed.index}:${site.id}:${route.id}`)
+      if (!revisionMatches(route.declared.revision, route.observed.repository)) limits.push(`route-revision-divergent:${site.id}:${route.id}`)
+      if (route.observed.repository.branch && !route.observed.repository.upstream) limits.push(`route-upstream-missing:${site.id}:${route.id}`)
     }
     const unregistered = site.worktrees.filter((worktree) => !worktree.registered)
     if (unregistered.length) limits.push(`site-worktrees-unrouted:${site.id}:${unregistered.length}`)
     for (const worktree of site.worktrees) {
       if (worktree.locked) limits.push(`site-worktree-locked:${site.id}:${worktree.path}`)
       if (worktree.prunable) limits.push(`site-worktree-prunable:${site.id}:${worktree.path}`)
+      if (!worktree.clean) limits.push(`site-worktree-dirty:${site.id}:${worktree.path}`)
+      if (worktree.conflicts) limits.push(`site-worktree-conflicts:${site.id}:${worktree.path}`)
+      if (worktree.operation) limits.push(`site-worktree-operation:${site.id}:${worktree.path}:${worktree.operation}`)
     }
+    limits.push(...await inspectPinnedSite(input, site))
   }
+  const declaredSiteIds = new Set(sites.map((site) => site.id))
+  for (const site of siteSettings(input).pinnedSites.filter((id) => !declaredSiteIds.has(id))) limits.push(`site-gitlink-site-missing:${site}`)
+  if (!duplicateGitDirs.length && input.deskRoot && (await reconcileCheckouts(input, { check: true })).status === 'stale') limits.push('checkout-index-stale')
+  else if (limits.some((limit) => limit.startsWith('checkout-index-') && limit !== 'checkout-index-stale')) limits.push('checkout-index-stale')
   return { status: limits.length ? 'partial' : 'ready', sites, limits }
 }
 
@@ -261,6 +310,7 @@ async function addSite(input, repository, flags) {
     ...(tag ? { tags: [tag] } : {}),
   }
   await writeSite(input, site)
+  input.resolvedHome.sites.push(site)
   let bound = null
   if (evidence && input.deskRoot) {
     const routeId = flags.route ?? 'main'
@@ -287,11 +337,11 @@ async function removeSite(input, id) {
   return { status: 'removed', id }
 }
 
-async function bindRoute(input, id, repositoryPath, routeId = 'main', declaredSite) {
-  return withRouteWriterLock(input, () => bindRouteUnlocked(input, id, repositoryPath, routeId, declaredSite))
+async function bindRoute(input, id, repositoryPath, routeId = 'main', declaredSite, flags = {}) {
+  return withRouteWriterLock(input, () => bindRouteUnlocked(input, id, repositoryPath, routeId, declaredSite, flags))
 }
 
-async function bindRouteUnlocked(input, id, repositoryPath, routeId = 'main', declaredSite) {
+async function bindRouteUnlocked(input, id, repositoryPath, routeId = 'main', declaredSite, flags = {}) {
   requireDesk(input)
   assertId(routeId)
   const site = declaredSite ?? declaration(input, id)
@@ -299,16 +349,26 @@ async function bindRouteUnlocked(input, id, repositoryPath, routeId = 'main', de
   const evidence = await inspectRepository(resolve(repositoryPath))
   assertSiteMatches(site, evidence)
   await assertGitDirAvailable(input, evidence)
+  await assertTopologyFamilySafe(input, evidence.commonGitDir)
   const superproject = await git(['rev-parse', '--show-superproject-working-tree'], evidence.root).catch(() => '')
   const mode = evidence.root === input.homeRoot ? 'embedded' : superproject ? 'submodule' : 'existing'
+  const revision = requestedRevision(flags)
+  if (mode === 'submodule' && revision) throw failure('route_revision_forbidden', 'A submodule Route is pinned by its parent gitlink.')
+  assertObservedRevision(revision, evidence)
   const route = await writeRoute(input, {
     id: routeId,
     site: id,
     mode,
     path: mode === 'embedded' ? '.' : evidence.root,
-    branch: evidence.branch,
+    revision,
   })
-  return { ...route, checkout: evidence.checkout }
+  try {
+    await reconcileCheckouts(input, { apply: true })
+    return { ...route, checkout: evidence.checkout }
+  } catch (error) {
+    await rm(join(input.deskRoot, 'routes', id, `${routeId}.json`), { force: true })
+    throw error
+  }
 }
 
 async function transitionRoute(input, siteId, routeId, status) {
@@ -327,7 +387,7 @@ async function transitionRoute(input, siteId, routeId, status) {
     site: siteId,
     route: route.id,
     ref: route.ref,
-    declared: { status, checkout: { ...route.declared.checkout } },
+    declared: { status, checkout: { ...route.declared.checkout }, ...(route.declared.revision ? { revision: { ...route.declared.revision } } : {}) },
   }
 }
 
@@ -347,7 +407,7 @@ async function supersedeRoute(input, siteId, routeId, replacementId) {
     site: siteId,
     route: route.id,
     ref: route.ref,
-    declared: { status: 'superseded', supersededBy: replacement.id, checkout: { ...route.declared.checkout } },
+    declared: { status: 'superseded', supersededBy: replacement.id, checkout: { ...route.declared.checkout }, ...(route.declared.revision ? { revision: { ...route.declared.revision } } : {}) },
   }
 }
 
@@ -435,7 +495,22 @@ async function planRouteMigrations(input, siteId, flags) {
     await assertSafeRouteFile(input, route.documentPath)
     const original = route.sourceBytes
     const mode = route.fileMode
-    const document = migrationDocumentFromV7(input, route, original)
+    let observedRevision
+    if (route.mode === 'managed-worktree' && !route.declared.revision) {
+      let evidence
+      try {
+        evidence = await inspectRepository((await validateManagedCheckout(input, route)).resolvedPath)
+      } catch (error) {
+        throw failure('route_migration_revision_unobservable', `${route.ref} has no observable worktree revision: ${error.message}`)
+      }
+      if (evidence.checkout !== 'linked-worktree' || !evidence.head) {
+        throw failure('route_migration_revision_unobservable', `${route.ref} does not resolve to an observable linked worktree.`)
+      }
+      observedRevision = evidence.branch
+        ? { kind: 'branch', name: evidence.branch }
+        : { kind: 'commit', sha: evidence.head }
+    }
+    const document = migrationDocumentFromV7(input, route, original, { observedRevision, validate: true })
     planned.push({ route, original, mode, next: Buffer.from(`${JSON.stringify(document, null, 2)}\n`) })
   }
   const summary = planned.map(({ route }) => ({
@@ -496,7 +571,7 @@ async function rollbackRouteMigration(input, runId, flags) {
   })
 }
 
-async function cloneRoute(input, id, routeId = 'main') {
+async function cloneRoute(input, id, routeId = 'main', flags = {}) {
   requireDesk(input)
   assertId(routeId)
   const site = declaration(input, id)
@@ -506,7 +581,9 @@ async function cloneRoute(input, id, routeId = 'main') {
   if (await exists(destination)) throw failure('route_checkout_exists', `${relative(input.homeRoot, destination)} already exists.`)
   await mkdir(dirname(destination), { recursive: true })
   try {
-    await git(['clone', '--quiet', '--', site.source, destination], input.homeRoot)
+    const branch = flags.branch ? String(flags.branch) : null
+    if (branch) await validateBranch(input.homeRoot, branch)
+    await git(['clone', '--quiet', ...(branch ? ['--branch', branch] : []), '--', site.source, destination], input.homeRoot)
     const evidence = await inspectRepository(destination)
     assertSiteMatches(site, evidence)
     const route = await writeRoute(input, {
@@ -514,7 +591,7 @@ async function cloneRoute(input, id, routeId = 'main') {
       site: id,
       mode: 'managed-clone',
       path: relative(input.homeRoot, destination),
-      branch: evidence.branch,
+      revision: branch ? { kind: 'branch', name: branch } : null,
     })
     return { ...route, checkout: evidence.checkout }
   } catch (error) {
@@ -530,20 +607,28 @@ async function createWorktree(input, id, flags) {
   await assertRouteAvailable(input, id, routeId)
   const existingBranch = flags.branch
   const newBranch = flags['new-branch']
-  if (Boolean(existingBranch) === Boolean(newBranch)) throw failure('site_worktree_branch_mode', 'Pass exactly one of --branch or --new-branch.', 2)
+  const detached = flags.detach
+  if ([existingBranch, newBranch, detached].filter(Boolean).length !== 1) throw failure('site_worktree_branch_mode', 'Pass exactly one of --branch, --new-branch or --detach.', 2)
   if (flags['start-point'] && !newBranch) throw failure('site_worktree_start_point', '--start-point requires --new-branch.', 2)
   const site = declaration(input, id)
-  const source = selectCurrentRoute(input, await scanRouteGraph(input), id, flags.from, '--from')
+  const source = selectCurrentRoute(input, await scanRouteGraph(input), id, required(flags.from, 'Source Route id'), '--from')
   const sourceEvidence = await inspectRepository(await routeRepositoryPath(input, source))
   assertSiteMatches(site, sourceEvidence)
-  const branch = String(existingBranch ?? newBranch)
-  await validateBranch(source.path, branch)
+  await assertTopologyFamilySafe(input, sourceEvidence.commonGitDir)
+  const branch = existingBranch || newBranch ? String(existingBranch ?? newBranch) : null
+  if (branch) await validateBranch(source.path, branch)
   const destination = managedPath(input, id, routeId)
   if (await exists(destination)) throw failure('route_checkout_exists', `${relative(input.homeRoot, destination)} already exists.`)
-  const branchExists = await localBranchExists(source.path, branch)
+  const branchExists = branch ? await localBranchExists(source.path, branch) : false
   let expectedHead
   let command
-  if (existingBranch) {
+  if (detached) {
+    const reference = String(detached)
+    if (!reference || reference.startsWith('-') || reference.includes('\0')) throw failure('site_start_point_invalid', 'Invalid detached ref.')
+    expectedHead = await git(['rev-parse', '--verify', `${reference}^{commit}`], source.path)
+      .catch(() => { throw failure('site_start_point_missing', `Local ref ${reference} does not resolve to a commit.`) })
+    command = ['worktree', 'add', '--detach', '--', destination, expectedHead]
+  } else if (existingBranch) {
     if (!branchExists) throw failure('site_branch_missing', `Local branch ${branch} does not exist.`)
     if (sourceEvidence.worktrees.some((worktree) => worktree.branch === branch)) throw failure('site_branch_in_use', `Local branch ${branch} is already checked out.`)
     expectedHead = await git(['rev-parse', '--verify', `refs/heads/${branch}^{commit}`], source.path)
@@ -562,18 +647,17 @@ async function createWorktree(input, id, flags) {
     const created = await inspectRepository(destination)
     if (created.checkout !== 'linked-worktree' || created.commonGitDir !== sourceEvidence.commonGitDir) throw failure('site_worktree_repository_mismatch', 'Created checkout is not a linked worktree of the source repository.')
     assertSiteMatches(site, created)
-    if (created.branch !== branch || created.head !== expectedHead) throw failure('site_worktree_revalidation', 'Created worktree branch or HEAD did not match the requested checkout.')
+    if (created.branch !== branch || created.head !== expectedHead) throw failure('site_worktree_revalidation', 'Created worktree revision did not match the requested checkout.')
     const route = await writeRoute(input, {
       id: routeId,
       site: id,
       mode: 'managed-worktree',
       path: relative(input.homeRoot, destination),
-      branch,
-      sourceRoute: source.id,
+      revision: branch ? { kind: 'branch', name: branch } : { kind: 'commit', sha: expectedHead },
     })
-    return { ...route, head: created.head, checkout: created.checkout }
+    return { ...route, head: created.head, branch: created.branch, detached: created.detached, checkout: created.checkout }
   } catch (error) {
-    await git(['worktree', 'remove', '--force', '--', destination], source.path).catch(() => {})
+    await git(['worktree', 'remove', '--', destination], source.path).catch(() => {})
     throw error
   }
 }
@@ -583,76 +667,13 @@ async function removeRoute(input, id, routeId, flags) {
   const route = selectCurrentRoute(input, graph, id, routeId, '--id', { allowInactive: Boolean(routeId) })
   const references = graph.filter((entry) => entry.site === id && entry.id !== route.id && entry.supersededBy === route.id)
   if (references.length) throw failure('route_supersession_target', `Route ${id}/${route.id} is still referenced by ${references.map((entry) => entry.ref).join(', ')}.`)
-  const mount = await inspectMount(input, route)
-  if (mount && mount.status !== 'direct') throw failure('route_mount_exists', `Route ${id}/${route.id} still has a Mount; unmount it first.`)
   if (route.mode.startsWith('managed-')) {
-    if (!truthy(flags.delete)) throw failure('route_managed_delete_required', `Route ${id}/${route.id} is managed; pass --delete.`)
-    const checkout = await validateManagedCheckout(input, route)
-    const evidence = await inspectRepository(checkout.resolvedPath)
-    if (!evidence.clean) throw failure('route_dirty', `Managed Route ${id}/${route.id} has local changes.`)
-    const current = evidence.worktrees.find((worktree) => worktree.path === evidence.root)
-    if (route.mode === 'managed-worktree') {
-      if (!current) throw failure('site_worktree_metadata_missing', `Linked worktree ${id}/${route.id} is missing from Git metadata.`)
-      if (current.locked) throw failure('site_worktree_locked', `Linked worktree ${id}/${route.id} is locked.`)
-      if (current.prunable) throw failure('site_worktree_prunable', `Linked worktree ${id}/${route.id} has prunable metadata.`)
-      const source = evidence.worktrees.find((entry) => entry.path !== evidence.root && entry.available && !entry.locked && !entry.prunable)?.path
-      if (!source) throw failure('site_worktree_source_missing', `No usable sibling checkout can remove ${id}/${route.id}.`)
-      await validateManagedCheckout(input, route, checkout)
-      await git(['worktree', 'remove', '--', checkout.declaredPath], source)
-    } else {
-      const dependants = evidence.worktrees.filter((worktree) => worktree.path !== evidence.root)
-      if (dependants.length) throw failure('site_clone_has_worktrees', `Managed clone ${id}/${route.id} still has dependent worktrees.`)
-      await validateManagedCheckout(input, route, checkout)
-      await rm(checkout.declaredPath, { recursive: true })
-    }
+    throw failure('checkout_delete_required', `Managed Checkout ${route.ref} must be removed with checkout delete.`)
   }
+  await removeGeneratedLink(input, checkoutAddress(input, route))
   await rm(route.documentPath)
   await removeEmpty(dirname(route.documentPath), join(input.deskRoot, 'routes'))
   return { status: 'removed', site: id, route: route.id, mode: route.mode }
-}
-
-async function mountRoute(input, id, routeId) {
-  const route = selectCurrentRoute(input, await scanRouteGraph(input), id, routeId)
-  if (route.mode !== 'existing') throw failure('route_mount_mode', `Only an existing Route can be mounted; ${id}/${route.id} is ${route.mode}.`)
-  const destination = mountPath(input, id, route.id)
-  const current = await inspectMount(input, route)
-  if (current?.status === 'ready') return { status: 'mounted', site: id, route: route.id, path: destination, target: route.path }
-  if (current?.status === 'direct') return { status: 'already-addressed', site: id, route: route.id, path: destination, target: route.path }
-  if (current) throw failure('route_mount_conflict', `Mount ${relative(input.homeRoot, destination)} is ${current.status}; remove it explicitly before rebuilding.`)
-  await mkdir(dirname(destination), { recursive: true })
-  await symlink(route.path, destination, 'dir')
-  return { status: 'mounted', site: id, route: route.id, path: destination, target: route.path }
-}
-
-async function unmountRoute(input, id, routeId) {
-  const route = selectCurrentRoute(input, await scanRouteGraph(input), id, routeId)
-  const destination = mountPath(input, id, route.id)
-  let info
-  try { info = await lstat(destination) } catch (error) {
-    if (error.code === 'ENOENT') return { status: 'unmounted', site: id, route: route.id, path: destination }
-    throw error
-  }
-  if (!info.isSymbolicLink()) throw failure('route_mount_not_symlink', `Refusing to remove non-symlink path ${relative(input.homeRoot, destination)}.`)
-  await rm(destination)
-  await removeEmpty(dirname(destination), join(input.homeRoot, 'checkouts'))
-  return { status: 'unmounted', site: id, route: route.id, path: destination }
-}
-
-async function inspectMount(input, route) {
-  if (route.mode !== 'existing') return null
-  const path = mountPath(input, route.site, route.id)
-  let info
-  try { info = await lstat(path) } catch (error) {
-    if (error.code === 'ENOENT') return null
-    throw error
-  }
-  if (!info.isSymbolicLink()) {
-    const target = await realpath(path).catch(() => null)
-    return { status: target === route.path ? 'direct' : 'conflict', path, ...(target ? { target } : {}) }
-  }
-  const target = await realpath(path).catch(() => null)
-  if (!target) return { status: 'broken', path }
-  return { status: target === route.path ? 'ready' : 'divergent', path, target }
 }
 
 async function routesFor(input, id) {
@@ -669,7 +690,7 @@ async function routesFor(input, id) {
       status: route.declared.status,
       supersededBy: route.declared.supersededBy,
       mode,
-      branch: route.declared.checkout.expectedBranch,
+      revision: route.declared.revision,
       path: await canonicalPath(declaredPath),
     }
   }))
@@ -698,7 +719,7 @@ async function scanRouteGraph(input) {
       let document
       let schemaVersion
       if (source?.$schema === 'https://endroit.org/schema/v7/route.json') {
-        document = migrationDocumentFromV7(input, stub, sourceBytes)
+        document = migrationDocumentFromV7(input, stub, sourceBytes, { validate: false })
         schemaVersion = 7
       } else {
         validateRoute(source, siteEntry.name, id, input)
@@ -716,16 +737,17 @@ async function scanRouteGraph(input) {
         ref: `checkout:${siteEntry.name}/${id}`,
         schemaVersion,
         declared: {
-          status: document.status,
-          ...(document.supersededBy ? { supersededBy: document.supersededBy } : {}),
-          checkout: { ...checkout },
+        status: document.status,
+        ...(document.supersededBy ? { supersededBy: document.supersededBy } : {}),
+        checkout: { ...checkout },
+        ...(document.revision ? { revision: { ...document.revision } } : {}),
         },
         declaredPath,
         documentPath,
         status: document.status,
         supersededBy: document.supersededBy,
         mode: checkout.mode,
-        branch: checkout.expectedBranch,
+        revision: document.revision,
         path: await canonicalPath(declaredPath),
         sourceBytes,
         fileMode: (await lstat(documentPath)).mode & 0o777,
@@ -830,8 +852,8 @@ async function writeRouteUnlocked(input, route) {
     checkout: {
       mode: route.mode,
       ...(['existing', 'submodule'].includes(route.mode) ? { path: route.path } : {}),
-      ...(route.branch ? { expectedBranch: route.branch } : {}),
     },
+    ...(route.revision ? { revision: { ...route.revision } } : {}),
   }
   validateRoute(document, route.site, route.id, input)
   await writeJsonAtomic(path, document)
@@ -843,10 +865,10 @@ async function writeRouteUnlocked(input, route) {
     site: route.site,
     route: route.id,
     ref: `checkout:${route.site}/${route.id}`,
-    declared: { status: document.status, checkout: document.checkout },
+    declared: { status: document.status, checkout: document.checkout, ...(document.revision ? { revision: document.revision } : {}) },
     observed: { path: await canonicalPath(declaredPath) },
     mode: route.mode,
-    branch: route.branch,
+    revision: route.revision ?? null,
     path: await canonicalPath(declaredPath),
   }
 }
@@ -860,10 +882,6 @@ function managedPath(input, site, route) {
   const destination = join(root, route)
   if (relative(root, destination).startsWith('..')) throw failure('route_path_invalid', 'Managed checkout must stay below checkouts/.')
   return destination
-}
-
-function mountPath(input, site, route) {
-  return managedPath(input, site, route)
 }
 
 async function routeRepositoryPath(input, route) {
@@ -912,6 +930,8 @@ async function inspectRepository(path) {
     return { name, url, repository: normalizeRepository(url) }
   })
   const changes = status.split('\n').filter((line) => /^(1 |2 |u |\? )/.test(line))
+  const upstream = status.match(/^# branch\.upstream (.+)$/m)?.[1] ?? null
+  const divergenceMatch = status.match(/^# branch\.ab \+(\d+) -(\d+)$/m)
   const worktrees = await Promise.all(parseWorktrees(worktreeOutput).map(async ({ locked, prunable, ...worktree }) => ({
     ...worktree,
     path: await canonicalPath(worktree.path),
@@ -924,6 +944,9 @@ async function inspectRepository(path) {
     root: await canonicalPath(root),
     head,
     branch,
+    detached: branch === null,
+    upstream,
+    divergence: divergenceMatch ? { ahead: Number(divergenceMatch[1]), behind: Number(divergenceMatch[2]) } : null,
     clean: changes.length === 0,
     changes,
     conflicts: changes.filter((line) => line.startsWith('u ')).length,
@@ -978,12 +1001,18 @@ function validateRoute(route, site, id, input) {
   }
   const pathMode = ['existing', 'submodule'].includes(checkout.mode)
   if (pathMode !== (typeof checkout.path === 'string' && checkout.path.length > 0)) throw failure('route_invalid', `Invalid Checkout path for Route ${site}/${id}.`)
-  if (checkout.expectedBranch !== undefined && (typeof checkout.expectedBranch !== 'string' || !checkout.expectedBranch.length)) throw failure('route_invalid', `Invalid expected branch for Route ${site}/${id}.`)
+  const revision = route.revision
+  if (revision !== undefined && (!revision || typeof revision !== 'object' || Array.isArray(revision)
+    || revision.kind === 'branch' && (typeof revision.name !== 'string' || !revision.name || Object.keys(revision).some((key) => !['kind', 'name'].includes(key)))
+    || revision.kind === 'commit' && (typeof revision.sha !== 'string' || !/^[a-f0-9]{40,64}$/i.test(revision.sha) || Object.keys(revision).some((key) => !['kind', 'sha'].includes(key)))
+    || !['branch', 'commit'].includes(revision.kind))) throw failure('route_invalid', `Invalid revision for Route ${site}/${id}.`)
+  if (checkout.mode === 'managed-worktree' && !revision) throw failure('route_invalid', `Managed worktree Route ${site}/${id} requires a revision.`)
+  if (checkout.mode === 'submodule' && revision) throw failure('route_invalid', `Submodule Route ${site}/${id} cannot declare a revision.`)
   if (pathMode && !isAbsolute(checkout.path) && checkout.path.split(/[\\/]+/).includes('..')) throw failure('route_path_invalid', `Route ${site}/${id} path must not escape its Home context.`)
   if (route.status === 'superseded' ? !validId(route.supersededBy) || route.supersededBy === id : Boolean(route.supersededBy)) throw failure('route_invalid', `Invalid lifecycle for Route ${site}/${id}.`)
   const rootKeys = Object.keys(route)
-  if (rootKeys.some((key) => !['$schema', 'id', 'site', 'status', 'supersededBy', 'checkout'].includes(key))) throw failure('route_invalid', `Invalid Route ${site}/${id}.`)
-  if (Object.keys(checkout).some((key) => !['mode', 'path', 'expectedBranch'].includes(key))) throw failure('route_invalid', `Invalid Checkout ${site}/${id}.`)
+  if (rootKeys.some((key) => !['$schema', 'id', 'site', 'status', 'supersededBy', 'checkout', 'revision'].includes(key))) throw failure('route_invalid', `Invalid Route ${site}/${id}.`)
+  if (Object.keys(checkout).some((key) => !['mode', 'path'].includes(key))) throw failure('route_invalid', `Invalid Checkout ${site}/${id}.`)
 }
 
 function routeDeclaration(route) {
@@ -999,16 +1028,549 @@ function routeDeclaration(route) {
 
 async function observeRoute(input, site, route) {
   const repository = await routeRepositoryPath(input, route).then(inspectRepository).catch((error) => ({ available: false, error: error.message, worktrees: [], conflicts: 0 }))
+  const currentWorktree = repository.worktrees.find((worktree) => worktree.path === repository.root)
   return {
     ...routeDeclaration(route),
     observed: {
       path: repository.root ?? route.path,
+      address: checkoutAddress(input, route),
+      target: route.declaredPath,
+      realpath: repository.root ?? null,
+      remote: repository.remotes?.[0]?.repository ?? null,
+      gitDir: repository.gitDir ?? null,
+      commonGitDir: repository.commonGitDir ?? null,
+      checkout: repository.checkout ?? null,
+      head: repository.head ?? null,
+      branch: repository.branch ?? null,
+      detached: repository.detached ?? null,
+      clean: repository.clean ?? false,
+      changes: repository.changes?.length ?? 0,
+      conflicts: repository.conflicts ?? 0,
+      operation: repository.operation ?? null,
+      locked: Boolean(currentWorktree?.locked),
+      prunable: Boolean(currentWorktree?.prunable),
+      upstream: repository.upstream ?? null,
+      divergence: repository.divergence ?? null,
       repository,
-      mount: await inspectMount(input, route),
+      index: (await inspectCheckoutIndex(input, route)).status,
       matches: matchesSite(site, repository),
       observedAt: new Date().toISOString(),
     },
   }
+}
+
+async function observeWorktree(input, site, worktree, route) {
+  const evidence = worktree.available ? await inspectRepository(worktree.path).catch(() => null) : null
+  const technicalId = evidence ? sha256(`${evidence.commonGitDir}\0${evidence.gitDir}`).slice(0, 12) : sha256(worktree.path).slice(0, 12)
+  return {
+    ...worktree,
+    ...(evidence ? {
+      head: evidence.head,
+      branch: evidence.branch,
+      detached: evidence.detached,
+      clean: evidence.clean,
+      changes: evidence.changes.length,
+      conflicts: evidence.conflicts,
+      operation: evidence.operation,
+      upstream: evidence.upstream,
+      divergence: evidence.divergence,
+      gitDir: evidence.gitDir,
+      commonGitDir: evidence.commonGitDir,
+      checkout: evidence.checkout,
+      remote: evidence.remotes[0]?.repository ?? null,
+    } : { clean: false, changes: 0, conflicts: 0, operation: null }),
+    route,
+    registered: Boolean(route),
+    ref: route ? `checkout:${site}/${route}` : `worktree:${site}/${technicalId}`,
+    address: route ? managedPath(input, site, route) : observedWorktreePath(input, site, worktree.path, technicalId),
+  }
+}
+
+function observedCheckout(site, worktree) {
+  return {
+    id: worktree.ref.split('/').at(-1),
+    site,
+    ref: worktree.ref,
+    kind: 'observed-worktree',
+    declared: null,
+    observed: { ...worktree },
+  }
+}
+
+function checkoutAddress(input, route) {
+  return route.mode === 'embedded' ? input.homeRoot : managedPath(input, route.site, route.id)
+}
+
+function observedWorktreePath(input, site, path, id) {
+  return join(input.homeRoot, 'checkouts', site, '_observed', `${slug(basename(path)) || 'worktree'}--${id}`)
+}
+
+async function inspectCheckoutIndex(input, route) {
+  if (route.mode === 'embedded') return { status: 'direct', address: input.homeRoot, target: input.homeRoot }
+  const address = checkoutAddress(input, route)
+  const target = route.declaredPath
+  let info
+  try { info = await lstat(address) } catch (error) {
+    if (error.code === 'ENOENT') return { status: 'missing', address, target }
+    throw error
+  }
+  if (!info.isSymbolicLink()) {
+    const observed = await realpath(address).catch(() => null)
+    return { status: observed === await canonicalPath(target) ? 'direct' : 'conflict', address, target, ...(observed ? { realpath: observed } : {}) }
+  }
+  const linked = await readlink(address)
+  const observed = await realpath(address).catch(() => null)
+  if (!observed) return { status: 'broken', address, target, linked }
+  return { status: observed === await canonicalPath(target) ? 'linked' : 'divergent', address, target, linked, realpath: observed }
+}
+
+function indexManifestPath(input) { return join(input.homeRoot, '.endroit', 'checkout-index.json') }
+
+async function readIndexManifest(input) {
+  return (await readIndexSnapshot(input)).document
+}
+
+async function readIndexSnapshot(input) {
+  const path = indexManifestPath(input)
+  let bytes
+  let mode
+  try {
+    const [content, info] = await Promise.all([readFile(path), lstat(path)])
+    if (info.isSymbolicLink() || !info.isFile()) throw failure('checkout_index_invalid', `${relative(input.homeRoot, path)} must be a regular file.`)
+    bytes = content
+    mode = info.mode & 0o777
+  } catch (error) {
+    if (error.code === 'ENOENT') return { document: { version: 1, links: [] }, bytes: null, mode: 0o600 }
+    throw error
+  }
+  let document
+  try { document = JSON.parse(bytes) } catch { throw failure('checkout_index_invalid', `${relative(input.homeRoot, path)} is invalid.`) }
+  if (document?.version !== 1 || !Array.isArray(document.links)) throw failure('checkout_index_invalid', `${relative(input.homeRoot, path)} is invalid.`)
+  for (const link of document.links) {
+    const absolute = resolve(input.homeRoot, link.path ?? '')
+    if (!inside(join(input.homeRoot, 'checkouts'), absolute) || typeof link.target !== 'string' || !isAbsolute(link.target)
+      || link.digest !== checkoutLinkDigest(link.path, link.target)) throw failure('checkout_index_invalid', `Invalid generated Checkout link ${link.path}.`)
+  }
+  return { document, bytes, mode }
+}
+
+function checkoutLinkDigest(path, target) { return sha256(`${path}\0${target}`) }
+
+async function desiredCheckoutLinks(input) {
+  const desired = []
+  for (const route of await scanRouteGraph(input)) {
+    if (route.mode === 'embedded') continue
+    const address = checkoutAddress(input, route)
+    const target = await canonicalPath(route.declaredPath)
+    if (address !== target && !route.mode.startsWith('managed-')) desired.push(indexLink(input, address, target, route.ref))
+  }
+  if (siteSettings(input).observedWorktrees === 'surface') {
+    for (const site of await listSites(input)) {
+      for (const worktree of site.worktrees.filter((entry) => !entry.registered && entry.available)) {
+        desired.push(indexLink(input, worktree.address, worktree.path, worktree.ref))
+      }
+    }
+  }
+  return desired.sort((left, right) => left.path.localeCompare(right.path))
+}
+
+function indexLink(input, path, target, ref) {
+  const local = relative(input.homeRoot, path)
+  return { path: local, target, ref, digest: checkoutLinkDigest(local, target) }
+}
+
+async function reconcileCheckouts(input, flags = {}) {
+  requireDesk(input)
+  if (truthy(flags.check) && truthy(flags.apply)) throw failure('usage', 'Choose --check or --apply.', 2)
+  const [manifestSnapshot, desired] = await Promise.all([readIndexSnapshot(input), desiredCheckoutLinks(input)])
+  const manifest = manifestSnapshot.document
+  const desiredDocument = { version: 1, links: desired }
+  const desiredBytes = Buffer.from(`${JSON.stringify(desiredDocument, null, 2)}\n`)
+  const current = new Map(manifest.links.map((link) => [link.path, link]))
+  const wanted = new Map(desired.map((link) => [link.path, link]))
+  const plan = []
+  for (const link of desired) {
+    const path = resolve(input.homeRoot, link.path)
+    const owned = current.get(link.path)
+    const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+    if (!info) plan.push({ action: 'create', ...link })
+    else if (!info.isSymbolicLink()) plan.push({ action: 'conflict', ...link })
+    else {
+      const target = await symlinkTarget(path)
+      if (target !== link.target && owned?.target === target) plan.push({ action: 'replace', ...link, previousTarget: target })
+      else if (target !== link.target) plan.push({ action: 'conflict', ...link, observedTarget: target })
+      else if (owned?.digest !== link.digest) plan.push({ action: 'record', ...link })
+    }
+  }
+  for (const link of manifest.links.filter((entry) => !wanted.has(entry.path))) {
+    const path = resolve(input.homeRoot, link.path)
+    const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+    if (!info) plan.push({ action: 'forget', ...link })
+    else if (!info.isSymbolicLink() || await symlinkTarget(path) !== link.target) plan.push({ action: 'conflict', ...link })
+    else plan.push({ action: 'remove', ...link })
+  }
+  const conflicts = plan.filter((entry) => entry.action === 'conflict')
+  if (!truthy(flags.apply)) return { status: plan.length ? 'stale' : 'current', readOnly: true, changes: plan.length - conflicts.length, conflicts }
+  if (conflicts.length) throw failure('checkout_index_conflict', `Checkout index has ${conflicts.length} conflicting path(s).`)
+  const created = []
+  const removed = []
+  try {
+    for (const entry of plan) {
+      const path = resolve(input.homeRoot, entry.path)
+      if (entry.action === 'create') {
+        await ensureSafeDirectories(input.homeRoot, dirname(path))
+        await symlink(entry.target, path, 'dir')
+        created.push(entry)
+      } else if (entry.action === 'replace') {
+        await rm(path)
+        removed.push({ ...entry, target: entry.previousTarget })
+        await symlink(entry.target, path, 'dir')
+        created.push(entry)
+      } else if (entry.action === 'remove') {
+        await rm(path)
+        removed.push(entry)
+        await removeEmpty(dirname(path), join(input.homeRoot, 'checkouts'))
+      }
+      if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_FAULT_AFTER_CHECKOUT_INDEX_ACTION === entry.action) {
+        if (process.env.ENDROIT_TEST_CHECKOUT_INDEX_FAULT_READY_FILE) {
+          await writeFile(process.env.ENDROIT_TEST_CHECKOUT_INDEX_FAULT_READY_FILE, 'ready\n')
+          await new Promise((resolvePromise) => setTimeout(resolvePromise, Number(process.env.ENDROIT_TEST_HOLD_CHECKOUT_INDEX_FAULT_MS ?? 100)))
+        }
+        throw failure('checkout_index_fault', `Injected failure after Checkout index ${entry.action}.`)
+      }
+    }
+    await ensureSafeDirectories(input.homeRoot, dirname(indexManifestPath(input)))
+    await writeBytesAtomic(indexManifestPath(input), desiredBytes, 0o600)
+  } catch (error) {
+    const rollbackFailures = await rollbackCheckoutIndex(input, manifestSnapshot, desiredBytes, created, removed)
+    if (rollbackFailures.length) error.message = `${error.message} Checkout index rollback failed: ${rollbackFailures.join('; ')}`
+    throw error
+  }
+  return { status: 'reconciled', changes: plan.length, links: desired.length }
+}
+
+async function rollbackCheckoutIndex(input, manifestSnapshot, desiredBytes, created, removed) {
+  const failures = []
+  let ownership
+  try { ownership = await checkoutIndexRollbackOwnership(input, manifestSnapshot, desiredBytes) } catch (error) { return [`manifest: ownership preflight failed: ${error.message}`] }
+  if (!ownership.allowed) return [`manifest: ${ownership.message}`]
+  for (const entry of created.reverse()) {
+    const path = resolve(input.homeRoot, entry.path)
+    try {
+      const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+      if (!info) continue
+      if (!info.isSymbolicLink() || await symlinkTarget(path) !== entry.target) throw new Error(`${entry.path} is no longer the generated link`)
+      await rm(path)
+    } catch (error) { failures.push(`${entry.path}: ${error.message}`) }
+  }
+  for (const entry of removed.reverse()) {
+    const path = resolve(input.homeRoot, entry.path)
+    try {
+      await ensureSafeDirectories(input.homeRoot, dirname(path))
+      const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+      if (info) {
+        if (!info.isSymbolicLink() || await symlinkTarget(path) !== entry.target) throw new Error(`${entry.path} was replaced during rollback`)
+      } else await symlink(entry.target, path, 'dir')
+    } catch (error) { failures.push(`${entry.path}: ${error.message}`) }
+  }
+  if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_CHECKOUT_INDEX_ROLLBACK_LINKS_READY_FILE) {
+    await writeFile(process.env.ENDROIT_TEST_CHECKOUT_INDEX_ROLLBACK_LINKS_READY_FILE, 'ready\n')
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, Number(process.env.ENDROIT_TEST_HOLD_CHECKOUT_INDEX_ROLLBACK_MS ?? 100)))
+  }
+  try { ownership = await checkoutIndexRollbackOwnership(input, manifestSnapshot, desiredBytes) } catch (error) {
+    failures.push(`manifest: ownership revalidation failed: ${error.message}`)
+    return failures
+  }
+  if (!ownership.allowed) {
+    failures.push(`manifest: ${ownership.message}`)
+    return failures
+  }
+  try {
+    const path = indexManifestPath(input)
+    if (manifestSnapshot.bytes) {
+      if (!ownership.originalMatches) await writeBytesAtomic(path, manifestSnapshot.bytes, manifestSnapshot.mode)
+    } else if (ownership.current) {
+      await assertRegularFile(path, 'checkout_index_invalid')
+      await rm(path)
+    }
+  } catch (error) { failures.push(`manifest: ${error.message}`) }
+  return failures
+}
+
+async function checkoutIndexRollbackOwnership(input, manifestSnapshot, desiredBytes) {
+  const current = await readFile(indexManifestPath(input)).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+  const originalMatches = Boolean(current && manifestSnapshot.bytes && current.equals(manifestSnapshot.bytes))
+  const desiredMatches = Boolean(current && current.equals(desiredBytes))
+  if (current && !originalMatches && !desiredMatches) {
+    return { allowed: false, current, originalMatches, desiredMatches, message: 'manifest changed concurrently; it and the failed apply link state were preserved' }
+  }
+  return { allowed: true, current, originalMatches, desiredMatches }
+}
+
+async function removeGeneratedLink(input, path) {
+  const manifest = await readIndexManifest(input)
+  const local = relative(input.homeRoot, path)
+  const entry = manifest.links.find((link) => link.path === local)
+  if (!entry) return
+  const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+  if (info && (!info.isSymbolicLink() || await symlinkTarget(path) !== entry.target)) throw failure('checkout_index_conflict', `Refusing to remove unowned Checkout path ${local}.`)
+  if (info) await rm(path)
+  await writeJsonAtomic(indexManifestPath(input), { version: 1, links: manifest.links.filter((link) => link.path !== local) }, 0o600)
+}
+
+async function deleteCheckout(input, selector, flags) {
+  const parsed = parseCheckoutRef(selector)
+  if (parsed.kind !== 'checkout' || flags.approve !== selector) throw failure('checkout_delete_approval', `Pass --approve ${selector}.`, 2)
+  const graph = await scanRouteGraph(input)
+  const route = selectCurrentRoute(input, graph, parsed.site, parsed.id, '--id', { allowInactive: true })
+  if (!route.mode.startsWith('managed-')) throw failure('checkout_delete_mode', `Only managed Checkouts can be deleted.`)
+  const references = graph.filter((entry) => entry.site === parsed.site && entry.id !== route.id && entry.supersededBy === route.id)
+  if (references.length) throw failure('route_supersession_target', `${route.ref} is still referenced by ${references.map((entry) => entry.ref).join(', ')}.`)
+  const checkout = await validateManagedCheckout(input, route)
+  const evidence = await inspectRepository(checkout.resolvedPath)
+  if (!evidence.clean || evidence.conflicts || evidence.operation) throw failure('route_dirty', `${route.ref} is not clean and idle.`)
+  await assertTopologyFamilySafe(input, evidence.commonGitDir, route.ref)
+  let source
+  if (route.mode === 'managed-worktree') {
+    const current = evidence.worktrees.find((worktree) => worktree.path === evidence.root)
+    if (!current) throw failure('site_worktree_metadata_missing', `${route.ref} is missing from Git metadata.`)
+    if (current.locked) throw failure('site_worktree_locked', `${route.ref} is locked.`)
+    if (current.prunable) throw failure('site_worktree_prunable', `${route.ref} has prunable metadata.`)
+    source = evidence.worktrees.find((entry) => entry.path !== evidence.root && entry.available && !entry.locked && !entry.prunable)?.path
+    if (!source) throw failure('site_worktree_source_missing', `No usable sibling checkout can remove ${route.ref}.`)
+  } else if (evidence.worktrees.some((worktree) => worktree.path !== evidence.root)) {
+    throw failure('site_clone_has_worktrees', `${route.ref} still has dependent worktrees.`)
+  }
+  if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_CHECKOUT_DELETE_READY_FILE) {
+    await writeFile(process.env.ENDROIT_TEST_CHECKOUT_DELETE_READY_FILE, 'ready\n')
+    await new Promise((resolvePromise) => setTimeout(resolvePromise, Number(process.env.ENDROIT_TEST_HOLD_CHECKOUT_DELETE_MS ?? 100)))
+  }
+  const stagedRoute = await stageRouteDeletion(route)
+  let stagedCheckout = null
+  let destructive = false
+  try {
+    if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_ROUTE_STAGED_READY_FILE) {
+      await writeFile(process.env.ENDROIT_TEST_ROUTE_STAGED_READY_FILE, stagedRoute.path)
+      await new Promise((resolvePromise) => setTimeout(resolvePromise, Number(process.env.ENDROIT_TEST_HOLD_ROUTE_STAGED_MS ?? 100)))
+    }
+    await assertRouteDestinationVacant(stagedRoute)
+    if (route.mode === 'managed-worktree') {
+      await validateManagedCheckout(input, route, checkout)
+      destructive = true
+      if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_FAULT_AFTER_DESTRUCTIVE_BOUNDARY === route.ref) {
+        throw failure('checkout_delete_fault', `Injected failure after ${route.ref} destructive boundary.`)
+      }
+      await git(['worktree', 'remove', '--', checkout.declaredPath], source)
+    } else {
+      await validateManagedCheckout(input, route, checkout)
+      stagedCheckout = await stageManagedCloneDeletion(route, checkout)
+      if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_CLONE_STAGED_READY_FILE) {
+        await writeFile(process.env.ENDROIT_TEST_CLONE_STAGED_READY_FILE, stagedCheckout.path)
+        await new Promise((resolvePromise) => setTimeout(resolvePromise, Number(process.env.ENDROIT_TEST_HOLD_CLONE_STAGED_MS ?? 100)))
+      }
+      await assertRouteDestinationVacant(stagedRoute)
+      await assertStagedManagedClone(route, stagedCheckout)
+      destructive = true
+      if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_FAULT_AFTER_DESTRUCTIVE_BOUNDARY === route.ref) {
+        throw failure('checkout_delete_fault', `Injected failure after ${route.ref} destructive boundary.`)
+      }
+      await rm(stagedCheckout.path, { recursive: true })
+      stagedCheckout = null
+    }
+  } catch (error) {
+    if (destructive) {
+      if (route.mode === 'managed-worktree' && await managedWorktreeIntact(input, route, checkout, evidence)) {
+        try {
+          await restoreStagedRoute(stagedRoute)
+          throw error
+        } catch (rollbackError) {
+          if (rollbackError === error) throw error
+          error.message = `${error.message} Route rollback failed: ${rollbackError.message}`
+        }
+      }
+      throw partialCheckoutDeletion(input, route, stagedRoute, stagedCheckout, checkout, error)
+    }
+    const rollbackFailures = []
+    let checkoutRestored = true
+    const checkoutToRestore = stagedCheckout ?? error.stagedCheckout
+    if (checkoutToRestore) {
+      try { await restoreStagedCheckout(checkoutToRestore) } catch (rollbackError) {
+        checkoutRestored = false
+        rollbackFailures.push(rollbackError.message)
+      }
+    }
+    if (checkoutRestored) {
+      try { await restoreStagedRoute(stagedRoute) } catch (rollbackError) { rollbackFailures.push(rollbackError.message) }
+    } else {
+      rollbackFailures.push(`Route backup retained at ${stagedRoute.path}`)
+    }
+    if (rollbackFailures.length) error.message = `${error.message} Checkout deletion rollback failed: ${rollbackFailures.join('; ')}`
+    throw error
+  }
+  const retainedRouteBackup = await rm(stagedRoute.path, { force: true }).then(() => null).catch(() => relative(input.homeRoot, stagedRoute.path))
+  const retainedRouteDirectory = await removeEmpty(dirname(route.documentPath), join(input.deskRoot, 'routes')).then(() => null).catch(() => relative(input.homeRoot, dirname(route.documentPath)))
+  return {
+    status: 'deleted',
+    ref: selector,
+    branchDeleted: false,
+    ...(retainedRouteBackup ? { retainedRouteBackup } : {}),
+    ...(retainedRouteDirectory ? { retainedRouteDirectory } : {}),
+  }
+}
+
+async function stageRouteDeletion(route) {
+  const expected = { sha256: sha256(route.sourceBytes), mode: route.fileMode }
+  const current = await routeFileState(route.documentPath)
+  if (current.sha256 !== expected.sha256 || current.mode !== expected.mode) throw failure('route_delete_drift', `${route.ref} declaration changed before deletion.`)
+  const path = `${route.documentPath}.${randomUUID()}.delete`
+  await rename(route.documentPath, path)
+  const result = { path, destination: route.documentPath, ...expected }
+  try {
+    const staged = await routeFileState(path)
+    if (staged.sha256 !== expected.sha256 || staged.mode !== expected.mode) throw failure('route_delete_drift', `${route.ref} declaration changed during deletion.`)
+    return result
+  } catch (error) {
+    try { await restoreStagedRoute(result) } catch (rollbackError) { error.message = `${error.message} Route staging rollback failed: ${rollbackError.message}` }
+    throw error
+  }
+}
+
+async function restoreStagedRoute(staged) {
+  if (!await exists(staged.path)) throw new Error(`${staged.path} is missing while restoring its Route`)
+  const current = await routeFileState(staged.path)
+  if (current.sha256 !== staged.sha256 || current.mode !== staged.mode) throw new Error(`${staged.path} changed while restoring its Route`)
+  const bytes = await readFile(staged.path)
+  let handle
+  let identity
+  try {
+    handle = await open(staged.destination, 'wx', staged.mode)
+    identity = await handle.stat()
+    await handle.writeFile(bytes)
+    await handle.chmod(staged.mode)
+    await handle.sync()
+    await handle.close()
+    handle = null
+    await syncDirectory(dirname(staged.destination))
+    const restored = await routeFileState(staged.destination)
+    if (restored.sha256 !== staged.sha256 || restored.mode !== staged.mode) throw new Error(`${staged.destination} did not restore exactly`)
+    await rm(staged.path)
+  } catch (error) {
+    await handle?.close().catch(() => {})
+    if (identity) {
+      const observed = await lstat(staged.destination).catch(() => null)
+      if (observed?.dev === identity.dev && observed.ino === identity.ino) await rm(staged.destination, { force: true }).catch(() => {})
+    }
+    if (error.code === 'EEXIST') throw new Error(`${staged.destination} was replaced while restoring its Route`)
+    throw error
+  }
+}
+
+async function assertRouteDestinationVacant(staged) {
+  if (await exists(staged.destination)) throw failure('route_delete_drift', `${staged.destination} was recreated during deletion.`)
+}
+
+async function stageManagedCloneDeletion(route, checkout) {
+  const path = join(dirname(checkout.declaredPath), `.${basename(checkout.declaredPath)}.${randomUUID()}.delete`)
+  await rename(checkout.declaredPath, path)
+  const staged = { path, destination: checkout.declaredPath, dev: checkout.dev, ino: checkout.ino }
+  try {
+    await assertStagedManagedClone(route, staged)
+    return staged
+  } catch (error) {
+    try { await restoreStagedCheckout(staged) } catch (rollbackError) {
+      error.stagedCheckout = staged
+      error.message = `${error.message} Checkout staging rollback failed: ${rollbackError.message}`
+    }
+    throw error
+  }
+}
+
+async function restoreStagedCheckout(staged) {
+  if (!await exists(staged.path)) throw new Error(`${staged.path} is missing while restoring its Checkout`)
+  const current = await lstat(staged.path)
+  if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== staged.dev || current.ino !== staged.ino) throw new Error(`${staged.path} changed while restoring its Checkout`)
+  if (await exists(staged.destination)) throw new Error(`${staged.destination} was replaced while restoring its Checkout`)
+  await rename(staged.path, staged.destination)
+}
+
+async function assertStagedManagedClone(route, staged) {
+  const current = await lstat(staged.path)
+  if (!current.isDirectory() || current.isSymbolicLink() || current.dev !== staged.dev || current.ino !== staged.ino) {
+    throw failure('route_checkout_changed', `Managed Route ${route.site}/${route.id} checkout changed during deletion.`)
+  }
+}
+
+async function managedWorktreeIntact(input, route, checkout, before) {
+  try {
+    await validateManagedCheckout(input, route, checkout)
+    const after = await inspectRepository(checkout.resolvedPath)
+    return after.root === before.root
+      && after.gitDir === before.gitDir
+      && after.commonGitDir === before.commonGitDir
+      && after.head === before.head
+      && after.branch === before.branch
+      && after.clean === before.clean
+      && after.changes.length === before.changes.length
+  } catch { return false }
+}
+
+function partialCheckoutDeletion(input, route, stagedRoute, stagedCheckout, checkout, cause) {
+  const routeRecovery = relative(input.homeRoot, stagedRoute.path)
+  const checkoutRecovery = relative(input.homeRoot, stagedCheckout?.path ?? checkout.declaredPath)
+  return failure('checkout_partial_deletion', `${route.ref} deletion crossed its destructive boundary and may be partial (${cause.code ?? 'error'}: ${cause.message}). Route recovery: ${routeRecovery}. Checkout recovery: ${checkoutRecovery}.`)
+}
+
+async function assertTopologyFamilySafe(input, commonGitDir, exceptRef = null) {
+  for (const site of await listSites(input)) {
+    for (const worktree of site.worktrees) {
+      if (!worktree.registered && worktree.commonGitDir === commonGitDir && (!worktree.clean || worktree.conflicts || worktree.operation)) {
+        if (worktree.ref !== exceptRef) throw failure('checkout_family_blocked', `${worktree.ref} is dirty, conflicted or in a Git operation.`)
+      }
+    }
+  }
+}
+
+async function inspectPinnedSite(input, site) {
+  if (!siteSettings(input).pinnedSites.includes(site.id)) return []
+  const route = (await routesFor(input, site.id)).find((entry) => entry.id === 'main')
+  if (!route || route.mode !== 'submodule') return [`site-gitlink-missing:${site.id}`]
+  if (route.declaredPath !== managedPath(input, site.id, 'main')) return [`site-gitlink-path-divergent:${site.id}`]
+  const evidence = await routeRepositoryPath(input, route).then(inspectRepository).catch(() => null)
+  if (!evidence) return [`site-gitlink-uninitialized:${site.id}`]
+  if (!matchesSite(site, evidence)) return [`site-gitlink-remote-divergent:${site.id}`]
+  const stage = await git(['ls-files', '--stage', '--', relative(input.homeRoot, route.declaredPath)], input.homeRoot).catch(() => '')
+  const match = stage.match(/^160000 ([a-f0-9]{40,64}) /i)
+  if (!match) return [`site-gitlink-missing:${site.id}`]
+  return match[1] === evidence.head ? [] : [`site-gitlink-commit-divergent:${site.id}`]
+}
+
+function siteSettings(input) {
+  return {
+    pinnedSites: input.resolvedHome.home.settings?.['endroit/sites']?.pinnedSites ?? [],
+    observedWorktrees: input.resolvedHome.desk?.settings?.['endroit/sites']?.observedWorktrees ?? 'report',
+  }
+}
+
+function requestedRevision(flags) {
+  if (flags.branch && flags.commit) throw failure('usage', 'Choose --branch or --commit.', 2)
+  if (flags.branch) return { kind: 'branch', name: String(flags.branch) }
+  if (flags.commit) {
+    const sha = String(flags.commit)
+    if (!/^[a-f0-9]{40,64}$/i.test(sha)) throw failure('route_revision_invalid', `Invalid commit ${sha}.`)
+    return { kind: 'commit', sha: sha.toLowerCase() }
+  }
+  return null
+}
+
+function assertObservedRevision(revision, evidence) {
+  if (!revision) return
+  if (revision.kind === 'branch' && evidence.branch !== revision.name) throw failure('route_revision_divergent', `Observed branch ${evidence.branch ?? 'detached'} does not match ${revision.name}.`)
+  if (revision.kind === 'commit' && evidence.head !== revision.sha) throw failure('route_revision_divergent', `Observed commit ${evidence.head} does not match ${revision.sha}.`)
+}
+
+function revisionMatches(revision, evidence) {
+  if (!revision || evidence.available === false) return true
+  return revision.kind === 'branch' ? evidence.branch === revision.name : evidence.head === revision.sha
 }
 
 function migrationRoot(input) { return join(input.homeRoot, '.endroit', 'migrations', 'checkout-v8') }
@@ -1203,7 +1765,7 @@ async function assertRegularFile(path, code) {
   if (info.isSymbolicLink() || !info.isFile()) throw failure(code, `${path} must be a non-symlink regular file.`)
 }
 
-function migrationDocumentFromV7(input, route, bytes) {
+function migrationDocumentFromV7(input, route, bytes, options = {}) {
   let legacy
   try { legacy = JSON.parse(bytes) } catch { throw failure('route_migration_drift', `${relative(input.homeRoot, route.documentPath)} is no longer valid JSON.`) }
   if (!legacy || typeof legacy !== 'object' || Array.isArray(legacy)) {
@@ -1227,7 +1789,7 @@ function migrationDocumentFromV7(input, route, bytes) {
   if (['existing', 'submodule'].includes(legacy.mode) && !isAbsolute(legacy.path) && legacy.path.split(/[\\/]+/).includes('..')) {
     throw failure('route_path_invalid', `Route ${legacy.site}/${legacy.id} path cannot migrate outside its Home context.`)
   }
-  return {
+  const migrated = {
     $schema: 'https://endroit.org/schema/v8/route.json',
     id: legacy.id,
     site: legacy.site,
@@ -1235,9 +1797,13 @@ function migrationDocumentFromV7(input, route, bytes) {
     checkout: {
       mode: legacy.mode,
       ...(['existing', 'submodule'].includes(legacy.mode) ? { path: legacy.path } : {}),
-      ...(legacy.branch ? { expectedBranch: legacy.branch } : {}),
     },
+    ...(legacy.mode === 'managed-worktree' && (legacy.branch || options.observedRevision)
+      ? { revision: legacy.branch ? { kind: 'branch', name: legacy.branch } : options.observedRevision }
+      : {}),
   }
+  if (options.validate !== false) validateRoute(migrated, legacy.site, legacy.id, input)
+  return migrated
 }
 
 function routeDocument(route, overrides = {}) {
@@ -1250,6 +1816,7 @@ function routeDocument(route, overrides = {}) {
     status,
     ...(status === 'superseded' ? { supersededBy } : {}),
     checkout: { ...route.declared.checkout },
+    ...(route.declared.revision ? { revision: { ...route.declared.revision } } : {}),
   }
 }
 
@@ -1257,21 +1824,27 @@ function requireV8Route(route) {
   if (route.schemaVersion !== 8) throw failure('route_migration_required', `Route ${route.site}/${route.id} must be migrated to v8 before changing lifecycle.`)
 }
 
-function parseCheckoutRef(value, routeId) {
-  if (routeId) return { site: value.replace(/^site:/, ''), id: routeId }
-  const match = String(value).match(/^checkout:([a-z0-9][a-z0-9._-]{0,127})\/([a-z0-9][a-z0-9._-]{0,127})$/)
-  if (!match) throw failure('checkout_ref_invalid', 'Use checkout:<site>/<route>.', 2)
-  return { site: match[1], id: match[2] }
+function parseCheckoutRef(value) {
+  const match = String(value).match(/^(checkout|worktree):([a-z0-9][a-z0-9._-]{0,127})\/([a-z0-9][a-z0-9._-]{0,127})$/)
+  if (!match) throw failure('checkout_ref_invalid', 'Use checkout:<site>/<route> or worktree:<site>/<id>.', 2)
+  return { kind: match[1], site: match[2], id: match[3] }
 }
 
 function assertDistinctGitDirs(checkouts) {
+  const [duplicate] = findDuplicateGitDirs(checkouts)
+  if (duplicate) throw failure('checkout_duplicate_git_dir', `${duplicate.first} and ${duplicate.second} resolve to the same Git directory.`)
+}
+
+function findDuplicateGitDirs(checkouts) {
   const seen = new Map()
-  for (const checkout of checkouts.filter((entry) => entry.observed.repository.available)) {
+  const duplicates = []
+  for (const checkout of checkouts.filter((entry) => entry.declared && entry.observed.repository?.available)) {
     const gitDir = checkout.observed.repository.gitDir
     const existing = seen.get(gitDir)
-    if (existing) throw failure('checkout_duplicate_git_dir', `${existing} and ${checkout.ref} resolve to the same Git directory.`)
-    seen.set(gitDir, checkout.ref)
+    if (existing) duplicates.push({ gitDir, first: existing, second: checkout.ref })
+    else seen.set(gitDir, checkout.ref)
   }
+  return duplicates
 }
 
 async function assertGitDirAvailable(input, evidence) {
@@ -1359,6 +1932,10 @@ function sha256(value) { return createHash('sha256').update(value).digest('hex')
 function migrationRunId() { return `${new Date().toISOString().replace(/[-:.]/g, '').replace('Z', 'z')}-${process.pid}` }
 function inside(root, candidate) { const path = relative(root, candidate); return path && !path.startsWith('..') && !isAbsolute(path) }
 async function canonicalPath(path) { return realpath(path).catch(() => resolve(path)) }
+async function symlinkTarget(path) {
+  const target = await readlink(path)
+  return isAbsolute(target) ? resolve(target) : resolve(dirname(path), target)
+}
 async function removeEmpty(path, stop) {
   let current = path
   while (current !== stop) { try { await rm(current) } catch { break }; current = dirname(current) }
@@ -1380,7 +1957,11 @@ function argumentsOf(argv) {
 function human(value) {
   if (value.sites) return value.sites.length ? value.sites.map((site) => `${site.id} · ${site.state} · ${site.routes.length} route(s)`).join('\n') : 'No Sites.'
   if (value.routes) return value.routes.length ? value.routes.map((route) => `${route.ref} · ${route.declared.status} · ${route.declared.checkout.mode}`).join('\n') : 'No Routes.'
-  if (value.checkouts) return value.checkouts.length ? value.checkouts.map((checkout) => `${checkout.ref} · ${checkout.declared.status} · ${checkout.observed.repository.available ? 'available' : 'missing'}`).join('\n') : 'No Checkouts.'
+  if (value.checkouts) return value.checkouts.length ? value.checkouts.map((checkout) => {
+    const declared = checkout.declared
+    const available = declared ? checkout.observed.repository.available : checkout.observed.available
+    return `${checkout.ref} · ${declared?.status ?? 'observed'} · ${declared?.checkout.mode ?? checkout.observed.checkout} · ${available ? 'available' : 'missing'}`
+  }).join('\n') : 'No Checkouts.'
   return Object.entries(value).map(([key, entry]) => `${key}: ${typeof entry === 'object' ? JSON.stringify(entry) : entry}`).join('\n')
 }
 function help(surface, command) {

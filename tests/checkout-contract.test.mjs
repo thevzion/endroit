@@ -16,7 +16,12 @@ test('Route v8 accepts exactly five Checkout modes and derives contextual paths'
   const modes = ['embedded', 'existing', 'managed-clone', 'managed-worktree', 'submodule']
   for (const mode of modes) {
     const path = ['existing', 'submodule'].includes(mode) ? `/tmp/${mode}` : undefined
-    const document = await routeV8Document({ id: mode, site: 'demo', checkout: { mode, ...(path ? { path } : {}) } })
+    const document = await routeV8Document({
+      id: mode,
+      site: 'demo',
+      checkout: { mode, ...(path ? { path } : {}) },
+      ...(mode === 'managed-worktree' ? { revision: { kind: 'branch', name: 'feature/topology' } } : {}),
+    })
     const route = await resolveCheckout(root, document)
     assert.equal(route.ref, `checkout:demo/${mode}`)
     assert.equal(route.declared.checkout.mode, mode)
@@ -35,10 +40,13 @@ test('Route v8 closes properties and lifecycle combinations', async () => {
     { ...base, status: 'superseded' },
     { ...base, checkout: { mode: 'unknown' } },
     { ...base, checkout: { mode: 'managed-clone', path: '/tmp/managed' } },
-    { ...base, checkout: { mode: 'managed-worktree', expectedBranch: '' } },
+    { ...base, checkout: { mode: 'managed-worktree' } },
+    { ...base, checkout: { mode: 'managed-worktree' }, revision: { kind: 'branch', name: '' } },
+    { ...base, checkout: { mode: 'submodule', path: '/tmp/module' }, revision: { kind: 'commit', sha: 'a'.repeat(40) } },
   ]) await assert.rejects(validateRouteDocument(document), (error) => error.code === 'document_invalid')
   await validateRouteDocument({ ...base, status: 'superseded', supersededBy: 'other' })
-  await validateRouteDocument({ ...base, checkout: { mode: 'managed-worktree', expectedBranch: 'feature/checkout-v8' } })
+  await validateRouteDocument({ ...base, checkout: { mode: 'managed-worktree' }, revision: { kind: 'branch', name: 'feature/checkout-v8' } })
+  await validateRouteDocument({ ...base, revision: { kind: 'commit', sha: 'a'.repeat(40) } })
   await assert.rejects(resolveCheckout(root, { ...base, status: 'superseded', supersededBy: 'main' }), (error) => error.code === 'route_supersession_invalid')
   await assert.rejects(resolveCheckout(root, { ...base, checkout: { mode: 'existing', path: '../escape' } }), (error) => error.code === 'route_path_invalid')
   await assert.rejects(validateRouteDocument({
@@ -95,7 +103,7 @@ test('v7 and v8 resolve to the same declared Checkout without persisting observa
     path: '/tmp/demo',
     branch: 'main',
   }
-  const v8 = await routeV8Document({ id: 'main', site: 'demo', checkout: { mode: 'existing', path: '/tmp/demo', expectedBranch: 'main' } })
+  const v8 = await routeV8Document({ id: 'main', site: 'demo', checkout: { mode: 'existing', path: '/tmp/demo' } })
   assert.deepEqual((await resolveCheckout(root, v7)).declared, (await resolveCheckout(root, v8)).declared)
   assert.equal('head' in v8, false)
   assert.equal('dirty' in v8, false)

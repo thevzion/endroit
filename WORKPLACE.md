@@ -83,7 +83,7 @@ validation error or `ambiguous` when authority cannot be established.
 | Equipment | `equipment/<id>/equipment.json` or `.desk/equipment/<id>/equipment.json` and declared files | Home or Desk; durable reusable method | Instructions, Skills, Commands and runtime namespaces |
 | Material | Addressable files inside the Home, Desk or owning Room; Site-native files remain Site-owned | Declared owner; ephemeral, retained, accepted or archived | Linked from the owning Room or exposed by Equipment |
 | Site | `sites/<site>/SITE.md` | Site; durable external identity and sovereignty | Floor Plan, HUD and generated Site accessors |
-| Route | `.desk/routes/<site>/<route>.json` | Desk; durable local relationship | Resolved checkout, optional Mount and Route accessors |
+| Route | `.desk/routes/<site>/<route>.json` | Desk; durable local relationship | Resolved Checkout and Route accessors |
 
 Relationships remain source-backed:
 
@@ -189,17 +189,17 @@ transcript or hidden reasoning into Workplace truth.
 A Site declaration names external identity; it does not copy Site truth into
 the Home. A Desk Route names the Site, lifecycle and Checkout configuration.
 Supported materializations are embedded repositories, existing checkouts,
-managed clones, managed worktrees, user-managed submodules and optional
-rebuildable Mounts. A remote-only Site has no local Route. Checkout is an
+managed clones, managed worktrees and user-managed submodules. The rebuildable
+Checkout index exposes them locally. A remote-only Site has no local Route. Checkout is an
 Endroit implementation object addressed as `checkout:<site>/<route>`, not an
 additional Open Workplace object.
 
 Endroit reads frozen v7 and current v8 Route metadata and writes v8 only.
 Declared status and configuration remain separate from observed path, Git and
-Mount evidence. Parked and superseded Routes remain inspectable but are not
+physical-index evidence. Parked and superseded Routes remain inspectable but are not
 selected for implicit or operational effects. Explicit Route migration and
 rollback change only Desk metadata; they never persist HEAD or dirty state or
-modify a checkout or Mount.
+modify a checkout or generated index link.
 
 Immediately before a Site mutation, run the tracked Console's `route inspect`
 for the exact Site and Route. Stop on a path, repository, branch, worktree or
@@ -273,7 +273,7 @@ Endroit extensions are explicitly implementation-owned:
 - **Artifact kinds** validate selected Material forms;
 - **Work Resolution** validates proof-carrying Work Items and their explicit
   review without storing an agent identity or transcript;
-- **Route modes, managed checkouts and Mounts** materialize local Site access;
+- **Route modes, managed checkouts and the physical index** materialize local Site access;
 - **`.endroit/` state and provider hooks** are local rebuildable machinery.
 
 These extensions do not redefine Open Workplace objects, grant authority or
