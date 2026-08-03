@@ -65,7 +65,11 @@ test('create and init choose explicit Desk Git boundaries around Home-owned Memb
     const resumed = captureIo()
     assert.equal(await runCli(['route', 'bind', 'self', deferred, '--id', 'embedded', '--home', deferred, '--json'], resumed.io), 0, resumed.stderr())
     assert.equal(JSON.parse(resumed.stdout()).mode, 'embedded')
-    assert.equal(JSON.parse(await readFile(join(deferred, '.desk/routes/self/embedded.json'), 'utf8')).path, '.')
+    const embeddedRoute = JSON.parse(await readFile(join(deferred, '.desk/routes/self/embedded.json'), 'utf8'))
+    assert.equal(embeddedRoute.$schema, 'https://endroit.org/schema/v8/route.json')
+    assert.equal(embeddedRoute.status, 'active')
+    assert.deepEqual(embeddedRoute.checkout, { mode: 'embedded', expectedBranch: 'main' })
+    assert.equal('path' in embeddedRoute, false)
   } finally {
     await removeTree(temporary, { force: true })
   }
