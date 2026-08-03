@@ -128,8 +128,8 @@ async function activity(input, options) {
   for (const site of sites) {
     for (const route of site.routes) {
       const subject = `site:${site.id}/${route.id}`
-      if (route.root) events.push(...await gitActivity(route.root, since, subject))
-      if (route.git?.available && !route.git.clean) events.push(currentGitActivity(subject, route.git, generatedAt))
+      if (route.observed.path) events.push(...await gitActivity(route.observed.path, since, subject))
+      if (route.observed.git?.available && !route.observed.git.clean) events.push(currentGitActivity(subject, route.observed.git, generatedAt))
     }
     if (site.map.state !== 'current') {
       events.push({
@@ -284,7 +284,7 @@ async function hud(input) {
     projectionProbe(homeRoot, plan.home.providers),
     scanOrientation(homeRoot, plan),
   ])
-  const sites = await scanSites(plan.sites ?? [], homeRoot, deskRoot, artifacts)
+  const sites = await scanSites(plan.sites ?? [], plan.routes ?? [], homeRoot, deskRoot, artifacts)
   const items = {
     rooms: orientation.rooms,
     meetings: orientation.meetings,
@@ -319,9 +319,9 @@ async function hud(input) {
       attention.push(item('advisory', `site:${site.id}`, 'site-worktrees-unrouted', `${site.id} has ${unroutedWorktrees.length} Git worktree(s) without a local Route; inspect site list or site doctor.`))
     }
     for (const route of site.routes) {
-      if (!route.git?.available) attention.push(item('blocking', `site:${site.id}/${route.id}`, 'site-broken', 'Route is not a usable Git checkout.'))
-      else if (route.git.conflicts) attention.push(item('blocking', `site:${site.id}/${route.id}`, 'site-conflicts', `Route has ${route.git.conflicts} conflict(s).`))
-      else if (!route.git.clean) attention.push(item('advisory', `site:${site.id}/${route.id}`, 'site-dirty', `Route has ${route.git.changes} change(s).`))
+      if (!route.observed.git?.available) attention.push(item('blocking', `site:${site.id}/${route.id}`, 'site-broken', 'Route is not a usable Git checkout.'))
+      else if (route.observed.git.conflicts) attention.push(item('blocking', `site:${site.id}/${route.id}`, 'site-conflicts', `Route has ${route.observed.git.conflicts} conflict(s).`))
+      else if (!route.observed.git.clean) attention.push(item('advisory', `site:${site.id}/${route.id}`, 'site-dirty', `Route has ${route.observed.git.changes} change(s).`))
     }
   }
   for (const runtime of trust.runtimes.filter((entry) => entry.trust === 'pending')) {
@@ -499,13 +499,17 @@ function siteItem(site) {
     tags: site.tags ?? [],
     ref: `site:${site.id}`,
     access: ['model', 'user'],
-    routable: !metadataError && site.routes.some((route) => route.git?.available),
+    routable: !metadataError && site.routes.some((route) => route.observed.git?.available),
     entrypoint: { model: 'endroit-site-map', user: 'endroit-site-map' },
     routes: site.routes.map((route) => ({
       id: route.id,
-      state: route.git?.available ? route.git.clean ? 'clean' : 'dirty' : 'broken',
-      root: route.root,
-      head: route.git?.head ?? null,
+      ref: route.ref,
+      declared: route.declared,
+      observed: {
+        state: route.observed.git?.available ? route.observed.git.clean ? 'clean' : 'dirty' : 'broken',
+        path: route.observed.path,
+        head: route.observed.git?.head ?? null,
+      },
     })),
     worktrees: site.worktrees.map((worktree) => ({
       path: worktree.path,
@@ -531,33 +535,31 @@ function surface(entry) {
   }
 }
 
-async function scanSites(sites, homeRoot, deskRoot, artifacts) {
+async function scanSites(sites, declaredRoutes, homeRoot, deskRoot, artifacts) {
   return Promise.all(sites.map(async (site) => {
     const routes = []
-    const siteRoot = deskRoot && join(deskRoot, 'routes', site.id)
-    if (siteRoot) {
-      for (const entry of await safeReadDir(siteRoot)) {
-        if (!entry.isFile() || entry.isSymbolicLink() || !entry.name.endsWith('.json')) continue
-        const route = JSON.parse(await readFile(join(siteRoot, entry.name), 'utf8'))
-        if (route.$schema !== 'https://endroit.org/schema/v7/route.json' || route.site !== site.id) continue
-        const resolved = await realpath(resolve(homeRoot, route.path)).catch(() => null)
-        routes.push({
-          id: route.id,
-          type: route.mode,
-          declaration: relative(deskRoot, join(siteRoot, entry.name)),
-          root: resolved,
+    for (const route of declaredRoutes.filter((entry) => entry.site === site.id)) {
+      const resolved = await realpath(route.declaredPath).catch(() => null)
+      routes.push({
+        id: route.id,
+        ref: route.ref,
+        declared: route.declared,
+        declaration: deskRoot ? relative(deskRoot, route.documentPath) : route.documentPath,
+        observed: {
+          path: resolved,
           git: resolved ? await gitProbe(resolved) : { available: false, error: 'Broken Route.' },
-        })
-      }
+          observedAt: new Date().toISOString(),
+        },
+      })
     }
     const maps = artifacts.items
       .filter((artifact) => artifact.kind === 'endroit/sites:site-map' && artifact.sites?.includes(site.id))
       .sort((left, right) => String(right.createdAt ?? '').localeCompare(String(left.createdAt ?? '')))
-    const heads = new Set(routes.map((route) => route.git?.head).filter(Boolean))
-    const registered = new Map(routes.filter((route) => route.root).map((route) => [route.root, route.id]))
+    const heads = new Set(routes.map((route) => route.observed.git?.head).filter(Boolean))
+    const registered = new Map(routes.filter((route) => route.observed.path).map((route) => [route.observed.path, route.id]))
     const worktrees = new Map()
     for (const route of routes) {
-      for (const worktree of route.git?.worktrees ?? []) worktrees.set(worktree.path, {
+      for (const worktree of route.observed.git?.worktrees ?? []) worktrees.set(worktree.path, {
         ...worktree,
         route: registered.get(worktree.path) ?? null,
       })
@@ -769,7 +771,7 @@ function human(model, full) {
     `SITES       ${model.sites.length} declared · ${model.sites.reduce((sum, site) => sum + site.routes.length, 0)} routes`,
   ]
   for (const site of model.sites) {
-    const routes = site.routes.map((route) => `${route.id}:${route.git?.clean ? 'clean' : route.git?.available ? 'dirty' : 'broken'}@${route.root ?? 'missing'}`).join(' · ') || 'unbound'
+    const routes = site.routes.map((route) => `${route.id}:${route.observed.git?.clean ? 'clean' : route.observed.git?.available ? 'dirty' : 'broken'}@${route.observed.path ?? 'missing'}`).join(' · ') || 'unbound'
     lines.push(`  ${site.id.padEnd(18)} ${routes} · map:${site.map.state}${site.map.path ? `@${site.map.path}` : ''}`)
   }
   lines.push(`CONTEXT     instructions:${model.context.instructionBytes}B · desk:${model.context.deskInstructionBytes}B · model:${model.context.modelDescriptionBytes}B`)

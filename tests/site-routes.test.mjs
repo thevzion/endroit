@@ -22,12 +22,11 @@ test('Site worktrees are created, classified, discovered and adopted explicitly'
     await git(repository, ['branch', 'existing', 'starting-point'])
 
     const existing = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'existing-route', '--from', 'main', '--branch', 'existing'])
-    assert.deepEqual(select(existing, ['site', 'route', 'branch', 'head', 'sourceRoute', 'mode', 'checkout']), {
+    assert.deepEqual(select(existing, ['site', 'route', 'branch', 'head', 'mode', 'checkout']), {
       site: 'demo',
       route: 'existing-route',
       branch: 'existing',
       head: await git(repository, ['rev-parse', 'starting-point']),
-      sourceRoute: 'main',
       mode: 'managed-worktree',
       checkout: 'linked-worktree',
     })
@@ -43,7 +42,7 @@ test('Site worktrees are created, classified, discovered and adopted explicitly'
     const listed = await runtimeJson(home, ['list'])
     const site = listed.sites.find((entry) => entry.id === 'demo')
     assert.deepEqual(
-      site.routes.map(({ id, mode, evidence }) => [id, mode, evidence.checkout]),
+      site.routes.map(({ id, declared, observed }) => [id, declared.checkout.mode, observed.repository.checkout]),
       [
         ['existing-route', 'managed-worktree', 'linked-worktree'],
         ['main', 'existing', 'main'],
@@ -225,8 +224,8 @@ test('Sites can stay remote-only while different Desks own independent Routes', 
 
     await initDesk(home, { id: 'two', member: 'owner', repository: 'tracked' })
     await runtimeJson(home, ['route', 'bind', 'product', second, '--id', 'local'])
-    assert.equal(JSON.parse(await readFile(join(firstDesk, 'routes/product/local.json'), 'utf8')).path, await realpath(first))
-    assert.equal(JSON.parse(await readFile(join(home, '.desk/routes/product/local.json'), 'utf8')).path, await realpath(second))
+    assert.equal(JSON.parse(await readFile(join(firstDesk, 'routes/product/local.json'), 'utf8')).checkout.path, await realpath(first))
+    assert.equal(JSON.parse(await readFile(join(home, '.desk/routes/product/local.json'), 'utf8')).checkout.path, await realpath(second))
     assert.match(await readFile(join(home, 'sites/product/SITE.md'), 'utf8'), /repository: "github.com\/example\/product"/)
   } finally {
     await removeTree(temporary, { force: true })
@@ -342,8 +341,12 @@ async function runtimeJson(home, args, namespace = 'site') {
 
 async function runtimeFailure(home, args, code) {
   const output = captureIo()
-  assert.notEqual(await dispatchRuntime(home, 'site', args, output.io), 0)
-  assert.match(output.stderr(), new RegExp(code))
+  try {
+    assert.notEqual(await dispatchRuntime(home, 'site', args, output.io), 0)
+    assert.match(output.stderr(), new RegExp(code))
+  } catch (error) {
+    assert.equal(error.code, code)
+  }
 }
 
 async function localBranch(repository, branch) {

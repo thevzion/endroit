@@ -472,9 +472,9 @@ test('Sites separate deterministic inspection from agent-authored Map Artifacts'
     assert.deepEqual(await tree(site), before)
     const inspected = JSON.parse(inspectedOutput.stdout())
     assert.equal(inspected.status, 'inspected')
-    assert.deepEqual(inspected.files, ['README.md', 'package.json'])
-    assert.deepEqual(inspected.manifests, ['package.json'])
-    assert.deepEqual(inspected.tests, [])
+    assert.deepEqual(inspected.observed.files, ['README.md', 'package.json'])
+    assert.deepEqual(inspected.observed.manifests, ['package.json'])
+    assert.deepEqual(inspected.observed.tests, [])
 
     const mappedOutput = captureIo()
     assert.equal(await dispatchRuntime(home, 'artifact', [
@@ -486,7 +486,7 @@ test('Sites separate deterministic inspection from agent-authored Map Artifacts'
       '--status',
       'current',
       '--derived-from',
-      `site:demo@${inspected.head}`,
+      `site:demo@${inspected.observed.head}`,
       '--field',
       'sites=["demo"]',
       '--json',

@@ -16,13 +16,13 @@ export async function listArtifacts(homeRoot, deskRoot, plan) {
     ...(deskRoot ? [{ scope: 'desk', path: join(deskRoot, 'artifacts'), legacy: true }] : []),
   )
   for (const site of plan.sites ?? []) {
-    for (const route of await routes(homeRoot, deskRoot, site.id)) {
+    for (const route of (plan.routes ?? []).filter((entry) => entry.site === site.id)) {
       for (const kind of plan.artifactKinds.filter((entry) => entry.owners.includes('site') && entry.sitePath)) {
         roots.push({
           scope: `site:${site.id}`,
           route: route.id,
           site: site.id,
-          path: join(route.path, kind.sitePath),
+          path: join(route.declaredPath, kind.sitePath),
           legacy: false,
         })
       }
@@ -93,19 +93,6 @@ function normalizeMetadata(raw) {
 
 function isLegacyMetadata(raw) {
   return raw.state !== undefined || raw.createdAt !== undefined || raw.derivedFrom !== undefined
-}
-
-async function routes(homeRoot, deskRoot, siteId) {
-  if (!deskRoot) return []
-  const found = []
-  for (const entry of await safeReadDir(join(deskRoot, 'routes', siteId))) {
-    if (!entry.isFile() || entry.isSymbolicLink() || !entry.name.endsWith('.json')) continue
-    const document = JSON.parse(await readFile(join(deskRoot, 'routes', siteId, entry.name), 'utf8'))
-    if (document.$schema !== 'https://endroit.org/schema/v7/route.json' || document.site !== siteId) continue
-    const path = await realpath(resolve(homeRoot, document.path)).catch(() => null)
-    if (path) found.push({ id: document.id, path })
-  }
-  return found
 }
 
 function parseArtifact(content) {

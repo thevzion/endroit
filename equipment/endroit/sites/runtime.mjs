@@ -65,14 +65,11 @@ async function routeCommand(input, command, args, flags) {
 async function listSites(input) {
   return Promise.all(declarations(input).map(async (site) => {
     const routes = await routesFor(input, site.id)
-    const inspected = await Promise.all(routes.map(async (route) => {
-      const evidence = await routeRepositoryPath(input, route).then(inspectRepository).catch((error) => ({ available: false, error: error.message }))
-      return { ...route, mount: await inspectMount(input, route), matches: matchesSite(site, evidence), evidence }
-    }))
-    const registered = new Map(inspected.filter((route) => route.path).map((route) => [route.path, route.id]))
+    const inspected = await Promise.all(routes.map((route) => observeRoute(input, site, route)))
+    const registered = new Map(inspected.filter((route) => route.observed.path).map((route) => [route.observed.path, route.id]))
     const worktrees = new Map()
-    for (const route of inspected.filter((entry) => entry.matches && entry.evidence.available)) {
-      for (const worktree of route.evidence.worktrees) worktrees.set(worktree.path, {
+    for (const route of inspected.filter((entry) => entry.observed.matches && entry.observed.repository.available)) {
+      for (const worktree of route.observed.repository.worktrees) worktrees.set(worktree.path, {
         ...worktree,
         route: registered.get(worktree.path) ?? null,
         registered: registered.has(worktree.path),
@@ -90,16 +87,17 @@ async function listSites(input) {
 async function listRoutes(input, siteId) {
   if (siteId) {
     declaration(input, siteId)
-    return routesFor(input, siteId)
+    return (await routesFor(input, siteId)).map(routeDeclaration)
   }
   const values = []
-  for (const site of declarations(input)) values.push(...await routesFor(input, site.id))
+  for (const site of declarations(input)) values.push(...(await routesFor(input, site.id)).map(routeDeclaration))
   return values.sort((left, right) => left.site.localeCompare(right.site) || left.id.localeCompare(right.id))
 }
 
 async function inspectSite(input, id) {
   const site = declaration(input, id)
-  return { status: 'inspected', ...site, routes: await routesFor(input, id) }
+  const listed = (await listSites(input)).find((entry) => entry.id === id)
+  return { status: 'inspected', ...site, routes: listed.routes, worktrees: listed.worktrees }
 }
 
 async function inspectRoute(input, id, routeId) {
@@ -120,30 +118,37 @@ async function inspectRoute(input, id, routeId) {
     status: 'inspected',
     site: id,
     route: route.id,
-    mode: route.mode,
+    ref: route.ref,
+    declared: route.declared,
+    declaration: relative(input.deskRoot, route.documentPath),
     repository: site.repository ?? null,
-    root: evidence.root,
-    head: evidence.head,
-    branch: evidence.branch,
-    mount: await inspectMount(input, route),
-    workingTree: {
-      clean: evidence.clean,
-      changes: evidence.changes.length,
-      conflicts: evidence.conflicts,
-      operation: evidence.operation,
-      worktrees: evidence.worktrees.length,
+    observed: {
+      path: evidence.root,
+      head: evidence.head,
+      branch: evidence.branch,
+      checkout: evidence.checkout,
+      gitDir: evidence.gitDir,
+      commonGitDir: evidence.commonGitDir,
+      mount: await inspectMount(input, route),
+      workingTree: {
+        clean: evidence.clean,
+        changes: evidence.changes.length,
+        conflicts: evidence.conflicts,
+        operation: evidence.operation,
+        worktrees: evidence.worktrees.length,
+      },
+      observedAt: new Date().toISOString(),
+      files,
+      manifests: files.filter((path) => /(^|\/)(package\.json|pyproject\.toml|Cargo\.toml|go\.mod|Gemfile|composer\.json)$/.test(path)),
+      scripts: scripts.sort(),
+      tests: files.filter((path) => /(^|\/)(test|tests|spec|__tests__)(\/|$)|\.(test|spec)\.[^.]+$/i.test(path)).slice(0, 100),
+      limits: [
+        ...(trackedFiles.length > 5000 ? [`Tracked files are capped at 5,000 of ${trackedFiles.length}.`] : []),
+        'Manifest scripts are read from at most 20 package.json files.',
+        'Tests are detected from conventional paths and filenames and capped at 100.',
+        'No file content is interpreted by this scanner.',
+      ],
     },
-    observedAt: new Date().toISOString(),
-    files,
-    manifests: files.filter((path) => /(^|\/)(package\.json|pyproject\.toml|Cargo\.toml|go\.mod|Gemfile|composer\.json)$/.test(path)),
-    scripts: scripts.sort(),
-    tests: files.filter((path) => /(^|\/)(test|tests|spec|__tests__)(\/|$)|\.(test|spec)\.[^.]+$/i.test(path)).slice(0, 100),
-    limits: [
-      ...(trackedFiles.length > 5000 ? [`Tracked files are capped at 5,000 of ${trackedFiles.length}.`] : []),
-      'Manifest scripts are read from at most 20 package.json files.',
-      'Tests are detected from conventional paths and filenames and capped at 100.',
-      'No file content is interpreted by this scanner.',
-    ],
   }
 }
 
@@ -152,10 +157,10 @@ async function doctorSites(input) {
   const limits = []
   for (const site of sites) {
     for (const route of site.routes) {
-      if (!route.evidence.available) limits.push(`route-broken:${site.id}:${route.id}`)
-      else if (!route.matches) limits.push(`route-site-mismatch:${site.id}:${route.id}`)
-      if (route.evidence.conflicts) limits.push(`route-conflicts:${site.id}:${route.id}`)
-      if (route.mount && !['ready', 'direct'].includes(route.mount.status)) limits.push(`route-mount-${route.mount.status}:${site.id}:${route.id}`)
+      if (!route.observed.repository.available) limits.push(`route-broken:${site.id}:${route.id}`)
+      else if (!route.observed.matches) limits.push(`route-site-mismatch:${site.id}:${route.id}`)
+      if (route.observed.repository.conflicts) limits.push(`route-conflicts:${site.id}:${route.id}`)
+      if (route.observed.mount && !['ready', 'direct'].includes(route.observed.mount.status)) limits.push(`route-mount-${route.observed.mount.status}:${site.id}:${route.id}`)
     }
     const unregistered = site.worktrees.filter((worktree) => !worktree.registered)
     if (unregistered.length) limits.push(`site-worktrees-unrouted:${site.id}:${unregistered.length}`)
@@ -405,18 +410,22 @@ async function inspectMount(input, route) {
 }
 
 async function routesFor(input, id) {
-  if (!input.deskRoot) return []
-  const root = join(input.deskRoot, 'routes', id)
-  const values = []
-  for (const entry of await safeReadDir(root)) {
-    if (!entry.isFile() || entry.isSymbolicLink() || !entry.name.endsWith('.json')) continue
-    const documentPath = join(root, entry.name)
-    const route = JSON.parse(await readFile(documentPath, 'utf8'))
-    validateRoute(route, id, entry.name.slice(0, -5), input)
-    const declaredPath = isAbsolute(route.path) ? resolve(route.path) : resolve(input.homeRoot, route.path)
-    values.push({ ...route, documentPath, declaredPath, path: await canonicalPath(declaredPath) })
-  }
-  return values.sort((left, right) => left.id.localeCompare(right.id))
+  const values = (input.resolvedHome.routes ?? []).filter((route) => route.site === id)
+  return Promise.all(values.map(async (route) => {
+    const mode = route.declared.checkout.mode
+    const declaredPath = mode === 'embedded'
+      ? input.homeRoot
+      : mode.startsWith('managed-') ? managedPath(input, route.site, route.id) : route.declaredPath
+    return {
+      ...route,
+      declaredPath,
+      status: route.declared.status,
+      supersededBy: route.declared.supersededBy,
+      mode,
+      branch: route.declared.checkout.expectedBranch,
+      path: await canonicalPath(declaredPath),
+    }
+  }))
 }
 
 async function selectRoute(input, id, routeId, flag = '--id') {
@@ -451,21 +460,32 @@ async function writeRoute(input, route) {
   const path = join(root, `${route.id}.json`)
   await mkdir(root, { recursive: true })
   const document = {
-    $schema: 'https://endroit.org/schema/v7/route.json',
+    $schema: 'https://endroit.org/schema/v8/route.json',
     id: route.id,
     site: route.site,
-    mode: route.mode,
-    path: route.path,
-    ...(route.branch ? { branch: route.branch } : {}),
-    ...(route.sourceRoute ? { sourceRoute: route.sourceRoute } : {}),
+    status: route.status ?? 'active',
+    ...(route.supersededBy ? { supersededBy: route.supersededBy } : {}),
+    checkout: {
+      mode: route.mode,
+      ...(['existing', 'submodule'].includes(route.mode) ? { path: route.path } : {}),
+      ...(route.branch ? { expectedBranch: route.branch } : {}),
+    },
   }
   validateRoute(document, route.site, route.id, input)
   await writeJsonAtomic(path, document)
+  const declaredPath = ['embedded'].includes(route.mode)
+    ? input.homeRoot
+    : route.mode.startsWith('managed-') ? managedPath(input, route.site, route.id) : resolve(input.homeRoot, route.path)
   return {
     status: route.mode === 'managed-clone' ? 'cloned' : route.mode === 'managed-worktree' ? 'created' : 'bound',
-    ...document,
+    site: route.site,
     route: route.id,
-    path: await canonicalPath(isAbsolute(route.path) ? route.path : resolve(input.homeRoot, route.path)),
+    ref: `checkout:${route.site}/${route.id}`,
+    declared: { status: document.status, checkout: document.checkout },
+    observed: { path: await canonicalPath(declaredPath) },
+    mode: route.mode,
+    branch: route.branch,
+    path: await canonicalPath(declaredPath),
   }
 }
 
@@ -489,7 +509,7 @@ async function routeRepositoryPath(input, route) {
 }
 
 async function validateManagedCheckout(input, route, expected) {
-  const declaredPath = route.declaredPath ?? (isAbsolute(route.path) ? resolve(route.path) : resolve(input.homeRoot, route.path))
+  const declaredPath = route.declaredPath
   if (declaredPath !== managedPath(input, route.site, route.id)) {
     throw failure('route_path_invalid', `Managed Route ${route.site}/${route.id} must stay below its Desk checkout path.`)
   }
@@ -587,14 +607,41 @@ function declaration(input, id) {
 function matchesSite(site, evidence) { return evidence.available !== false && (!site.repository || evidence.remotes.some((remote) => remote.repository === site.repository)) }
 function assertSiteMatches(site, evidence) { if (!matchesSite(site, evidence)) throw failure('route_site_mismatch', `${evidence.root} does not match ${site.repository}.`) }
 function validateRoute(route, site, id, input) {
-  if (route.$schema !== 'https://endroit.org/schema/v7/route.json' || route.id !== id || route.site !== site || !['embedded', 'existing', 'managed-clone', 'managed-worktree', 'submodule'].includes(route.mode) || typeof route.path !== 'string' || !route.path) {
+  const checkout = route.checkout
+  if (route.$schema !== 'https://endroit.org/schema/v8/route.json' || route.id !== id || route.site !== site || !['active', 'parked', 'superseded'].includes(route.status) || !checkout || !['embedded', 'existing', 'managed-clone', 'managed-worktree', 'submodule'].includes(checkout.mode)) {
     throw failure('route_invalid', `Invalid Route ${site}/${id}.`)
   }
-  if (route.mode === 'embedded' && route.path !== '.') throw failure('route_path_invalid', `Embedded Route ${site}/${id} must point to the Home root.`)
-  if (route.mode.startsWith('managed-') && resolve(input.homeRoot, route.path) !== managedPath(input, site, id)) {
-    throw failure('route_path_invalid', `Managed Route ${site}/${id} must stay below its Desk checkout path.`)
+  const pathMode = ['existing', 'submodule'].includes(checkout.mode)
+  if (pathMode !== (typeof checkout.path === 'string' && checkout.path.length > 0)) throw failure('route_invalid', `Invalid Checkout path for Route ${site}/${id}.`)
+  if (route.status === 'superseded' ? !route.supersededBy : Boolean(route.supersededBy)) throw failure('route_invalid', `Invalid lifecycle for Route ${site}/${id}.`)
+  const rootKeys = Object.keys(route)
+  if (rootKeys.some((key) => !['$schema', 'id', 'site', 'status', 'supersededBy', 'checkout'].includes(key))) throw failure('route_invalid', `Invalid Route ${site}/${id}.`)
+  if (Object.keys(checkout).some((key) => !['mode', 'path', 'expectedBranch'].includes(key))) throw failure('route_invalid', `Invalid Checkout ${site}/${id}.`)
+}
+
+function routeDeclaration(route) {
+  return {
+    id: route.id,
+    site: route.site,
+    ref: route.ref,
+    schemaVersion: route.schemaVersion,
+    declared: route.declared,
+    declaration: relative(dirname(dirname(route.documentPath)), route.documentPath),
   }
-  if (route.mode === 'managed-worktree' && !route.sourceRoute) throw failure('route_invalid', `Managed worktree Route ${site}/${id} requires sourceRoute.`)
+}
+
+async function observeRoute(input, site, route) {
+  const repository = await routeRepositoryPath(input, route).then(inspectRepository).catch((error) => ({ available: false, error: error.message, worktrees: [], conflicts: 0 }))
+  return {
+    ...routeDeclaration(route),
+    observed: {
+      path: repository.root ?? route.path,
+      repository,
+      mount: await inspectMount(input, route),
+      matches: matchesSite(site, repository),
+      observedAt: new Date().toISOString(),
+    },
+  }
 }
 
 async function validateBranch(root, branch) {

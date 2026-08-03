@@ -365,17 +365,15 @@ function assertSourceScope(kind, scope) {
 }
 
 async function routes(input, siteId) {
-  if (!input.deskRoot) return []
-  const root = join(input.deskRoot, 'routes', siteId)
-  const found = []
-  for (const entry of await safeReadDir(root)) {
-    if (!entry.isFile() || entry.isSymbolicLink() || !entry.name.endsWith('.json')) continue
-    const document = JSON.parse(await readFile(join(root, entry.name), 'utf8'))
-    if (document.$schema !== 'https://endroit.org/schema/v7/route.json' || document.site !== siteId) continue
-    const path = await realpath(resolve(input.homeRoot, document.path)).catch(() => null)
-    if (path) found.push({ id: document.id, path })
-  }
-  return found
+  return Promise.all((input.resolvedHome.routes ?? [])
+    .filter((route) => route.site === siteId)
+    .map(async (route) => ({
+      id: route.id,
+      ref: route.ref,
+      declared: route.declared,
+      path: await realpath(route.declaredPath).catch(() => null),
+    })))
+    .then((found) => found.filter((route) => route.path))
 }
 
 async function selectRoute(input, siteId, routeId) {
