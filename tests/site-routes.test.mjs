@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -462,7 +462,8 @@ test('Route migration checks without effect and rollback preserves Git and Mount
       path: await realpath(repository),
       branch: 'main',
     }, null, 2)}\n`)
-    await writeFile(routePath, original, { mode: 0o600 })
+    await writeFile(routePath, original)
+    await chmod(routePath, 0o640)
     await writeFile(join(repository, 'dirty.txt'), 'preserve me\n')
     const mounted = await runtimeJson(home, ['route', 'mount', 'demo'])
     const invariant = await checkoutInvariant(repository, mounted.path)
@@ -479,13 +480,18 @@ test('Route migration checks without effect and rollback preserves Git and Mount
     const migrated = await runtimeJson(home, ['route', 'migrate', 'demo'])
     assert.equal(migrated.status, 'migrated')
     assert.equal(migrated.changes, 1)
+    assert.equal((await lstat(routePath)).mode & 0o777, 0o640)
     const v8 = JSON.parse(await readFile(routePath, 'utf8'))
     assert.equal(v8.$schema, 'https://endroit.org/schema/v8/route.json')
     assert.deepEqual(v8.checkout, { mode: 'existing', path: await realpath(repository), expectedBranch: 'main' })
     assert.equal('sourceRoute' in v8, false)
-    const journal = await readFile(join(migrationsRoot, migrated.runId, 'journal.json'), 'utf8')
+    const journalPath = join(migrationsRoot, migrated.runId, 'journal.json')
+    const journal = await readFile(journalPath, 'utf8')
     assert.doesNotMatch(journal, /"(?:head|dirty|clean|gitDir|commonGitDir)"/)
+    assert.equal(JSON.parse(journal).status, 'applied')
+    assert.deepEqual(JSON.parse(journal).routes.map(({ progress }) => progress), ['after'])
     assert.deepEqual(await checkoutInvariant(repository, mounted.path), invariant)
+    await runtimeFailure(home, ['route', 'migrate', 'demo', '--rollback', migrated.runId], 'usage')
 
     const appliedBytes = await readFile(routePath)
     await writeFile(routePath, `${JSON.stringify({ ...v8, status: 'parked' }, null, 2)}\n`)
@@ -495,11 +501,176 @@ test('Route migration checks without effect and rollback preserves Git and Mount
     const rolledBack = await runtimeJson(home, ['route', 'migrate', '--rollback', migrated.runId])
     assert.equal(rolledBack.status, 'rolled-back')
     assert.deepEqual(await readFile(routePath), original)
+    assert.equal((await lstat(routePath)).mode & 0o777, 0o640)
+    const completedJournal = JSON.parse(await readFile(journalPath, 'utf8'))
+    assert.equal(completedJournal.status, 'rolled-back')
+    assert.deepEqual(completedJournal.routes.map(({ progress }) => progress), ['original'])
+    assert.deepEqual(
+      await runtimeJson(home, ['route', 'migrate', '--rollback', migrated.runId]),
+      { status: 'current', runId: migrated.runId, changes: 0, routes: [] },
+    )
     assert.deepEqual(await checkoutInvariant(repository, mounted.path), invariant)
   } finally {
     await fixture.cleanup()
   }
 })
+
+test('Route migration filters one Site or Route and drops legacy worktree sourceRoute metadata', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository, temporary } = fixture
+    const legacy = await legacyRouteSet(home, repository)
+    const otherRepository = join(temporary, 'other-repository')
+    await gitInit(otherRepository)
+    await writeFile(join(otherRepository, 'README.md'), '# other\n')
+    await commit(otherRepository, 'other')
+    await runtimeJson(home, ['add', otherRepository, '--id', 'other'])
+    const otherPath = join(home, '.desk/routes/other/main.json')
+    await writeLegacyRoute(otherPath, {
+      $schema: 'https://endroit.org/schema/v7/route.json',
+      id: 'main',
+      site: 'other',
+      mode: 'existing',
+      path: await realpath(otherRepository),
+      branch: 'main',
+    })
+
+    assert.equal((await runtimeJson(home, ['route', 'migrate', '--check'])).changes, 3)
+    assert.equal((await runtimeJson(home, ['route', 'migrate', 'demo', '--check'])).changes, 2)
+    assert.equal((await runtimeJson(home, ['route', 'migrate', 'demo', '--id', 'main', '--check'])).changes, 1)
+
+    const migrated = await runtimeJson(home, ['route', 'migrate', 'demo', '--id', legacy.worktree.id])
+    assert.equal(migrated.changes, 1)
+    const worktreeV8 = JSON.parse(await readFile(legacy.worktree.path, 'utf8'))
+    assert.deepEqual(worktreeV8.checkout, { mode: 'managed-worktree', expectedBranch: legacy.worktree.branch })
+    assert.equal('path' in worktreeV8.checkout, false)
+    assert.equal('sourceRoute' in worktreeV8, false)
+    assert.equal(JSON.parse(await readFile(legacy.main.path, 'utf8')).$schema, 'https://endroit.org/schema/v7/route.json')
+    assert.equal(JSON.parse(await readFile(otherPath, 'utf8')).$schema, 'https://endroit.org/schema/v7/route.json')
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Route migration rollback resumes prepared, applying and rolling-back multi-Route runs under one lock', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository, temporary } = fixture
+    await legacyRouteSet(home, repository)
+
+    const prepared = await runtimeJson(home, ['route', 'migrate', 'demo'])
+    const preparedRun = await migrationRun(home, prepared.runId)
+    for (const entry of preparedRun.journal.routes) await restoreMigrationOriginal(home, preparedRun.root, entry)
+    await rewriteMigrationJournal(preparedRun, 'prepared', () => 'original')
+    const preparedRecovery = await runtimeJson(home, ['route', 'migrate', '--rollback', prepared.runId])
+    assert.equal(preparedRecovery.status, 'rolled-back')
+    assert.equal(preparedRecovery.changes, 0)
+
+    const applying = await runtimeJson(home, ['route', 'migrate', 'demo'])
+    const applyingRun = await migrationRun(home, applying.runId)
+    await restoreMigrationOriginal(home, applyingRun.root, applyingRun.journal.routes[0])
+    await rewriteMigrationJournal(applyingRun, 'applying', (_entry, index) => index === 0 ? 'original' : 'after')
+    const applyingRecovery = await runtimeJson(home, ['route', 'migrate', '--rollback', applying.runId])
+    assert.equal(applyingRecovery.status, 'rolled-back')
+    assert.equal(applyingRecovery.changes, applyingRun.journal.routes.length - 1)
+    assert.equal((await migrationRun(home, applying.runId)).journal.status, 'rolled-back')
+
+    const rollingBack = await runtimeJson(home, ['route', 'migrate', 'demo'])
+    const rollingBackRun = await migrationRun(home, rollingBack.runId)
+    await restoreMigrationOriginal(home, rollingBackRun.root, rollingBackRun.journal.routes[0])
+    await rewriteMigrationJournal(rollingBackRun, 'rolling-back', (_entry, index) => index === 0 ? 'original' : 'after')
+    const rollbackRecovery = await runtimeJson(home, ['route', 'migrate', '--rollback', rollingBack.runId])
+    assert.equal(rollbackRecovery.status, 'rolled-back')
+    assert.equal(rollbackRecovery.changes, rollingBackRun.journal.routes.length - 1)
+    assert.deepEqual((await migrationRun(home, rollingBack.runId)).journal.routes.map(({ progress }) => progress), ['original', 'original'])
+
+    const lockRoot = join(home, '.endroit/migrations/checkout-v8')
+    const lockPath = join(lockRoot, '.lock')
+    await writeFile(lockPath, `${JSON.stringify({ pid: process.pid })}\n`, { flag: 'wx' })
+    const beforeLock = await readFile(join(home, '.desk/routes/demo/main.json'))
+    await runtimeFailure(home, ['route', 'migrate', 'demo'], 'route_migration_locked')
+    assert.deepEqual(await readFile(join(home, '.desk/routes/demo/main.json')), beforeLock)
+    await rm(lockPath)
+
+    await writeFile(lockPath, `${JSON.stringify({ pid: 2147483647 })}\n`, { flag: 'wx' })
+    const staleRecovered = await runtimeJson(home, ['route', 'migrate', 'demo'])
+    assert.equal(staleRecovered.status, 'migrated')
+    await runtimeJson(home, ['route', 'migrate', '--rollback', staleRecovered.runId])
+
+    const corrupt = await runtimeJson(home, ['route', 'migrate', 'demo'])
+    const corruptRun = await migrationRun(home, corrupt.runId)
+    const originalRoot = join(corruptRun.root, 'originals')
+    const originalSite = join(originalRoot, corruptRun.journal.routes[0].site)
+    const external = join(temporary, 'forged-originals')
+    await mkdir(external)
+    await rm(originalSite, { recursive: true })
+    await symlink(external, originalSite, 'dir')
+    await runtimeFailure(home, ['route', 'migrate', '--rollback', corrupt.runId], 'route_rollback_corrupt')
+    await runtimeFailure(home, ['route', 'migrate', '--rollback', 'missing-run'], 'route_migration_missing')
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+async function legacyRouteSet(home, repository) {
+  await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'legacy-worktree', '--from', 'main', '--new-branch', 'legacy-worktree'])
+  const main = {
+    id: 'main',
+    path: join(home, '.desk/routes/demo/main.json'),
+    document: {
+      $schema: 'https://endroit.org/schema/v7/route.json',
+      id: 'main',
+      site: 'demo',
+      mode: 'existing',
+      path: await realpath(repository),
+      branch: 'main',
+    },
+  }
+  const worktree = {
+    id: 'legacy-worktree',
+    branch: 'legacy-worktree',
+    path: join(home, '.desk/routes/demo/legacy-worktree.json'),
+    document: {
+      $schema: 'https://endroit.org/schema/v7/route.json',
+      id: 'legacy-worktree',
+      site: 'demo',
+      mode: 'managed-worktree',
+      path: 'checkouts/demo/legacy-worktree',
+      branch: 'legacy-worktree',
+      sourceRoute: 'main',
+    },
+  }
+  await writeLegacyRoute(main.path, main.document)
+  await writeLegacyRoute(worktree.path, worktree.document)
+  return { main, worktree }
+}
+
+async function writeLegacyRoute(path, document, mode = 0o600) {
+  const bytes = Buffer.from(`${JSON.stringify(document, null, 2)}\n`)
+  await writeFile(path, bytes)
+  await chmod(path, mode)
+  return bytes
+}
+
+async function migrationRun(home, runId) {
+  const root = join(home, '.endroit/migrations/checkout-v8', runId)
+  const journalPath = join(root, 'journal.json')
+  return { root, journalPath, journal: JSON.parse(await readFile(journalPath, 'utf8')) }
+}
+
+async function restoreMigrationOriginal(home, root, entry) {
+  await writeFile(join(home, entry.declaration), await readFile(join(root, entry.original)))
+  await chmod(join(home, entry.declaration), entry.mode)
+}
+
+async function rewriteMigrationJournal(run, status, progress) {
+  run.journal = {
+    ...run.journal,
+    status,
+    routes: run.journal.routes.map((entry, index) => ({ ...entry, progress: progress(entry, index) })),
+  }
+  await writeFile(run.journalPath, `${JSON.stringify(run.journal, null, 2)}\n`)
+}
 
 async function siteFixture() {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-site-worktrees-'))
