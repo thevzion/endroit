@@ -1,8 +1,9 @@
 import { lstat, mkdir, readFile, readdir } from 'node:fs/promises'
-import { join, relative, resolve } from 'node:path'
+import { join, relative } from 'node:path'
 import { API, validateDocument } from './contracts.mjs'
 import { EndroitError } from './lib/errors.mjs'
 import { assertId, writeFileAtomic, writeJsonAtomic } from './lib/io.mjs'
+import { resolveCheckout, routeV8Document } from './routes.mjs'
 
 export async function loadSites(root) {
   const sitesRoot = join(root, 'sites')
@@ -46,19 +47,11 @@ export async function writeSite(root, site) {
 }
 
 export async function writeRoute(root, deskRoot, route) {
-  const document = await validateDocument({
-    $schema: API.route,
-    id: assertId(route.id, 'Route id'),
-    site: assertId(route.site, 'Site id'),
-    mode: route.mode,
-    path: route.path,
-    ...(route.branch ? { branch: route.branch } : {}),
-    ...(route.sourceRoute ? { sourceRoute: route.sourceRoute } : {}),
-  }, 'route')
+  const document = await routeV8Document(route)
   const path = join(deskRoot, 'routes', document.site, `${document.id}.json`)
   await mkdir(join(deskRoot, 'routes', document.site), { recursive: true })
   await writeJsonAtomic(path, document, 0o600)
-  return { ...document, resolvedPath: resolve(root, document.path) }
+  return resolveCheckout(root, document, { documentPath: path })
 }
 
 function frontmatter(content, path) {

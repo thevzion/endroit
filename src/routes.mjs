@@ -1,4 +1,5 @@
-import { isAbsolute, join, resolve } from 'node:path'
+import { lstat, readFile, readdir } from 'node:fs/promises'
+import { isAbsolute, join, relative, resolve } from 'node:path'
 import { API, validateRouteDocument } from './contracts.mjs'
 import { EndroitError } from './lib/errors.mjs'
 import { assertId } from './lib/io.mjs'
@@ -10,6 +11,34 @@ export function managedCheckoutPath(homeRoot, site, route) {
   return join(homeRoot, 'checkouts', assertId(site, 'Site id'), assertId(route, 'Route id'))
 }
 
+export async function loadRoutes(homeRoot, deskRoot, sites = []) {
+  if (!deskRoot) return []
+  const declaredSites = new Set(sites.map((site) => site.id))
+  const values = []
+  for (const siteEntry of await directories(join(deskRoot, 'routes'))) {
+    if (declaredSites.size && !declaredSites.has(siteEntry.name)) {
+      throw new EndroitError('route_site_missing', `Routes declare unknown Site ${siteEntry.name}.`)
+    }
+    const siteRoot = join(deskRoot, 'routes', siteEntry.name)
+    for (const entry of await safeReadDir(siteRoot)) {
+      if (!entry.isFile() || entry.isSymbolicLink() || !entry.name.endsWith('.json')) continue
+      const documentPath = join(siteRoot, entry.name)
+      let document
+      try {
+        document = JSON.parse(await readFile(documentPath, 'utf8'))
+      } catch (error) {
+        throw new EndroitError('route_invalid', `${relative(homeRoot, documentPath)} is not valid JSON: ${error.message}`)
+      }
+      values.push(await resolveCheckout(homeRoot, document, {
+        site: siteEntry.name,
+        id: entry.name.slice(0, -5),
+        documentPath,
+      }))
+    }
+  }
+  return values.sort((left, right) => left.site.localeCompare(right.site) || left.id.localeCompare(right.id))
+}
+
 export async function resolveCheckout(homeRoot, document, options = {}) {
   await validateRouteDocument(document)
   const site = options.site ?? document.site
@@ -17,7 +46,7 @@ export async function resolveCheckout(homeRoot, document, options = {}) {
   if (document.site !== site || document.id !== id) {
     throw new EndroitError('route_invalid', `Route ${site}/${id} identity does not match its document.`)
   }
-  const version = document.$schema === API.routeV8 ? 8 : 7
+  const version = document.$schema === API.route ? 8 : 7
   const declared = version === 8 ? declaredV8(document) : declaredV7(homeRoot, document)
   const declaredPath = checkoutPath(homeRoot, site, id, declared.checkout)
   return {
@@ -32,13 +61,9 @@ export async function resolveCheckout(homeRoot, document, options = {}) {
 }
 
 export async function routeV8Document(route) {
-  const checkout = route.checkout ?? {
-    mode: route.mode,
-    ...(route.path !== undefined ? { path: route.path } : {}),
-    ...(route.branch ? { expectedBranch: route.branch } : {}),
-  }
+  const checkout = route.checkout ?? legacyCheckout(route)
   const document = {
-    $schema: API.routeV8,
+    $schema: API.route,
     id: assertId(route.id, 'Route id'),
     site: assertId(route.site, 'Site id'),
     status: route.status ?? 'active',
@@ -46,6 +71,14 @@ export async function routeV8Document(route) {
     checkout,
   }
   return validateRouteDocument(document)
+}
+
+function legacyCheckout(route) {
+  return {
+    mode: route.mode,
+    ...(['existing', 'submodule'].includes(route.mode) && route.path !== undefined ? { path: route.path } : {}),
+    ...(route.branch ? { expectedBranch: route.branch } : {}),
+  }
 }
 
 function declaredV8(document) {
@@ -77,4 +110,19 @@ function checkoutPath(homeRoot, site, id, checkout) {
   if (checkout.mode === 'embedded') return resolve(homeRoot)
   if (checkout.mode.startsWith('managed-')) return managedCheckoutPath(homeRoot, site, id)
   return isAbsolute(checkout.path) ? resolve(checkout.path) : resolve(homeRoot, checkout.path)
+}
+
+async function directories(path) {
+  return (await safeReadDir(path)).filter((entry) => entry.isDirectory() && !entry.isSymbolicLink())
+}
+
+async function safeReadDir(path) {
+  try {
+    const info = await lstat(path)
+    if (info.isSymbolicLink() || !info.isDirectory()) throw new EndroitError('route_root_invalid', `${path} must be a directory.`)
+    return (await readdir(path, { withFileTypes: true })).sort((left, right) => left.name.localeCompare(right.name))
+  } catch (error) {
+    if (error.code === 'ENOENT') return []
+    throw error
+  }
 }

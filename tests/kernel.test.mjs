@@ -141,11 +141,11 @@ test('init embeds a Home in an existing repository without merging Site and Home
     assert.equal(await readFile(join(repository, 'README.md'), 'utf8'), '# Existing product\n')
     assert.match(await readFile(join(repository, 'sites/self/SITE.md'), 'utf8'), /kind: "site"/)
     assert.deepEqual(JSON.parse(await readFile(join(repository, '.desk/routes/self/embedded.json'), 'utf8')), {
-      $schema: 'https://endroit.org/schema/v7/route.json',
+      $schema: 'https://endroit.org/schema/v8/route.json',
       id: 'embedded',
       site: 'self',
-      mode: 'embedded',
-      path: '.',
+      status: 'active',
+      checkout: { mode: 'embedded' },
     })
     assert.equal((await exec('git', ['check-ignore', '.desk/routes/self/embedded.json'], { cwd: repository })).stdout.trim(), '.desk/routes/self/embedded.json')
     assert.equal((await resolveHome(repository)).sites[0].id, 'self')

@@ -9,6 +9,7 @@ import { DESK_INSTRUCTION, HOME_INSTRUCTION, readInstructionFile } from './instr
 import { EndroitError } from './lib/errors.mjs'
 import { resolvePackageFile } from './lib/io.mjs'
 import { loadSites } from './sites.mjs'
+import { loadRoutes } from './routes.mjs'
 import { listMembers } from './member.mjs'
 
 export async function resolveHome(root) {
@@ -41,8 +42,9 @@ export async function resolveHome(root) {
 
   const equipment = [...effective.values()].sort((left, right) => left.id.localeCompare(right.id))
   const sites = await loadSites(root)
-  const routes = await accessorRoutes(root, desk, sites)
-  assertRoomIdentities(routes.room)
+  const declaredRoutes = await loadRoutes(root, desk ? join(root, '.desk') : null, sites)
+  const accessors = await accessorRoutes(root, desk, sites)
+  assertRoomIdentities(accessors.room)
   const plan = {
     root,
     home,
@@ -64,9 +66,10 @@ export async function resolveHome(root) {
     } : null,
     equipment: [],
     catalog,
-    rooms: routes.room,
-    meetings: routes.meeting,
-    sites: routes.site,
+    rooms: accessors.room,
+    meetings: accessors.meeting,
+    sites: accessors.site,
+    routes: declaredRoutes,
     roomNamespaces: [],
     instructions: [],
     capabilities: [],
@@ -107,12 +110,12 @@ export async function resolveHome(root) {
     for (const item of manifest.capabilities ?? []) plan.capabilities.push(material(entry, item))
     for (const item of manifest.references ?? []) plan.references.push(material(entry, item))
     for (const item of manifest.skills ?? []) {
-      for (const route of item.forEach ? routes[item.forEach] : [null]) {
+      for (const route of item.forEach ? accessors[item.forEach] : [null]) {
         plan.skills.push(accessor(home, entry, item, 'model', route))
       }
     }
     for (const item of manifest.commands ?? []) {
-      for (const route of item.forEach ? routes[item.forEach] : [null]) {
+      for (const route of item.forEach ? accessors[item.forEach] : [null]) {
         plan.commands.push(accessor(home, entry, item, 'user', route))
       }
     }
@@ -166,6 +169,10 @@ export function publicPlan(plan) {
     rooms: plan.rooms,
     meetings: plan.meetings,
     sites: plan.sites,
+    routes: plan.routes.map((route) => ({
+      ...route,
+      documentPath: relative(plan.root, route.documentPath),
+    })),
     roomNamespaces: plan.roomNamespaces,
     instructions: plan.instructions.map(withoutRoot),
     capabilities: plan.capabilities.map(withoutRoot),

@@ -9,8 +9,8 @@ export const API = Object.freeze({
   desk: 'https://endroit.org/schema/v7/desk.json',
   member: 'https://endroit.org/schema/v7/member.json',
   site: 'https://endroit.org/schema/v7/site.json',
-  route: 'https://endroit.org/schema/v7/route.json',
-  routeV8: 'https://endroit.org/schema/v8/route.json',
+  route: 'https://endroit.org/schema/v8/route.json',
+  routeV7: 'https://endroit.org/schema/v7/route.json',
   artifact: 'https://endroit.org/schema/v7/artifact.json',
   runtime: 'endroit.org/runtime/v2alpha1',
 })
@@ -54,9 +54,9 @@ export async function validateDocument(document, type) {
 
 export async function validateRouteDocument(document) {
   let validate
-  if (document?.$schema === API.route) {
+  if (document?.$schema === API.routeV7) {
     validate = (await validators()).get('route')
-  } else if (document?.$schema === API.routeV8) {
+  } else if (document?.$schema === API.route) {
     routeV8ValidatorPromise ??= (async () => {
       const ajv = new Ajv2020({ allErrors: true, strict: true, strictRequired: false })
       const path = fileURLToPath(new URL('../schemas/v8/route.schema.json', import.meta.url))
