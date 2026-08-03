@@ -39,6 +39,17 @@ test('Publishing migrates mapped Work graphs from resolved Home and Desk Rooms',
 
   try {
     for (const room of rooms) createRoomFixture(homeRoot, room)
+    const crossRoomHandle = join(publishingRoot(homeRoot, rooms[0]), 'handles/web/cross-room.md')
+    writeFileSync(crossRoomHandle, document({
+      id: 'cross-room',
+      kind: 'publishing-handle',
+      status: 'published',
+      owner: rooms[0].ref,
+      publication: 'artifact:desk/initiatives/launch/publishing/publication/announcement-post',
+      system: 'web',
+      remote_id: 'cross-room',
+      url: 'https://example.test/cross-room',
+    }, '# Cross-Room Handle\n'))
     const resolvedHome = { rooms: rooms.map(({ id, scope, ref, path }) => ({ kind: 'room', id, scope, ref, path })) }
     const direct = (args, env = {}) => spawnSync(process.execPath, [runtime], {
       input: JSON.stringify({ argv: [...args, '--json'], homeRoot, resolvedHome }),
@@ -57,6 +68,7 @@ test('Publishing migrates mapped Work graphs from resolved Home and Desk Rooms',
     assert.deepEqual(inspection.rooms.map(({ room }) => room), rooms.map(({ ref }) => ref))
     assert.deepEqual(inspection.rooms[0].unmapped, ['retained-note'])
     assert.equal(inspection.rooms[0].retainedHandles, 1)
+    assert.equal(inspection.rooms[0].handles, 2)
 
     const failedPrepare = direct(['migrate', migration, 'prepare'], { ENDROIT_PUBLISHING_FAIL_AFTER: '4' })
     assert.notEqual(failedPrepare.status, 0)
@@ -67,7 +79,7 @@ test('Publishing migrates mapped Work graphs from resolved Home and Desk Rooms',
     }
 
     const prepared = run(['migrate', migration, 'prepare'])
-    assert.equal(prepared.snapshotFiles, 5)
+    assert.equal(prepared.snapshotFiles, 6)
     const failedApply = direct(['migrate', migration, 'apply'], { ENDROIT_PUBLISHING_FAIL_AFTER: '1' })
     assert.notEqual(failedApply.status, 0)
     for (const room of rooms) assert.equal(existsSync(join(publishingRoot(homeRoot, room), 'work')), false)
@@ -86,6 +98,7 @@ test('Publishing migrates mapped Work graphs from resolved Home and Desk Rooms',
     assert.equal(run(['validate']).status, 'valid')
     const handle = readFileSync(join(publishingRoot(homeRoot, rooms[0]), 'handles/web/brief.md'), 'utf8')
     assert.match(handle, /publication: "artifact:home\/studio\/publishing\/work\/brief\/publication\/brief-web"/)
+    assert.match(readFileSync(crossRoomHandle, 'utf8'), /publication: "artifact:desk\/initiatives\/launch\/publishing\/work\/announcement\/publication\/announcement-post"/)
     assert.match(readFileSync(join(publishingRoot(homeRoot, rooms[1]), 'handles/feed/announcement.md'), 'utf8'), /publication: "artifact:desk\/initiatives\/launch\/publishing\/work\/announcement\/publication\/announcement-post"/)
     assert.match(readFileSync(join(publishingRoot(homeRoot, rooms[0]), 'publication/retained-note/artifact.md'), 'utf8'), /status: "ready"/)
     assert.match(readFileSync(join(publishingRoot(homeRoot, rooms[0]), 'handles/web/retained.md'), 'utf8'), /publication: "artifact:home\/studio\/publishing\/publication\/retained-note"/)
@@ -107,6 +120,7 @@ test('Publishing migrates mapped Work graphs from resolved Home and Desk Rooms',
       assert.equal(manifest.state, 'rolled_back')
     }
     assert.equal(existsSync(join(publishingRoot(homeRoot, rooms[1]), 'handles/feed/announcement.md')), false)
+    assert.match(readFileSync(crossRoomHandle, 'utf8'), /publication: "artifact:desk\/initiatives\/launch\/publishing\/publication\/announcement-post"/)
   } finally {
     rmSync(homeRoot, { recursive: true, force: true })
   }

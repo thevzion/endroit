@@ -41,9 +41,10 @@ async function migrate(input, migration, phase) {
 
 async function inspectMigration(input) {
   const mappings = await loadMappings(input)
+  const mappedRefs = mappedLegacyRefs(mappings)
   const rooms = []
   for (const mapping of mappings) {
-    const inventory = await inventoryRoom(input, mapping)
+    const inventory = await inventoryRoom(input, mapping, mappedRefs)
     const manifest = await readJson(manifestPath(input, mapping.room), null)
     rooms.push({
       room: mapping.room,
@@ -66,6 +67,7 @@ async function inspectMigration(input) {
 
 async function prepare(input) {
   const mappings = await loadMappings(input)
+  const mappedRefs = mappedLegacyRefs(mappings)
   const inspection = await inspectMigration(input)
   assertBaseline(inspection)
   const existing = await Promise.all(mappings.map(({ room }) => readJson(manifestPath(input, room), null)))
@@ -78,7 +80,7 @@ async function prepare(input) {
   const stages = []
   try {
     for (const mapping of mappings) {
-      const inventory = await inventoryRoom(input, mapping)
+      const inventory = await inventoryRoom(input, mapping, mappedRefs)
       const root = migrationRoot(input, mapping.room)
       const legacy = join(root, 'legacy')
       if (await exists(legacy)) throw failure('snapshot_exists', `${rel(input, legacy)} already exists without a manifest.`)
@@ -660,7 +662,7 @@ function assertAcyclic(candidates, work) {
   for (const id of candidates.keys()) visit(id)
 }
 
-async function inventoryRoom(input, mapping) {
+async function inventoryRoom(input, mapping, mappedRefs) {
   const root = publishingRoot(input, mapping.room)
   const expected = mapping.works.flatMap(({ publications }) => publications.map(({ id }) => id)).sort()
   const actual = (await safeReadDir(join(root, 'publication'))).filter((entry) => entry.isDirectory() && !entry.isSymbolicLink()).map(({ name }) => name).sort()
@@ -671,7 +673,6 @@ async function inventoryRoom(input, mapping) {
     join(root, 'publication', id, 'content.md'),
   ])
   for (const path of sourceFiles) await readRegular(path)
-  const mappedRefs = new Set(expected.map((id) => legacyRef(mapping.room, id)))
   const handles = []
   const retainedHandles = []
   for (const path of await findFiles(join(root, 'handles'))) {
@@ -762,6 +763,8 @@ function mappingIndex(mappings) {
   }
   return index
 }
+
+function mappedLegacyRefs(mappings) { return new Set(mappingIndex(mappings).keys()) }
 
 function findPublication(mapping, id) {
   for (const work of mapping.works) {
