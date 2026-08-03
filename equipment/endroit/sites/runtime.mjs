@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -31,6 +31,7 @@ const CHECKOUT_HELP = {
   list: 'endroit checkout list [site] [--json]',
   inspect: 'endroit checkout inspect checkout:<site>/<route> [--json]',
 }
+let routeWriterLockDepth = 0
 
 try {
   const input = JSON.parse(await stdin())
@@ -61,22 +62,28 @@ async function siteCommand(input, command, args, flags) {
 }
 
 async function routeCommand(input, command, args, flags) {
-  if (command === 'list') return { status: 'listed', routes: await listRoutes(input, args[0]) }
-  if (command === 'inspect') return inspectRoute(input, required(args[0], 'Site id'), flags.id)
-  if (command === 'bind') return bindRoute(input, required(args[0], 'Site id'), required(args[1], 'Repository path'), flags.id)
-  if (command === 'clone') return cloneRoute(input, required(args[0], 'Site id'), flags.id)
-  if (command === 'worktree') return createWorktree(input, required(args[0], 'Site id'), flags)
-  if (command === 'mount') return mountRoute(input, required(args[0], 'Site id'), flags.id)
-  if (command === 'unmount') return unmountRoute(input, required(args[0], 'Site id'), flags.id)
-  if (command === 'park') return transitionRoute(input, required(args[0], 'Site id'), flags.id, 'parked')
-  if (command === 'activate') return transitionRoute(input, required(args[0], 'Site id'), flags.id, 'active')
-  if (command === 'supersede') return supersedeRoute(input, required(args[0], 'Site id'), required(flags.id, 'Route id'), required(flags.by, 'Replacement Route id'))
-  if (command === 'migrate') {
-    if (flags.rollback && args.length) throw failure('usage', 'route migrate --rollback does not accept a Site.', 2)
-    return flags.rollback ? rollbackRouteMigration(input, flags.rollback, flags) : migrateRoutes(input, args[0], flags)
+  const execute = async () => {
+    if (command === 'list') return { status: 'listed', routes: await listRoutes(input, args[0]) }
+    if (command === 'inspect') return inspectRoute(input, required(args[0], 'Site id'), flags.id)
+    if (command === 'bind') return bindRoute(input, required(args[0], 'Site id'), required(args[1], 'Repository path'), flags.id)
+    if (command === 'clone') return cloneRoute(input, required(args[0], 'Site id'), flags.id)
+    if (command === 'worktree') return createWorktree(input, required(args[0], 'Site id'), flags)
+    if (command === 'mount') return mountRoute(input, required(args[0], 'Site id'), flags.id)
+    if (command === 'unmount') return unmountRoute(input, required(args[0], 'Site id'), flags.id)
+    if (command === 'park') return transitionRoute(input, required(args[0], 'Site id'), flags.id, 'parked')
+    if (command === 'activate') return transitionRoute(input, required(args[0], 'Site id'), flags.id, 'active')
+    if (command === 'supersede') return supersedeRoute(input, required(args[0], 'Site id'), required(flags.id, 'Route id'), required(flags.by, 'Replacement Route id'))
+    if (command === 'migrate') {
+      if (flags.rollback === true) throw failure('usage', '--rollback requires a migration run id.', 2)
+      if (flags.rollback && args.length) throw failure('usage', 'route migrate --rollback does not accept a Site.', 2)
+      return flags.rollback ? rollbackRouteMigration(input, flags.rollback, flags) : migrateRoutes(input, args[0], flags)
+    }
+    if (command === 'remove') return removeRoute(input, required(args[0], 'Site id'), flags.id, flags)
+    throw failure('usage', 'endroit route bind|clone|worktree|mount|unmount|park|activate|supersede|migrate|list|inspect|remove', 2)
   }
-  if (command === 'remove') return removeRoute(input, required(args[0], 'Site id'), flags.id, flags)
-  throw failure('usage', 'endroit route bind|clone|worktree|mount|unmount|park|activate|supersede|migrate|list|inspect|remove', 2)
+  const mutations = ['bind', 'clone', 'worktree', 'mount', 'unmount', 'park', 'activate', 'supersede', 'migrate', 'remove']
+  if (!mutations.includes(command) || command === 'migrate' && (truthy(flags.check) && !flags.rollback || flags.rollback === true)) return execute()
+  return withRouteWriterLock(input, execute)
 }
 
 async function checkoutCommand(input, command, args, flags) {
@@ -301,9 +308,10 @@ async function bindRoute(input, id, repositoryPath, routeId = 'main', declaredSi
 }
 
 async function transitionRoute(input, siteId, routeId, status) {
-  const route = status === 'active'
+  let route = status === 'active'
     ? await selectRouteByStatus(input, siteId, routeId, 'parked')
     : await selectRoute(input, siteId, routeId, '--id', { allowInactive: true })
+  route = await freshRoute(input, route)
   requireV8Route(route)
   if (route.status === status) return { status: status === 'active' ? 'activated' : 'parked', site: siteId, route: route.id, ref: route.ref, declared: route.declared }
   const expected = status === 'parked' ? 'active' : 'parked'
@@ -321,8 +329,10 @@ async function transitionRoute(input, siteId, routeId, status) {
 
 async function supersedeRoute(input, siteId, routeId, replacementId) {
   if (routeId === replacementId) throw failure('route_supersession_invalid', 'A Route cannot supersede itself.')
-  const route = await selectRoute(input, siteId, routeId, '--id', { allowInactive: true })
-  const replacement = await selectRoute(input, siteId, replacementId, '--id', { allowInactive: true })
+  let route = await selectRoute(input, siteId, routeId, '--id', { allowInactive: true })
+  let replacement = await selectRoute(input, siteId, replacementId, '--id', { allowInactive: true })
+  route = await freshRoute(input, route)
+  replacement = await freshRoute(input, replacement)
   requireV8Route(route)
   requireV8Route(replacement)
   if (route.status !== 'active') throw failure('route_status_invalid', `Route ${siteId}/${route.id} must be active before it can be superseded.`)
@@ -343,34 +353,18 @@ async function migrateRoutes(input, siteId, flags) {
   if (flags.rollback) throw failure('usage', '--rollback cannot be combined with migration.', 2)
   if (flags.id && !siteId) throw failure('usage', '--id requires a Site id.', 2)
   if (siteId) declaration(input, siteId)
-  const allRoutes = []
-  for (const site of declarations(input)) allRoutes.push(...await routesFor(input, site.id))
-  const candidates = allRoutes
-    .filter((route) => route.schemaVersion === 7 && (!siteId || route.site === siteId) && (!flags.id || route.id === flags.id))
-  if (flags.id && !candidates.length) {
-    const selected = allRoutes.find((route) => route.site === siteId && route.id === flags.id)
-    if (!selected) throw failure('route_missing', `${siteId} has no Route ${flags.id}.`)
+  if (truthy(flags.check)) {
+    const { summary } = await planRouteMigrations(input, siteId, flags)
+    return { status: 'checked', readOnly: true, changes: summary.length, routes: summary }
   }
-  const planned = candidates.map((route) => ({ route }))
-  const summary = planned.map(({ route }) => ({
-    ref: route.ref,
-    declaration: relative(input.homeRoot, route.documentPath),
-    from: 7,
-    to: 8,
-  }))
-  if (truthy(flags.check)) return { status: 'checked', readOnly: true, changes: summary.length, routes: summary }
-  if (!summary.length) return { status: 'current', changes: 0, routes: [] }
-  return withMigrationLock(input, async () => {
+  return withRouteWriterLock(input, async () => {
+    const { planned, summary } = await planRouteMigrations(input, siteId, flags)
+    if (!summary.length) return { status: 'current', changes: 0, routes: [] }
     const runId = migrationRunId()
     const root = join(migrationRoot(input), runId)
     await ensureSafeDirectories(input.homeRoot, join(root, 'originals'))
     const entries = []
-    for (const { route } of planned) {
-      await assertSafeRouteFile(input, route.documentPath)
-      const original = await readFile(route.documentPath)
-      const info = await lstat(route.documentPath)
-      const document = migrationDocumentFromV7(input, route, original)
-      const next = Buffer.from(`${JSON.stringify(document, null, 2)}\n`)
+    for (const { route, original, mode, next } of planned) {
       const originalPath = join(root, 'originals', route.site, `${route.id}.json`)
       await ensureSafeDirectories(root, dirname(originalPath))
       await writeBytesAtomic(originalPath, original, 0o600)
@@ -380,7 +374,7 @@ async function migrateRoutes(input, siteId, flags) {
         id: route.id,
         declaration: relative(input.homeRoot, route.documentPath),
         original: relative(root, originalPath),
-        mode: info.mode & 0o777,
+        mode,
         beforeSha256: sha256(original),
         afterSha256: sha256(next),
         progress: 'original',
@@ -402,11 +396,15 @@ async function migrateRoutes(input, siteId, flags) {
       for (const entry of entries) {
         const destination = resolve(input.homeRoot, entry.declaration)
         await assertSafeRouteFile(input, destination)
-        const current = await readFile(destination)
-        if (sha256(current) !== entry.beforeSha256) throw failure('route_migration_drift', `${entry.declaration} changed after migration planning.`)
+        const current = await routeFileState(destination)
+        if (current.sha256 !== entry.beforeSha256 || current.mode !== entry.mode) throw failure('route_migration_drift', `${entry.declaration} changed after migration planning.`)
         await writeBytesAtomic(destination, entry.next, entry.mode)
         await assertSafeRouteFile(input, destination)
-        if (sha256(await readFile(destination)) !== entry.afterSha256) throw failure('route_migration_write_failed', `${entry.declaration} did not match its v8 digest.`)
+        const written = await routeFileState(destination)
+        if (written.sha256 !== entry.afterSha256 || written.mode !== entry.mode) throw failure('route_migration_write_failed', `${entry.declaration} did not match its v8 digest and mode.`)
+        if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_FAULT_AFTER_ROUTE_RENAME === `checkout:${entry.site}/${entry.id}`) {
+          throw failure('route_migration_fault', `Injected failure after writing ${entry.declaration}.`)
+        }
         const progress = journal.routes.map((route) => route.site === entry.site && route.id === entry.id ? { ...route, progress: 'after' } : route)
         journal = { ...journal, routes: progress, updatedAt: new Date().toISOString() }
         await writeJournal(input, root, journal)
@@ -421,11 +419,37 @@ async function migrateRoutes(input, siteId, flags) {
   })
 }
 
+async function planRouteMigrations(input, siteId, flags) {
+  const allRoutes = []
+  for (const site of declarations(input)) allRoutes.push(...await routesFor(input, site.id))
+  const candidates = allRoutes
+    .filter((route) => route.schemaVersion === 7 && (!siteId || route.site === siteId) && (!flags.id || route.id === flags.id))
+  if (flags.id && !candidates.length) {
+    const selected = allRoutes.find((route) => route.site === siteId && route.id === flags.id)
+    if (!selected) throw failure('route_missing', `${siteId} has no Route ${flags.id}.`)
+  }
+  const planned = []
+  for (const route of candidates) {
+    await assertSafeRouteFile(input, route.documentPath)
+    const original = await readFile(route.documentPath)
+    const mode = (await lstat(route.documentPath)).mode & 0o777
+    const document = migrationDocumentFromV7(input, route, original)
+    planned.push({ route, original, mode, next: Buffer.from(`${JSON.stringify(document, null, 2)}\n`) })
+  }
+  const summary = planned.map(({ route }) => ({
+    ref: route.ref,
+    declaration: relative(input.homeRoot, route.documentPath),
+    from: 7,
+    to: 8,
+  }))
+  return { planned, summary }
+}
+
 async function rollbackRouteMigration(input, runId, flags) {
   requireDesk(input)
   if (truthy(flags.check) || flags.id) throw failure('usage', '--rollback cannot be combined with --check or --id.', 2)
   if (!/^[a-z0-9][a-z0-9._-]{0,127}$/i.test(runId)) throw failure('route_migration_run_invalid', `Invalid migration run ${runId}.`, 2)
-  return withMigrationLock(input, async () => {
+  return withRouteWriterLock(input, async () => {
     const root = join(migrationRoot(input), runId)
     let journal = await readJournal(input, root, runId)
     if (journal.status === 'rolled-back') return { status: 'current', runId, changes: 0, routes: [] }
@@ -439,16 +463,18 @@ async function rollbackRouteMigration(input, runId, flags) {
     let changes = 0
     for (const item of classified) {
       await assertSafeRouteFile(input, item.destination)
-      const currentHash = sha256(await readFile(item.destination))
-      if (currentHash === item.entry.beforeSha256) {
+      const current = await routeFileState(item.destination)
+      if (current.mode !== item.entry.mode) throw failure('route_rollback_drift', `${item.entry.declaration} mode changed during rollback.`)
+      if (current.sha256 === item.entry.beforeSha256) {
         // A prior rollback attempt completed this Route before interruption.
-      } else if (currentHash === item.entry.afterSha256) {
+      } else if (current.sha256 === item.entry.afterSha256) {
         await assertSafeFileUnder(join(root, 'originals'), item.originalPath, 'route_rollback_corrupt')
         const original = await readFile(item.originalPath)
         if (sha256(original) !== item.entry.beforeSha256) throw failure('route_rollback_corrupt', `${item.entry.original} changed during rollback.`)
         await writeBytesAtomic(item.destination, original, item.entry.mode)
         await assertSafeRouteFile(input, item.destination)
-        if (sha256(await readFile(item.destination)) !== item.entry.beforeSha256) throw failure('route_rollback_write_failed', `${item.entry.declaration} did not restore its v7 digest.`)
+        const restored = await routeFileState(item.destination)
+        if (restored.sha256 !== item.entry.beforeSha256 || restored.mode !== item.entry.mode) throw failure('route_rollback_write_failed', `${item.entry.declaration} did not restore its v7 digest and mode.`)
         changes += 1
       } else {
         throw failure('route_rollback_drift', `${item.entry.declaration} changed during rollback.`)
@@ -505,7 +531,7 @@ async function createWorktree(input, id, flags) {
   if (Boolean(existingBranch) === Boolean(newBranch)) throw failure('site_worktree_branch_mode', 'Pass exactly one of --branch or --new-branch.', 2)
   if (flags['start-point'] && !newBranch) throw failure('site_worktree_start_point', '--start-point requires --new-branch.', 2)
   const site = declaration(input, id)
-  const source = await selectRoute(input, id, flags.from, '--from')
+  const source = await freshRoute(input, await selectRoute(input, id, flags.from, '--from'))
   const sourceEvidence = await inspectRepository(await routeRepositoryPath(input, source))
   assertSiteMatches(site, sourceEvidence)
   const branch = String(existingBranch ?? newBranch)
@@ -551,7 +577,7 @@ async function createWorktree(input, id, flags) {
 }
 
 async function removeRoute(input, id, routeId, flags) {
-  const route = await selectRoute(input, id, routeId, '--id', { allowInactive: Boolean(routeId) })
+  const route = await freshRoute(input, await selectRoute(input, id, routeId, '--id', { allowInactive: Boolean(routeId) }))
   const references = (await routesFor(input, id)).filter((entry) => entry.id !== route.id && entry.supersededBy === route.id)
   if (references.length) throw failure('route_supersession_target', `Route ${id}/${route.id} is still referenced by ${references.map((entry) => entry.ref).join(', ')}.`)
   const mount = await inspectMount(input, route)
@@ -583,7 +609,7 @@ async function removeRoute(input, id, routeId, flags) {
 }
 
 async function mountRoute(input, id, routeId) {
-  const route = await selectRoute(input, id, routeId)
+  const route = await freshRoute(input, await selectRoute(input, id, routeId))
   if (route.mode !== 'existing') throw failure('route_mount_mode', `Only an existing Route can be mounted; ${id}/${route.id} is ${route.mode}.`)
   const destination = mountPath(input, id, route.id)
   const current = await inspectMount(input, route)
@@ -596,7 +622,7 @@ async function mountRoute(input, id, routeId) {
 }
 
 async function unmountRoute(input, id, routeId) {
-  const route = await selectRoute(input, id, routeId)
+  const route = await freshRoute(input, await selectRoute(input, id, routeId))
   const destination = mountPath(input, id, route.id)
   let info
   try { info = await lstat(destination) } catch (error) {
@@ -646,6 +672,36 @@ async function routesFor(input, id) {
   }))
 }
 
+async function freshRoute(input, route) {
+  await assertSafeRouteFile(input, route.documentPath)
+  let document
+  try { document = JSON.parse(await readFile(route.documentPath, 'utf8')) } catch { throw failure('route_drift', `Route ${route.site}/${route.id} changed before mutation.`) }
+  if (document.$schema === 'https://endroit.org/schema/v7/route.json') {
+    if (document.site !== route.site || document.id !== route.id) throw failure('route_drift', `Route ${route.site}/${route.id} changed before mutation.`)
+    return route
+  }
+  validateRoute(document, route.site, route.id, input)
+  const mode = document.checkout.mode
+  const declaredPath = mode === 'embedded'
+    ? input.homeRoot
+    : mode.startsWith('managed-') ? managedPath(input, route.site, route.id) : isAbsolute(document.checkout.path) ? resolve(document.checkout.path) : resolve(input.homeRoot, document.checkout.path)
+  return {
+    ...route,
+    schemaVersion: 8,
+    declared: {
+      status: document.status,
+      ...(document.supersededBy ? { supersededBy: document.supersededBy } : {}),
+      checkout: { ...document.checkout },
+    },
+    declaredPath,
+    status: document.status,
+    supersededBy: document.supersededBy,
+    mode,
+    branch: document.checkout.expectedBranch,
+    path: await canonicalPath(declaredPath),
+  }
+}
+
 async function selectRoute(input, id, routeId, flag = '--id', options = {}) {
   declaration(input, id)
   const routes = await routesFor(input, id)
@@ -690,9 +746,14 @@ async function writeSite(input, site) {
 }
 
 async function writeRoute(input, route) {
+  return withRouteWriterLock(input, () => writeRouteUnlocked(input, route))
+}
+
+async function writeRouteUnlocked(input, route) {
   const root = join(input.deskRoot, 'routes', route.site)
   const path = join(root, `${route.id}.json`)
   await mkdir(root, { recursive: true })
+  if (await exists(path)) throw failure('route_exists', `Route ${route.site}/${route.id} already exists.`)
   const document = {
     $schema: 'https://endroit.org/schema/v8/route.json',
     id: route.id,
@@ -724,7 +785,7 @@ async function writeRoute(input, route) {
 }
 
 async function assertRouteAvailable(input, site, route) {
-  if ((await routesFor(input, site)).some((entry) => entry.id === route)) throw failure('route_exists', `Route ${site}/${route} already exists.`)
+  if (await exists(join(input.deskRoot, 'routes', site, `${route}.json`))) throw failure('route_exists', `Route ${site}/${route} already exists.`)
 }
 
 function managedPath(input, site, route) {
@@ -882,29 +943,43 @@ async function observeRoute(input, site, route) {
 }
 
 function migrationRoot(input) { return join(input.homeRoot, '.endroit', 'migrations', 'checkout-v8') }
+function routeWriterRoot(input) { return join(input.homeRoot, '.endroit', 'locks') }
 
-async function withMigrationLock(input, operation) {
-  const root = migrationRoot(input)
+async function withRouteWriterLock(input, operation) {
+  requireDesk(input)
+  if (routeWriterLockDepth) return operation()
+  const root = routeWriterRoot(input)
   await ensureSafeDirectories(input.homeRoot, root)
-  const lockPath = join(root, '.lock')
-  const lock = await acquireMigrationLock(lockPath)
+  const lockPath = join(root, 'routes.lock')
+  const lock = await acquireRouteWriterLock(lockPath)
+  routeWriterLockDepth += 1
   try {
     return await operation()
   } finally {
+    routeWriterLockDepth -= 1
     await lock.handle.close().catch(() => {})
     const current = await lstat(lockPath).catch(() => null)
-    if (current?.dev === lock.dev && current.ino === lock.ino) await rm(lockPath, { force: true }).catch(() => {})
+    if (current?.dev === lock.dev && current.ino === lock.ino) {
+      let owner
+      try { owner = JSON.parse(await readFile(lockPath, 'utf8')) } catch {}
+      if (owner?.token === lock.token) {
+        await rm(lockPath, { force: true }).catch(() => {})
+        await syncDirectory(root).catch(() => {})
+      }
+    }
   }
 }
 
-async function acquireMigrationLock(path, retry = true) {
+async function acquireRouteWriterLock(path, retry = true) {
   try {
     const handle = await open(path, 'wx', 0o600)
+    const token = randomUUID()
     try {
-      await handle.writeFile(`${JSON.stringify({ pid: process.pid, createdAt: new Date().toISOString() })}\n`)
+      await handle.writeFile(`${JSON.stringify({ token, pid: process.pid, startedAt: new Date().toISOString() })}\n`)
       await handle.sync()
+      await syncDirectory(dirname(path))
       const { dev, ino } = await handle.stat()
-      return { handle, dev, ino }
+      return { handle, dev, ino, token }
     } catch (error) {
       await handle.close().catch(() => {})
       await rm(path, { force: true }).catch(() => {})
@@ -912,13 +987,23 @@ async function acquireMigrationLock(path, retry = true) {
     }
   } catch (error) {
     if (error.code !== 'EEXIST') throw error
-    await assertRegularFile(path, 'route_migration_lock_invalid')
+    await assertRegularFile(path, 'route_writer_lock_invalid')
+    const observed = await lstat(path)
     let owner
-    try { owner = JSON.parse(await readFile(path, 'utf8')) } catch { throw failure('route_migration_lock_invalid', 'Checkout migration lock is invalid.') }
-    if (processAlive(owner.pid)) throw failure('route_migration_locked', `Checkout migration is locked by process ${owner.pid}.`)
-    if (!retry) throw failure('route_migration_locked', 'Checkout migration lock could not be recovered.')
+    try { owner = JSON.parse(await readFile(path, 'utf8')) } catch { throw failure('route_writer_lock_invalid', 'Route writer lock is invalid.') }
+    if (!owner || typeof owner.token !== 'string' || !owner.token || !Number.isInteger(owner.pid) || typeof owner.startedAt !== 'string' || Number.isNaN(Date.parse(owner.startedAt))) {
+      throw failure('route_writer_lock_invalid', 'Route writer lock metadata is invalid.')
+    }
+    if (processAlive(owner.pid)) throw failure('route_writer_locked', `Route mutation is locked by process ${owner.pid}.`)
+    if (!retry) throw failure('route_writer_locked', 'Route writer lock could not be recovered.')
+    const current = await lstat(path).catch(() => null)
+    if (!current || current.dev !== observed.dev || current.ino !== observed.ino) throw failure('route_writer_locked', 'Route writer lock changed during stale recovery.')
+    let currentOwner
+    try { currentOwner = JSON.parse(await readFile(path, 'utf8')) } catch { throw failure('route_writer_lock_invalid', 'Route writer lock is invalid.') }
+    if (currentOwner.token !== owner.token) throw failure('route_writer_locked', 'Route writer lock changed during stale recovery.')
     await rm(path)
-    return acquireMigrationLock(path, false)
+    await syncDirectory(dirname(path))
+    return acquireRouteWriterLock(path, false)
   }
 }
 
@@ -976,9 +1061,9 @@ async function classifyRollbackEntry(input, root, entry) {
   await assertSafeFileUnder(originalsRoot, originalPath, 'route_rollback_corrupt')
   const original = await readFile(originalPath)
   if (sha256(original) !== entry.beforeSha256) throw failure('route_rollback_corrupt', `${entry.original} does not match its journal digest.`)
-  const currentHash = sha256(await readFile(destination))
-  if (![entry.beforeSha256, entry.afterSha256].includes(currentHash)) throw failure('route_rollback_drift', `${entry.declaration} changed after migration.`)
-  return { entry, destination, originalPath, original, currentHash }
+  const current = await routeFileState(destination)
+  if (current.mode !== entry.mode || ![entry.beforeSha256, entry.afterSha256].includes(current.sha256)) throw failure('route_rollback_drift', `${entry.declaration} changed after migration.`)
+  return { entry, destination, originalPath }
 }
 
 async function assertSafeRouteFile(input, path) {
@@ -1144,8 +1229,9 @@ async function git(args, cwd) {
   try { return (await exec('git', args, { cwd, maxBuffer: 8 * 1024 * 1024, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } })).stdout.trim() }
   catch (error) { throw failure('git_failed', error.stderr?.trim() || error.message) }
 }
-async function writeJsonAtomic(path, document) {
-  await writeBytesAtomic(path, Buffer.from(`${JSON.stringify(document, null, 2)}\n`), 0o600)
+async function writeJsonAtomic(path, document, mode) {
+  mode ??= await lstat(path).then((info) => info.mode & 0o777).catch((error) => error.code === 'ENOENT' ? 0o600 : Promise.reject(error))
+  await writeBytesAtomic(path, Buffer.from(`${JSON.stringify(document, null, 2)}\n`), mode)
 }
 async function writeBytesAtomic(path, content, mode) {
   let temporary
@@ -1166,11 +1252,20 @@ async function writeBytesAtomic(path, content, mode) {
     await handle.close()
     handle = undefined
     await rename(temporary, path)
+    await syncDirectory(dirname(path))
   } catch (error) {
     await handle?.close().catch(() => {})
     await rm(temporary, { force: true }).catch(() => {})
     throw error
   }
+}
+async function syncDirectory(path) {
+  const handle = await open(path, 'r')
+  try { await handle.sync() } finally { await handle.close() }
+}
+async function routeFileState(path) {
+  const [bytes, info] = await Promise.all([readFile(path), lstat(path)])
+  return { sha256: sha256(bytes), mode: info.mode & 0o777 }
 }
 function sha256(value) { return createHash('sha256').update(value).digest('hex') }
 function migrationRunId() { return `${new Date().toISOString().replace(/[-:.]/g, '').replace('Z', 'z')}-${process.pid}` }

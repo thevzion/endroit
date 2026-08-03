@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -494,6 +494,9 @@ test('Route migration checks without effect and rollback preserves Git and Mount
     await runtimeFailure(home, ['route', 'migrate', 'demo', '--rollback', migrated.runId], 'usage')
 
     const appliedBytes = await readFile(routePath)
+    await chmod(routePath, 0o600)
+    await runtimeFailure(home, ['route', 'migrate', '--rollback', migrated.runId], 'route_rollback_drift')
+    await chmod(routePath, 0o640)
     await writeFile(routePath, `${JSON.stringify({ ...v8, status: 'parked' }, null, 2)}\n`)
     assert.notEqual(createHash('sha256').update(await readFile(routePath)).digest('hex'), JSON.parse(journal).routes[0].afterSha256)
     await runtimeFailure(home, ['route', 'migrate', '--rollback', migrated.runId], 'route_rollback_drift')
@@ -584,15 +587,18 @@ test('Route migration rollback resumes prepared, applying and rolling-back multi
     assert.equal(rollbackRecovery.changes, rollingBackRun.journal.routes.length - 1)
     assert.deepEqual((await migrationRun(home, rollingBack.runId)).journal.routes.map(({ progress }) => progress), ['original', 'original'])
 
-    const lockRoot = join(home, '.endroit/migrations/checkout-v8')
-    const lockPath = join(lockRoot, '.lock')
-    await writeFile(lockPath, `${JSON.stringify({ pid: process.pid })}\n`, { flag: 'wx' })
+    const lockRoot = join(home, '.endroit/locks')
+    const lockPath = join(lockRoot, 'routes.lock')
+    await mkdir(lockRoot, { recursive: true })
+    await writeFile(lockPath, `${JSON.stringify({ token: 'live-test-lock', pid: process.pid, startedAt: new Date().toISOString() })}\n`, { flag: 'wx' })
     const beforeLock = await readFile(join(home, '.desk/routes/demo/main.json'))
-    await runtimeFailure(home, ['route', 'migrate', 'demo'], 'route_migration_locked')
+    await runtimeFailure(home, ['route', 'migrate', 'demo'], 'route_writer_locked')
+    await runtimeFailure(home, ['route', 'park', 'demo'], 'route_writer_locked')
+    assert.equal((await runtimeJson(home, ['route', 'list', 'demo'])).status, 'listed')
     assert.deepEqual(await readFile(join(home, '.desk/routes/demo/main.json')), beforeLock)
     await rm(lockPath)
 
-    await writeFile(lockPath, `${JSON.stringify({ pid: 2147483647 })}\n`, { flag: 'wx' })
+    await writeFile(lockPath, `${JSON.stringify({ token: 'stale-test-lock', pid: 2147483647, startedAt: new Date().toISOString() })}\n`, { flag: 'wx' })
     const staleRecovered = await runtimeJson(home, ['route', 'migrate', 'demo'])
     assert.equal(staleRecovered.status, 'migrated')
     await runtimeJson(home, ['route', 'migrate', '--rollback', staleRecovered.runId])
@@ -607,6 +613,89 @@ test('Route migration rollback resumes prepared, applying and rolling-back multi
     await symlink(external, originalSite, 'dir')
     await runtimeFailure(home, ['route', 'migrate', '--rollback', corrupt.runId], 'route_rollback_corrupt')
     await runtimeFailure(home, ['route', 'migrate', '--rollback', 'missing-run'], 'route_migration_missing')
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Route migration recovers a fault after durable Route rename but before journal progress', async () => {
+  const fixture = await siteFixture()
+  const previousNodeEnv = process.env.NODE_ENV
+  const previousFault = process.env.ENDROIT_TEST_FAULT_AFTER_ROUTE_RENAME
+  try {
+    const { home, repository } = fixture
+    await legacyRouteSet(home, repository)
+    const migrationsRoot = join(home, '.endroit/migrations/checkout-v8')
+    const before = new Set(await readdir(migrationsRoot).catch((error) => error.code === 'ENOENT' ? [] : Promise.reject(error)))
+    process.env.NODE_ENV = 'test'
+    process.env.ENDROIT_TEST_FAULT_AFTER_ROUTE_RENAME = 'checkout:demo/main'
+    await runtimeFailure(home, ['route', 'migrate', 'demo'], 'route_migration_fault')
+    const runId = (await readdir(migrationsRoot)).find((entry) => !before.has(entry))
+    assert.ok(runId)
+    const run = await migrationRun(home, runId)
+    assert.equal(run.journal.status, 'applying')
+    assert.equal(run.journal.routes.find((entry) => entry.id === 'main').progress, 'original')
+    assert.equal(JSON.parse(await readFile(join(home, '.desk/routes/demo/main.json'), 'utf8')).$schema, 'https://endroit.org/schema/v8/route.json')
+    delete process.env.ENDROIT_TEST_FAULT_AFTER_ROUTE_RENAME
+    const recovered = await runtimeJson(home, ['route', 'migrate', '--rollback', runId])
+    assert.equal(recovered.status, 'rolled-back')
+    assert.equal(recovered.changes, 2)
+  } finally {
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = previousNodeEnv
+    if (previousFault === undefined) delete process.env.ENDROIT_TEST_FAULT_AFTER_ROUTE_RENAME
+    else process.env.ENDROIT_TEST_FAULT_AFTER_ROUTE_RENAME = previousFault
+    await fixture.cleanup()
+  }
+})
+
+test('Route migration check fully validates v7 without lock or journal effects', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home } = fixture
+    const routePath = join(home, '.desk/routes/demo/main.json')
+    const document = {
+      $schema: 'https://endroit.org/schema/v7/route.json',
+      id: 'main',
+      site: 'demo',
+      mode: 'existing',
+      path: '../repository',
+      branch: 'main',
+    }
+    const original = await writeLegacyRoute(routePath, document)
+    const lockRoot = join(home, '.endroit/locks')
+    const locksBefore = await readdir(lockRoot).catch((error) => error.code === 'ENOENT' ? [] : Promise.reject(error))
+    await runtimeFailure(home, ['route', 'migrate', 'demo', '--check'], 'route_path_invalid')
+    assert.deepEqual(await readFile(routePath), original)
+    assert.equal(await pathExists(join(home, '.endroit/migrations/checkout-v8')), false)
+    assert.deepEqual(await readdir(lockRoot), locksBefore)
+    assert.equal(await pathExists(join(lockRoot, 'routes.lock')), false)
+    await runtimeFailure(home, ['route', 'migrate', '--rollback'], 'usage')
+    assert.deepEqual(await readdir(lockRoot), locksBefore)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Route writer lifecycle and migration work from a separate Desk boundary', async () => {
+  const fixture = await siteFixture({ deskStrategy: 'separate' })
+  try {
+    const { home, repository } = fixture
+    assert.equal((await runtimeJson(home, ['route', 'park', 'demo'])).status, 'parked')
+    assert.equal((await runtimeJson(home, ['route', 'activate', 'demo'])).status, 'activated')
+    const routePath = join(home, '.desk/routes/demo/main.json')
+    await writeLegacyRoute(routePath, {
+      $schema: 'https://endroit.org/schema/v7/route.json',
+      id: 'main',
+      site: 'demo',
+      mode: 'existing',
+      path: await realpath(repository),
+      branch: 'main',
+    })
+    const migrated = await runtimeJson(home, ['route', 'migrate', 'demo'])
+    assert.equal(migrated.status, 'migrated')
+    assert.equal((await runtimeJson(home, ['route', 'migrate', '--rollback', migrated.runId])).status, 'rolled-back')
+    assert.equal(await pathExists(join(home, '.endroit/locks/routes.lock')), false)
   } finally {
     await fixture.cleanup()
   }
@@ -672,12 +761,12 @@ async function rewriteMigrationJournal(run, status, progress) {
   await writeFile(run.journalPath, `${JSON.stringify(run.journal, null, 2)}\n`)
 }
 
-async function siteFixture() {
+async function siteFixture(options = {}) {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-site-worktrees-'))
   const home = join(temporary, 'home')
   const repository = join(temporary, 'repository')
   const remote = join(temporary, 'remote.git')
-  await createHome(home)
+  await createHome(home, { deskStrategy: options.deskStrategy })
   await exec('git', ['init', '--quiet', '--bare', remote])
   await gitInit(repository)
   await writeFile(join(repository, 'README.md'), '# first\n')
