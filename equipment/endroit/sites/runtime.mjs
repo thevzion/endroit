@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { lstat, mkdir, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
@@ -23,6 +24,7 @@ const ROUTE_HELP = {
   park: 'endroit route park <site> [--id <route>] [--json]',
   activate: 'endroit route activate <site> [--id <route>] [--json]',
   supersede: 'endroit route supersede <site> --id <route> --by <route> [--json]',
+  migrate: 'endroit route migrate [site] [--id <route>] [--check | --rollback <run-id>] [--json]',
   remove: 'endroit route remove <site> [--id <route>] [--delete] [--json]',
 }
 const CHECKOUT_HELP = {
@@ -69,6 +71,7 @@ async function routeCommand(input, command, args, flags) {
   if (command === 'park') return transitionRoute(input, required(args[0], 'Site id'), flags.id, 'parked')
   if (command === 'activate') return transitionRoute(input, required(args[0], 'Site id'), flags.id, 'active')
   if (command === 'supersede') return supersedeRoute(input, required(args[0], 'Site id'), required(flags.id, 'Route id'), required(flags.by, 'Replacement Route id'))
+  if (command === 'migrate') return flags.rollback ? rollbackRouteMigration(input, flags.rollback, flags) : migrateRoutes(input, args[0], flags)
   if (command === 'remove') return removeRoute(input, required(args[0], 'Site id'), flags.id, flags)
   throw failure('usage', 'endroit route bind|clone|worktree|mount|unmount|park|activate|supersede|migrate|list|inspect|remove', 2)
 }
@@ -80,7 +83,7 @@ async function checkoutCommand(input, command, args, flags) {
 }
 
 async function listSites(input, siteId) {
-  return Promise.all(declarations(input).filter((site) => !siteId || site.id === siteId).map(async (site) => {
+  const listed = await Promise.all(declarations(input).filter((site) => !siteId || site.id === siteId).map(async (site) => {
     const routes = await routesFor(input, site.id)
     const inspected = await Promise.all(routes.map((route) => observeRoute(input, site, route)))
     const registered = new Map(inspected.filter((route) => route.observed.path).map((route) => [route.observed.path, route.id]))
@@ -94,11 +97,13 @@ async function listSites(input, siteId) {
     }
     return {
       ...site,
-      state: routes.length ? 'routed' : 'declared',
+      state: routes.some((route) => route.declared.status === 'active') ? 'routed' : routes.length ? 'unrouted' : 'declared',
       routes: inspected,
       worktrees: [...worktrees.values()].sort((left, right) => left.path.localeCompare(right.path)),
     }
   }))
+  if (!siteId) assertDistinctGitDirs(listed.flatMap((site) => site.routes))
+  return listed
 }
 
 async function listRoutes(input, siteId) {
@@ -119,7 +124,7 @@ async function inspectSite(input, id) {
 
 async function inspectRoute(input, id, routeId) {
   const site = declaration(input, id)
-  const route = await selectRoute(input, id, routeId)
+  const route = await selectRoute(input, id, routeId, '--id', { allowInactive: true })
   const evidence = await inspectRepository(await routeRepositoryPath(input, route))
   assertSiteMatches(site, evidence)
   const trackedFiles = (await git(['ls-files'], route.path)).split('\n').filter(Boolean).sort()
@@ -183,7 +188,7 @@ async function listCheckouts(input, siteId) {
 async function inspectCheckout(input, selector, routeId) {
   const parsed = parseCheckoutRef(selector, routeId)
   const site = declaration(input, parsed.site)
-  const route = await selectRoute(input, parsed.site, parsed.id, '--id')
+  const route = await selectRoute(input, parsed.site, parsed.id, '--id', { allowInactive: true })
   const checkout = await observeRoute(input, site, route)
   assertDistinctGitDirs(await listCheckouts(input, parsed.site))
   return { status: 'inspected', ...checkout }
@@ -194,10 +199,11 @@ async function doctorSites(input) {
   const limits = []
   for (const site of sites) {
     for (const route of site.routes) {
-      if (!route.observed.repository.available) limits.push(`route-broken:${site.id}:${route.id}`)
-      else if (!route.observed.matches) limits.push(`route-site-mismatch:${site.id}:${route.id}`)
+      if (route.declared.status === 'active' && !route.observed.repository.available) limits.push(`route-broken:${site.id}:${route.id}`)
+      else if (route.declared.status === 'active' && !route.observed.matches) limits.push(`route-site-mismatch:${site.id}:${route.id}`)
+      if (route.observed.repository.available && !route.observed.repository.clean) limits.push(`route-dirty:${site.id}:${route.id}`)
       if (route.observed.repository.conflicts) limits.push(`route-conflicts:${site.id}:${route.id}`)
-      if (route.observed.mount && !['ready', 'direct'].includes(route.observed.mount.status)) limits.push(`route-mount-${route.observed.mount.status}:${site.id}:${route.id}`)
+      if (route.declared.status === 'active' && route.observed.mount && !['ready', 'direct'].includes(route.observed.mount.status)) limits.push(`route-mount-${route.observed.mount.status}:${site.id}:${route.id}`)
     }
     const unregistered = site.worktrees.filter((worktree) => !worktree.registered)
     if (unregistered.length) limits.push(`site-worktrees-unrouted:${site.id}:${unregistered.length}`)
@@ -278,7 +284,7 @@ async function bindRoute(input, id, repositoryPath, routeId = 'main', declaredSi
   await assertRouteAvailable(input, id, routeId)
   const evidence = await inspectRepository(resolve(repositoryPath))
   assertSiteMatches(site, evidence)
-  await assertGitDirAvailable(input, id, evidence)
+  await assertGitDirAvailable(input, evidence)
   const superproject = await git(['rev-parse', '--show-superproject-working-tree'], evidence.root).catch(() => '')
   const mode = evidence.root === input.homeRoot ? 'embedded' : superproject ? 'submodule' : 'existing'
   const route = await writeRoute(input, {
@@ -292,7 +298,9 @@ async function bindRoute(input, id, repositoryPath, routeId = 'main', declaredSi
 }
 
 async function transitionRoute(input, siteId, routeId, status) {
-  const route = await selectRoute(input, siteId, routeId)
+  const route = status === 'active'
+    ? await selectRouteByStatus(input, siteId, routeId, 'parked')
+    : await selectRoute(input, siteId, routeId, '--id', { allowInactive: true })
   requireV8Route(route)
   if (route.status === status) return { status: status === 'active' ? 'activated' : 'parked', site: siteId, route: route.id, ref: route.ref, declared: route.declared }
   const expected = status === 'parked' ? 'active' : 'parked'
@@ -310,8 +318,8 @@ async function transitionRoute(input, siteId, routeId, status) {
 
 async function supersedeRoute(input, siteId, routeId, replacementId) {
   if (routeId === replacementId) throw failure('route_supersession_invalid', 'A Route cannot supersede itself.')
-  const route = await selectRoute(input, siteId, routeId)
-  const replacement = await selectRoute(input, siteId, replacementId)
+  const route = await selectRoute(input, siteId, routeId, '--id', { allowInactive: true })
+  const replacement = await selectRoute(input, siteId, replacementId, '--id', { allowInactive: true })
   requireV8Route(route)
   requireV8Route(replacement)
   if (route.status !== 'active') throw failure('route_status_invalid', `Route ${siteId}/${route.id} must be active before it can be superseded.`)
@@ -324,6 +332,120 @@ async function supersedeRoute(input, siteId, routeId, replacementId) {
     route: route.id,
     ref: route.ref,
     declared: { status: 'superseded', supersededBy: replacement.id, checkout: { ...route.declared.checkout } },
+  }
+}
+
+async function migrateRoutes(input, siteId, flags) {
+  if (flags.rollback) throw failure('usage', '--rollback cannot be combined with migration.', 2)
+  if (flags.id && !siteId) throw failure('usage', '--id requires a Site id.', 2)
+  if (siteId) declaration(input, siteId)
+  const allRoutes = []
+  for (const site of declarations(input)) allRoutes.push(...await routesFor(input, site.id))
+  const candidates = allRoutes
+    .filter((route) => route.schemaVersion === 7 && (!siteId || route.site === siteId) && (!flags.id || route.id === flags.id))
+  if (flags.id && !candidates.length) {
+    const selected = allRoutes.find((route) => route.site === siteId && route.id === flags.id)
+    if (!selected) throw failure('route_missing', `${siteId} has no Route ${flags.id}.`)
+  }
+  const planned = candidates.map((route) => ({
+    route,
+    document: routeDocument({ ...route, status: route.declared.status }),
+  }))
+  const summary = planned.map(({ route }) => ({
+    ref: route.ref,
+    declaration: relative(input.homeRoot, route.documentPath),
+    from: 7,
+    to: 8,
+  }))
+  if (truthy(flags.check)) return { status: 'checked', readOnly: true, changes: summary.length, routes: summary }
+  if (!summary.length) return { status: 'current', changes: 0, routes: [] }
+
+  const runId = migrationRunId()
+  const root = join(input.homeRoot, '.endroit', 'migrations', 'checkout-v8', runId)
+  const journalPath = join(root, 'journal.json')
+  const entries = []
+  await mkdir(join(root, 'originals'), { recursive: true })
+  for (const { route, document } of planned) {
+    const original = await readFile(route.documentPath)
+    const info = await lstat(route.documentPath)
+    const next = Buffer.from(`${JSON.stringify(document, null, 2)}\n`)
+    const originalPath = join(root, 'originals', route.site, `${route.id}.json`)
+    await mkdir(dirname(originalPath), { recursive: true })
+    await writeBytesAtomic(originalPath, original, 0o600)
+    entries.push({
+      site: route.site,
+      id: route.id,
+      declaration: relative(input.homeRoot, route.documentPath),
+      original: relative(root, originalPath),
+      mode: info.mode & 0o777,
+      beforeSha256: sha256(original),
+      afterSha256: sha256(next),
+      next,
+    })
+  }
+  const journal = {
+    version: 1,
+    runId,
+    kind: 'checkout-v8-route-migration',
+    status: 'prepared',
+    createdAt: new Date().toISOString(),
+    routes: entries.map(({ next: _next, ...entry }) => entry),
+  }
+  await writeJsonAtomic(journalPath, journal)
+  const applied = []
+  try {
+    for (const entry of entries) {
+      const destination = resolve(input.homeRoot, entry.declaration)
+      const current = await readFile(destination)
+      if (sha256(current) !== entry.beforeSha256) throw failure('route_migration_drift', `${entry.declaration} changed after migration planning.`)
+      await writeBytesAtomic(destination, entry.next, entry.mode)
+      applied.push(entry)
+    }
+  } catch (error) {
+    for (const entry of applied.reverse()) {
+      const original = await readFile(join(root, entry.original))
+      await writeBytesAtomic(resolve(input.homeRoot, entry.declaration), original, entry.mode)
+    }
+    await writeJsonAtomic(journalPath, { ...journal, status: 'rolled-back', rolledBackAt: new Date().toISOString(), reason: 'apply-failed' })
+    throw error
+  }
+  await writeJsonAtomic(journalPath, { ...journal, status: 'applied', appliedAt: new Date().toISOString() })
+  return { status: 'migrated', runId, changes: summary.length, routes: summary, rollback: `route migrate --rollback ${runId}` }
+}
+
+async function rollbackRouteMigration(input, runId, flags) {
+  if (truthy(flags.check) || flags.id) throw failure('usage', '--rollback cannot be combined with --check or --id.', 2)
+  if (!/^[a-z0-9][a-z0-9._-]{0,127}$/i.test(runId)) throw failure('route_migration_run_invalid', `Invalid migration run ${runId}.`, 2)
+  const root = join(input.homeRoot, '.endroit', 'migrations', 'checkout-v8', runId)
+  const journalPath = join(root, 'journal.json')
+  let journal
+  try { journal = JSON.parse(await readFile(journalPath, 'utf8')) } catch (error) {
+    if (error.code === 'ENOENT') throw failure('route_migration_missing', `Migration run ${runId} does not exist.`)
+    throw error
+  }
+  if (journal.kind !== 'checkout-v8-route-migration' || journal.runId !== runId || journal.status !== 'applied') {
+    throw failure('route_migration_state_invalid', `Migration run ${runId} is not applied.`)
+  }
+  const restores = []
+  for (const entry of journal.routes) {
+    const destination = resolve(input.homeRoot, entry.declaration)
+    const routeRoot = join(input.deskRoot, 'routes')
+    if (!inside(routeRoot, destination)) throw failure('route_rollback_corrupt', `Invalid Route declaration ${entry.declaration}.`)
+    const originalPath = resolve(root, entry.original)
+    if (!inside(root, originalPath)) throw failure('route_rollback_corrupt', `Invalid rollback source ${entry.original}.`)
+    const current = await readFile(destination)
+    if (sha256(current) !== entry.afterSha256) throw failure('route_rollback_drift', `${entry.declaration} changed after migration.`)
+    const original = await readFile(originalPath)
+    if (sha256(original) !== entry.beforeSha256) throw failure('route_rollback_corrupt', `${entry.original} does not match its journal digest.`)
+    restores.push({ entry, destination, original })
+  }
+  for (const { entry, destination, original } of restores) await writeBytesAtomic(destination, original, entry.mode)
+  await writeJsonAtomic(journalPath, { ...journal, status: 'rolled-back', rolledBackAt: new Date().toISOString() })
+  return {
+    status: 'rolled-back',
+    runId,
+    changes: restores.length,
+    routes: restores.map(({ entry }) => ({ ref: `checkout:${entry.site}/${entry.id}`, declaration: entry.declaration, from: 8, to: 7 })),
   }
 }
 
@@ -410,7 +532,9 @@ async function createWorktree(input, id, flags) {
 }
 
 async function removeRoute(input, id, routeId, flags) {
-  const route = await selectRoute(input, id, routeId)
+  const route = await selectRoute(input, id, routeId, '--id', { allowInactive: Boolean(routeId) })
+  const references = (await routesFor(input, id)).filter((entry) => entry.id !== route.id && entry.supersededBy === route.id)
+  if (references.length) throw failure('route_supersession_target', `Route ${id}/${route.id} is still referenced by ${references.map((entry) => entry.ref).join(', ')}.`)
   const mount = await inspectMount(input, route)
   if (mount && mount.status !== 'direct') throw failure('route_mount_exists', `Route ${id}/${route.id} still has a Mount; unmount it first.`)
   if (route.mode.startsWith('managed-')) {
@@ -492,6 +616,7 @@ async function routesFor(input, id) {
       : mode.startsWith('managed-') ? managedPath(input, route.site, route.id) : route.declaredPath
     return {
       ...route,
+      documentPath: join(input.deskRoot, 'routes', route.site, `${route.id}.json`),
       declaredPath,
       status: route.declared.status,
       supersededBy: route.declared.supersededBy,
@@ -502,7 +627,22 @@ async function routesFor(input, id) {
   }))
 }
 
-async function selectRoute(input, id, routeId, flag = '--id') {
+async function selectRoute(input, id, routeId, flag = '--id', options = {}) {
+  declaration(input, id)
+  const routes = await routesFor(input, id)
+  if (routeId) {
+    const selected = routes.find((route) => route.id === routeId)
+    if (!selected) throw failure('route_missing', `${id} has no Route ${routeId}.`)
+    if (selected.status !== 'active' && !options.allowInactive) throw failure('route_inactive', `Route ${id}/${routeId} is ${selected.status}; activate it before an operational effect.`)
+    return selected
+  }
+  const active = routes.filter((route) => route.status === 'active')
+  if (!active.length) throw failure('site_unrouted', `${id} has no active Route.`)
+  if (active.length > 1) throw failure('route_ambiguous', `${id} has multiple active Routes; pass ${flag}.`)
+  return active[0]
+}
+
+async function selectRouteByStatus(input, id, routeId, status) {
   declaration(input, id)
   const routes = await routesFor(input, id)
   if (routeId) {
@@ -510,10 +650,10 @@ async function selectRoute(input, id, routeId, flag = '--id') {
     if (!selected) throw failure('route_missing', `${id} has no Route ${routeId}.`)
     return selected
   }
-  const active = routes.filter((route) => route.status === 'active')
-  if (!active.length) throw failure('site_unrouted', `${id} has no active Route.`)
-  if (active.length > 1) throw failure('route_ambiguous', `${id} has multiple active Routes; pass ${flag}.`)
-  return active[0]
+  const matching = routes.filter((route) => route.status === status)
+  if (!matching.length) throw failure('route_status_missing', `${id} has no ${status} Route.`)
+  if (matching.length > 1) throw failure('route_ambiguous', `${id} has multiple ${status} Routes; pass --id.`)
+  return matching[0]
 }
 
 async function writeSite(input, site) {
@@ -756,10 +896,12 @@ function assertDistinctGitDirs(checkouts) {
   }
 }
 
-async function assertGitDirAvailable(input, siteId, evidence) {
-  for (const route of await routesFor(input, siteId)) {
-    const observed = await routeRepositoryPath(input, route).then(inspectRepository).catch(() => null)
-    if (observed?.gitDir === evidence.gitDir) throw failure('checkout_duplicate_git_dir', `${route.ref} already declares this Git checkout.`)
+async function assertGitDirAvailable(input, evidence) {
+  for (const site of declarations(input)) {
+    for (const route of await routesFor(input, site.id)) {
+      const observed = await routeRepositoryPath(input, route).then(inspectRepository).catch(() => null)
+      if (observed?.gitDir === evidence.gitDir) throw failure('checkout_duplicate_git_dir', `${route.ref} already declares this Git checkout.`)
+    }
   }
 }
 
@@ -800,10 +942,16 @@ async function git(args, cwd) {
   catch (error) { throw failure('git_failed', error.stderr?.trim() || error.message) }
 }
 async function writeJsonAtomic(path, document) {
+  await writeBytesAtomic(path, Buffer.from(`${JSON.stringify(document, null, 2)}\n`), 0o600)
+}
+async function writeBytesAtomic(path, content, mode) {
   const temporary = `${path}.${process.pid}.tmp`
-  await writeFile(temporary, `${JSON.stringify(document, null, 2)}\n`, { mode: 0o600 })
+  await writeFile(temporary, content, { mode })
   await rename(temporary, path)
 }
+function sha256(value) { return createHash('sha256').update(value).digest('hex') }
+function migrationRunId() { return `${new Date().toISOString().replace(/[-:.]/g, '').replace('Z', 'z')}-${process.pid}` }
+function inside(root, candidate) { const path = relative(root, candidate); return path && !path.startsWith('..') && !isAbsolute(path) }
 async function canonicalPath(path) { return realpath(path).catch(() => resolve(path)) }
 async function removeEmpty(path, stop) {
   let current = path

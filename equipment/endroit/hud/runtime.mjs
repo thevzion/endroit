@@ -312,7 +312,7 @@ async function hud(input) {
     const metadataError = orientationError(site, false)
     if (metadataError) attention.push(item('warning', `site:${site.id}`, 'orientation-invalid', metadataError))
     if (!(site.when?.length)) attention.push(item('advisory', `site:${site.id}`, 'site-routing-hint-missing', `${site.id} has no routing hint.`))
-    if (!site.routes.length) attention.push(item('warning', `site:${site.id}`, 'site-unrouted', `${site.id} has no local Route.`))
+    if (!site.routes.some((route) => route.declared.status === 'active')) attention.push(item('warning', `site:${site.id}`, 'site-unrouted', `${site.id} has no active local Route.`))
     if (site.map.state === 'stale') attention.push(item('advisory', `site:${site.id}`, 'site-map-stale', `${site.id} Site Map is stale.`))
     const unroutedWorktrees = site.worktrees.filter((worktree) => !worktree.route)
     if (unroutedWorktrees.length) {
@@ -572,7 +572,7 @@ async function scanSites(sites, declaredRoutes, homeRoot, deskRoot, artifacts) {
     const selected = current ?? maps[0] ?? null
     return {
       ...site,
-      state: routes.length ? 'routed' : 'declared',
+      state: routes.some((route) => route.declared.status === 'active') ? 'routed' : routes.length ? 'unrouted' : 'declared',
       routes,
       worktrees: [...worktrees.values()].sort((left, right) => left.path.localeCompare(right.path)),
       map: {
@@ -581,7 +581,7 @@ async function scanSites(sites, declaredRoutes, homeRoot, deskRoot, artifacts) {
         path: selected?.path ?? null,
         derivedFrom: selected?.derivedFrom ?? null,
         generatedAt: selected?.createdAt ?? null,
-        route: `site map ${site.id}${routes.length === 1 ? ` --route ${routes[0].id}` : ''}`,
+        route: `site map ${site.id}${routes.filter((route) => route.declared.status === 'active').length === 1 ? ` --route ${routes.find((route) => route.declared.status === 'active').id}` : ''}`,
       },
     }
   }))

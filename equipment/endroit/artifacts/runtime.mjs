@@ -381,6 +381,7 @@ async function selectRoute(input, siteId, routeId) {
   if (routeId) {
     const selected = found.find((entry) => entry.id === routeId)
     if (!selected) throw failure('route_missing', `${siteId} has no Route ${routeId}.`)
+    if (selected.declared.status !== 'active') throw failure('route_inactive', `Route ${siteId}/${routeId} is ${selected.declared.status}.`)
     return selected
   }
   const active = found.filter((route) => route.declared.status === 'active')

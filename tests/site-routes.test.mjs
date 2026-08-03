@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -153,6 +154,7 @@ test('Site unbind preserves dirty, locked, prunable, dependent and submodule wor
 
     const dirty = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'dirty', '--new-branch', 'dirty-work'])
     await writeFile(join(dirty.path, 'change.txt'), 'dirty\n')
+    assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('route-dirty:demo:dirty'))
     await runtimeFailure(home, ['route', 'remove', 'demo', '--id', 'dirty', '--delete'], 'route_dirty')
     assert.equal(await exists(dirty.path), true)
     await rm(join(dirty.path, 'change.txt'))
@@ -249,6 +251,7 @@ test('an existing Route can expose and remove a reconstructible Mount without to
     assert.equal((await lstat(mounted.path)).isSymbolicLink(), true)
     assert.equal(await realpath(mounted.path), await realpath(repository))
     assert.equal((await runtimeJson(home, ['route', 'mount', 'demo'])).status, 'mounted')
+    assert.equal((await runtimeJson(home, ['doctor'])).limits.some((limit) => limit.startsWith('route-mount-')), false)
     await runtimeFailure(home, ['route', 'remove', 'demo'], 'route_mount_exists')
 
     await rename(repository, moved)
@@ -274,6 +277,29 @@ test('an existing Route can expose and remove a reconstructible Mount without to
     assert.equal(await exists(join(repository, 'README.md')), true)
   } finally {
     await removeTree(temporary, { force: true })
+  }
+})
+
+test('Doctor diagnoses conflicted Checkouts without treating lifecycle as routability', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository } = fixture
+    await git(repository, ['branch', 'conflict-work'])
+    const route = await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'conflict', '--from', 'main', '--branch', 'conflict-work'])
+    await writeFile(join(repository, 'README.md'), '# main change\n')
+    await commit(repository, 'main change')
+    await writeFile(join(route.path, 'README.md'), '# route change\n')
+    await commit(route.path, 'route change')
+    await assert.rejects(git(route.path, ['merge', 'main']))
+    const doctor = await runtimeJson(home, ['doctor'])
+    assert.ok(doctor.limits.includes('route-conflicts:demo:conflict'))
+    assert.ok(doctor.limits.includes('route-dirty:demo:conflict'))
+    await runtimeJson(home, ['route', 'park', 'demo', '--id', 'conflict'])
+    const inactiveDoctor = await runtimeJson(home, ['doctor'])
+    assert.ok(inactiveDoctor.limits.includes('route-conflicts:demo:conflict'))
+    assert.equal(inactiveDoctor.sites[0].state, 'routed')
+  } finally {
+    await fixture.cleanup()
   }
 })
 
@@ -328,9 +354,12 @@ test('Route lifecycle changes only metadata and inactive Checkouts leave implici
     assert.equal((await runtimeJson(home, ['route', 'park', 'demo', '--id', 'main'])).status, 'parked')
     const implicit = await runtimeJson(home, ['route', 'inspect', 'demo'])
     assert.equal(implicit.route, 'feature--checkout-v8')
-    assert.equal((await runtimeJson(home, ['route', 'activate', 'demo', '--id', 'main'])).status, 'activated')
+    await runtimeFailure(home, ['route', 'worktree', 'demo', '--id', 'inactive-source', '--from', 'main', '--new-branch', 'inactive/source'], 'route_inactive')
+    await runtimeFailure(home, ['route', 'mount', 'demo', '--id', 'main'], 'route_inactive')
+    assert.equal((await runtimeJson(home, ['route', 'activate', 'demo'])).route, 'main')
     await runtimeFailure(home, ['route', 'inspect', 'demo'], 'route_ambiguous')
     assert.equal((await runtimeJson(home, ['route', 'supersede', 'demo', '--id', 'main', '--by', 'feature--checkout-v8'])).status, 'superseded')
+    await runtimeFailure(home, ['route', 'remove', 'demo', '--id', 'feature--checkout-v8', '--delete'], 'route_supersession_target')
 
     const listed = await runtimeJson(home, ['checkout', 'list', 'demo'])
     assert.deepEqual(listed.checkouts.map(({ ref, declared }) => [ref, declared.status]), [
@@ -360,10 +389,31 @@ test('Checkout observation rejects duplicate gitDir but permits a shared commonG
   try {
     const { home, repository } = fixture
     await runtimeFailure(home, ['route', 'bind', 'demo', repository, '--id', 'duplicate'], 'checkout_duplicate_git_dir')
+    const aliasRoot = join(home, 'sites', 'alias')
+    await mkdir(aliasRoot)
+    await writeFile(join(aliasRoot, 'SITE.md'), (await readFile(join(home, 'sites/demo/SITE.md'), 'utf8')).replace('id: "demo"', 'id: "alias"').replace('# demo', '# alias'))
+    await runtimeFailure(home, ['route', 'bind', 'alias', repository, '--id', 'main'], 'checkout_duplicate_git_dir')
     await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'review--shared', '--from', 'main', '--new-branch', 'review/shared'])
     const checkouts = (await runtimeJson(home, ['checkout', 'list', 'demo'])).checkouts
     assert.equal(new Set(checkouts.map((entry) => entry.observed.repository.gitDir)).size, 2)
     assert.equal(new Set(checkouts.map((entry) => entry.observed.repository.commonGitDir)).size, 1)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('a Site with only inactive Routes is unrouted until its unique parked Route is activated', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home } = fixture
+    await runtimeJson(home, ['route', 'park', 'demo'])
+    assert.equal((await runtimeJson(home, ['list'])).sites[0].state, 'unrouted')
+    const hud = await runtimeJson(home, ['json'], 'hud')
+    assert.equal(hud.sites[0].state, 'unrouted')
+    assert.equal(hud.attention.warning.some((entry) => entry.code === 'site-unrouted'), true)
+    await runtimeFailure(home, ['route', 'inspect', 'demo'], 'site_unrouted')
+    assert.equal((await runtimeJson(home, ['route', 'activate', 'demo'])).status, 'activated')
+    assert.equal((await runtimeJson(home, ['list'])).sites[0].state, 'routed')
   } finally {
     await fixture.cleanup()
   }
@@ -394,6 +444,58 @@ test('v7 and v8 Route declarations have parity through Sites, HUD and Artifacts'
     assert.deepEqual(hudV7.declared, hudV8.declared)
     assert.equal(siteV7.observed.repository.available, siteV8.observed.repository.available)
     assert.deepEqual(artifactsV7.artifacts, artifactsV8.artifacts)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Route migration checks without effect and rollback preserves Git and Mount invariants', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository } = fixture
+    const routePath = join(home, '.desk/routes/demo/main.json')
+    const original = Buffer.from(`${JSON.stringify({
+      $schema: 'https://endroit.org/schema/v7/route.json',
+      id: 'main',
+      site: 'demo',
+      mode: 'existing',
+      path: await realpath(repository),
+      branch: 'main',
+    }, null, 2)}\n`)
+    await writeFile(routePath, original, { mode: 0o600 })
+    await writeFile(join(repository, 'dirty.txt'), 'preserve me\n')
+    const mounted = await runtimeJson(home, ['route', 'mount', 'demo'])
+    const invariant = await checkoutInvariant(repository, mounted.path)
+    const migrationsRoot = join(home, '.endroit/migrations/checkout-v8')
+
+    const checked = await runtimeJson(home, ['route', 'migrate', 'demo', '--check'])
+    assert.equal(checked.status, 'checked')
+    assert.equal(checked.readOnly, true)
+    assert.equal(checked.changes, 1)
+    assert.deepEqual(await readFile(routePath), original)
+    assert.equal(await pathExists(migrationsRoot), false)
+    assert.deepEqual(await checkoutInvariant(repository, mounted.path), invariant)
+
+    const migrated = await runtimeJson(home, ['route', 'migrate', 'demo'])
+    assert.equal(migrated.status, 'migrated')
+    assert.equal(migrated.changes, 1)
+    const v8 = JSON.parse(await readFile(routePath, 'utf8'))
+    assert.equal(v8.$schema, 'https://endroit.org/schema/v8/route.json')
+    assert.deepEqual(v8.checkout, { mode: 'existing', path: await realpath(repository), expectedBranch: 'main' })
+    assert.equal('sourceRoute' in v8, false)
+    const journal = await readFile(join(migrationsRoot, migrated.runId, 'journal.json'), 'utf8')
+    assert.doesNotMatch(journal, /"(?:head|dirty|clean|gitDir|commonGitDir)"/)
+    assert.deepEqual(await checkoutInvariant(repository, mounted.path), invariant)
+
+    const appliedBytes = await readFile(routePath)
+    await writeFile(routePath, `${JSON.stringify({ ...v8, status: 'parked' }, null, 2)}\n`)
+    assert.notEqual(createHash('sha256').update(await readFile(routePath)).digest('hex'), JSON.parse(journal).routes[0].afterSha256)
+    await runtimeFailure(home, ['route', 'migrate', '--rollback', migrated.runId], 'route_rollback_drift')
+    await writeFile(routePath, appliedBytes)
+    const rolledBack = await runtimeJson(home, ['route', 'migrate', '--rollback', migrated.runId])
+    assert.equal(rolledBack.status, 'rolled-back')
+    assert.deepEqual(await readFile(routePath), original)
+    assert.deepEqual(await checkoutInvariant(repository, mounted.path), invariant)
   } finally {
     await fixture.cleanup()
   }
@@ -449,11 +551,17 @@ async function runtimeJson(home, args, namespace = 'site') {
 
 async function runtimeFailure(home, args, code) {
   const output = captureIo()
+  let thrown
+  let exitCode
   try {
-    assert.notEqual(await dispatchRuntime(home, 'site', args, output.io), 0)
-    assert.match(output.stderr(), new RegExp(code))
+    exitCode = await dispatchRuntime(home, 'site', args, output.io)
   } catch (error) {
-    assert.equal(error.code, code)
+    thrown = error
+  }
+  if (thrown) assert.equal(thrown.code, code)
+  else {
+    assert.notEqual(exitCode, 0)
+    assert.match(output.stderr(), new RegExp(code))
   }
 }
 
@@ -481,6 +589,20 @@ async function pathExists(path) {
   try { await lstat(path); return true } catch (error) {
     if (error.code === 'ENOENT') return false
     throw error
+  }
+}
+
+async function checkoutInvariant(repository, mount) {
+  const repositoryInfo = await lstat(repository)
+  const mountInfo = await lstat(mount)
+  return {
+    path: await realpath(repository),
+    dev: repositoryInfo.dev,
+    ino: repositoryInfo.ino,
+    head: await git(repository, ['rev-parse', 'HEAD']),
+    status: await git(repository, ['status', '--porcelain=v2', '--branch', '--untracked-files=all']),
+    mountSymlink: mountInfo.isSymbolicLink(),
+    mountTarget: await realpath(mount),
   }
 }
 
