@@ -21,9 +21,13 @@ Without `--check`, `route migrate` writes v8 documents and returns a migration
 run ID. Endroit stores the exact original bytes, file modes and digests under
 `.endroit/migrations/checkout-v8/<run-id>/`. The journal contains Route
 metadata only; it persists no observed HEAD, branch status or dirty state.
-One local exclusive lock serializes migration and rollback. The journal moves
-through `prepared`, `applying` and `applied`; every Route records its progress
-atomically after its v8 bytes are verified.
+One local exclusive Route-writer lock serializes migration, rollback and every
+other Route or Mount mutation. The writer refreshes the lock mtime every five
+seconds. A lock is active only while its PID is live and its heartbeat is at
+most 30 seconds old; stale recovery is itself serialized by a distinct
+exclusive reaper lock and revalidates the writer token and file identity. The
+journal moves through `prepared`, `applying` and `applied`; every Route records
+its progress atomically after its v8 bytes are durably verified.
 
 Rollback the exact run:
 

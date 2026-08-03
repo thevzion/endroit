@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile, readdir, realpath, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -32,6 +32,10 @@ const CHECKOUT_HELP = {
   inspect: 'endroit checkout inspect checkout:<site>/<route> [--json]',
 }
 let routeWriterLockDepth = 0
+// A writer refreshes mtime every 5 seconds; only a live PID with a heartbeat no
+// older than 30 seconds is active. Expiry is deliberately conservative.
+const ROUTE_WRITER_HEARTBEAT_MS = 5_000
+const ROUTE_WRITER_STALE_MS = 30_000
 
 try {
   const input = JSON.parse(await stdin())
@@ -288,6 +292,10 @@ async function removeSite(input, id) {
 }
 
 async function bindRoute(input, id, repositoryPath, routeId = 'main', declaredSite) {
+  return withRouteWriterLock(input, () => bindRouteUnlocked(input, id, repositoryPath, routeId, declaredSite))
+}
+
+async function bindRouteUnlocked(input, id, repositoryPath, routeId = 'main', declaredSite) {
   requireDesk(input)
   assertId(routeId)
   const site = declaredSite ?? declaration(input, id)
@@ -308,10 +316,10 @@ async function bindRoute(input, id, repositoryPath, routeId = 'main', declaredSi
 }
 
 async function transitionRoute(input, siteId, routeId, status) {
-  let route = status === 'active'
-    ? await selectRouteByStatus(input, siteId, routeId, 'parked')
-    : await selectRoute(input, siteId, routeId, '--id', { allowInactive: true })
-  route = await freshRoute(input, route)
+  const graph = await scanRouteGraph(input)
+  const route = status === 'active'
+    ? selectCurrentRouteByStatus(input, graph, siteId, routeId, 'parked')
+    : selectCurrentRoute(input, graph, siteId, routeId, '--id', { allowInactive: true })
   requireV8Route(route)
   if (route.status === status) return { status: status === 'active' ? 'activated' : 'parked', site: siteId, route: route.id, ref: route.ref, declared: route.declared }
   const expected = status === 'parked' ? 'active' : 'parked'
@@ -329,10 +337,9 @@ async function transitionRoute(input, siteId, routeId, status) {
 
 async function supersedeRoute(input, siteId, routeId, replacementId) {
   if (routeId === replacementId) throw failure('route_supersession_invalid', 'A Route cannot supersede itself.')
-  let route = await selectRoute(input, siteId, routeId, '--id', { allowInactive: true })
-  let replacement = await selectRoute(input, siteId, replacementId, '--id', { allowInactive: true })
-  route = await freshRoute(input, route)
-  replacement = await freshRoute(input, replacement)
+  const graph = await scanRouteGraph(input)
+  const route = selectCurrentRoute(input, graph, siteId, routeId, '--id', { allowInactive: true })
+  const replacement = selectCurrentRoute(input, graph, siteId, replacementId, '--by', { allowInactive: true })
   requireV8Route(route)
   requireV8Route(replacement)
   if (route.status !== 'active') throw failure('route_status_invalid', `Route ${siteId}/${route.id} must be active before it can be superseded.`)
@@ -420,8 +427,7 @@ async function migrateRoutes(input, siteId, flags) {
 }
 
 async function planRouteMigrations(input, siteId, flags) {
-  const allRoutes = []
-  for (const site of declarations(input)) allRoutes.push(...await routesFor(input, site.id))
+  const allRoutes = await scanRouteGraph(input)
   const candidates = allRoutes
     .filter((route) => route.schemaVersion === 7 && (!siteId || route.site === siteId) && (!flags.id || route.id === flags.id))
   if (flags.id && !candidates.length) {
@@ -431,8 +437,8 @@ async function planRouteMigrations(input, siteId, flags) {
   const planned = []
   for (const route of candidates) {
     await assertSafeRouteFile(input, route.documentPath)
-    const original = await readFile(route.documentPath)
-    const mode = (await lstat(route.documentPath)).mode & 0o777
+    const original = route.sourceBytes
+    const mode = route.fileMode
     const document = migrationDocumentFromV7(input, route, original)
     planned.push({ route, original, mode, next: Buffer.from(`${JSON.stringify(document, null, 2)}\n`) })
   }
@@ -531,7 +537,7 @@ async function createWorktree(input, id, flags) {
   if (Boolean(existingBranch) === Boolean(newBranch)) throw failure('site_worktree_branch_mode', 'Pass exactly one of --branch or --new-branch.', 2)
   if (flags['start-point'] && !newBranch) throw failure('site_worktree_start_point', '--start-point requires --new-branch.', 2)
   const site = declaration(input, id)
-  const source = await freshRoute(input, await selectRoute(input, id, flags.from, '--from'))
+  const source = selectCurrentRoute(input, await scanRouteGraph(input), id, flags.from, '--from')
   const sourceEvidence = await inspectRepository(await routeRepositoryPath(input, source))
   assertSiteMatches(site, sourceEvidence)
   const branch = String(existingBranch ?? newBranch)
@@ -577,8 +583,9 @@ async function createWorktree(input, id, flags) {
 }
 
 async function removeRoute(input, id, routeId, flags) {
-  const route = await freshRoute(input, await selectRoute(input, id, routeId, '--id', { allowInactive: Boolean(routeId) }))
-  const references = (await routesFor(input, id)).filter((entry) => entry.id !== route.id && entry.supersededBy === route.id)
+  const graph = await scanRouteGraph(input)
+  const route = selectCurrentRoute(input, graph, id, routeId, '--id', { allowInactive: Boolean(routeId) })
+  const references = graph.filter((entry) => entry.site === id && entry.id !== route.id && entry.supersededBy === route.id)
   if (references.length) throw failure('route_supersession_target', `Route ${id}/${route.id} is still referenced by ${references.map((entry) => entry.ref).join(', ')}.`)
   const mount = await inspectMount(input, route)
   if (mount && mount.status !== 'direct') throw failure('route_mount_exists', `Route ${id}/${route.id} still has a Mount; unmount it first.`)
@@ -609,7 +616,7 @@ async function removeRoute(input, id, routeId, flags) {
 }
 
 async function mountRoute(input, id, routeId) {
-  const route = await freshRoute(input, await selectRoute(input, id, routeId))
+  const route = selectCurrentRoute(input, await scanRouteGraph(input), id, routeId)
   if (route.mode !== 'existing') throw failure('route_mount_mode', `Only an existing Route can be mounted; ${id}/${route.id} is ${route.mode}.`)
   const destination = mountPath(input, id, route.id)
   const current = await inspectMount(input, route)
@@ -622,7 +629,7 @@ async function mountRoute(input, id, routeId) {
 }
 
 async function unmountRoute(input, id, routeId) {
-  const route = await freshRoute(input, await selectRoute(input, id, routeId))
+  const route = selectCurrentRoute(input, await scanRouteGraph(input), id, routeId)
   const destination = mountPath(input, id, route.id)
   let info
   try { info = await lstat(destination) } catch (error) {
@@ -672,34 +679,98 @@ async function routesFor(input, id) {
   }))
 }
 
-async function freshRoute(input, route) {
-  await assertSafeRouteFile(input, route.documentPath)
-  let document
-  try { document = JSON.parse(await readFile(route.documentPath, 'utf8')) } catch { throw failure('route_drift', `Route ${route.site}/${route.id} changed before mutation.`) }
-  if (document.$schema === 'https://endroit.org/schema/v7/route.json') {
-    if (document.site !== route.site || document.id !== route.id) throw failure('route_drift', `Route ${route.site}/${route.id} changed before mutation.`)
-    return route
+async function scanRouteGraph(input) {
+  const root = join(input.deskRoot, 'routes')
+  const rootEntries = await safeReadDir(root)
+  if (rootEntries.length || await exists(root)) await assertDirectory(root, 'route_root_invalid')
+  const graph = []
+  for (const siteEntry of rootEntries) {
+    if (!siteEntry.isDirectory() || siteEntry.isSymbolicLink()) continue
+    declaration(input, siteEntry.name)
+    const siteRoot = join(root, siteEntry.name)
+    await assertDirectory(siteRoot, 'route_root_invalid')
+    for (const entry of await safeReadDir(siteRoot)) {
+      if (!entry.name.endsWith('.json')) continue
+      if (!entry.isFile() || entry.isSymbolicLink()) throw failure('route_invalid', `${relative(input.homeRoot, join(siteRoot, entry.name))} must be a regular Route document.`)
+      const id = entry.name.slice(0, -5)
+      const documentPath = join(siteRoot, entry.name)
+      await assertSafeRouteFile(input, documentPath)
+      const sourceBytes = await readFile(documentPath)
+      let source
+      try { source = JSON.parse(sourceBytes) } catch { throw failure('route_invalid', `${relative(input.homeRoot, documentPath)} is not valid JSON.`) }
+      const stub = { id, site: siteEntry.name, documentPath }
+      let document
+      let schemaVersion
+      if (source?.$schema === 'https://endroit.org/schema/v7/route.json') {
+        document = migrationDocumentFromV7(input, stub, sourceBytes)
+        schemaVersion = 7
+      } else {
+        validateRoute(source, siteEntry.name, id, input)
+        document = source
+        schemaVersion = 8
+      }
+      const checkout = document.checkout
+      const declaredPath = checkout.mode === 'embedded'
+        ? input.homeRoot
+        : checkout.mode.startsWith('managed-') ? managedPath(input, siteEntry.name, id)
+          : isAbsolute(checkout.path) ? resolve(checkout.path) : resolve(input.homeRoot, checkout.path)
+      graph.push({
+        id,
+        site: siteEntry.name,
+        ref: `checkout:${siteEntry.name}/${id}`,
+        schemaVersion,
+        declared: {
+          status: document.status,
+          ...(document.supersededBy ? { supersededBy: document.supersededBy } : {}),
+          checkout: { ...checkout },
+        },
+        declaredPath,
+        documentPath,
+        status: document.status,
+        supersededBy: document.supersededBy,
+        mode: checkout.mode,
+        branch: checkout.expectedBranch,
+        path: await canonicalPath(declaredPath),
+        sourceBytes,
+        fileMode: (await lstat(documentPath)).mode & 0o777,
+      })
+    }
   }
-  validateRoute(document, route.site, route.id, input)
-  const mode = document.checkout.mode
-  const declaredPath = mode === 'embedded'
-    ? input.homeRoot
-    : mode.startsWith('managed-') ? managedPath(input, route.site, route.id) : isAbsolute(document.checkout.path) ? resolve(document.checkout.path) : resolve(input.homeRoot, document.checkout.path)
-  return {
-    ...route,
-    schemaVersion: 8,
-    declared: {
-      status: document.status,
-      ...(document.supersededBy ? { supersededBy: document.supersededBy } : {}),
-      checkout: { ...document.checkout },
-    },
-    declaredPath,
-    status: document.status,
-    supersededBy: document.supersededBy,
-    mode,
-    branch: document.checkout.expectedBranch,
-    path: await canonicalPath(declaredPath),
+  for (const route of graph.filter((entry) => entry.status === 'superseded')) {
+    if (!graph.some((entry) => entry.site === route.site && entry.id === route.supersededBy)) {
+      throw failure('route_supersession_invalid', `Route ${route.site}/${route.id} supersedes to missing Route ${route.supersededBy}.`)
+    }
   }
+  return graph.sort((left, right) => left.site.localeCompare(right.site) || left.id.localeCompare(right.id))
+}
+
+function selectCurrentRoute(input, graph, id, routeId, flag = '--id', options = {}) {
+  declaration(input, id)
+  const routes = graph.filter((route) => route.site === id)
+  if (routeId) {
+    const selected = routes.find((route) => route.id === routeId)
+    if (!selected) throw failure('route_missing', `${id} has no Route ${routeId}.`)
+    if (selected.status !== 'active' && !options.allowInactive) throw failure('route_inactive', `Route ${id}/${routeId} is ${selected.status}; activate it before an operational effect.`)
+    return selected
+  }
+  const active = routes.filter((route) => route.status === 'active')
+  if (!active.length) throw failure('site_unrouted', `${id} has no active Route.`)
+  if (active.length > 1) throw failure('route_ambiguous', `${id} has multiple active Routes; pass ${flag}.`)
+  return active[0]
+}
+
+function selectCurrentRouteByStatus(input, graph, id, routeId, status) {
+  declaration(input, id)
+  const routes = graph.filter((route) => route.site === id)
+  if (routeId) {
+    const selected = routes.find((route) => route.id === routeId)
+    if (!selected) throw failure('route_missing', `${id} has no Route ${routeId}.`)
+    return selected
+  }
+  const matching = routes.filter((route) => route.status === status)
+  if (!matching.length) throw failure('route_status_missing', `${id} has no ${status} Route.`)
+  if (matching.length > 1) throw failure('route_ambiguous', `${id} has multiple ${status} Routes; pass --id.`)
+  return matching[0]
 }
 
 async function selectRoute(input, id, routeId, flag = '--id', options = {}) {
@@ -911,7 +982,9 @@ function validateRoute(route, site, id, input) {
   }
   const pathMode = ['existing', 'submodule'].includes(checkout.mode)
   if (pathMode !== (typeof checkout.path === 'string' && checkout.path.length > 0)) throw failure('route_invalid', `Invalid Checkout path for Route ${site}/${id}.`)
-  if (route.status === 'superseded' ? !route.supersededBy : Boolean(route.supersededBy)) throw failure('route_invalid', `Invalid lifecycle for Route ${site}/${id}.`)
+  if (checkout.expectedBranch !== undefined && (typeof checkout.expectedBranch !== 'string' || !checkout.expectedBranch.length)) throw failure('route_invalid', `Invalid expected branch for Route ${site}/${id}.`)
+  if (pathMode && !isAbsolute(checkout.path) && checkout.path.split(/[\\/]+/).includes('..')) throw failure('route_path_invalid', `Route ${site}/${id} path must not escape its Home context.`)
+  if (route.status === 'superseded' ? !validId(route.supersededBy) || route.supersededBy === id : Boolean(route.supersededBy)) throw failure('route_invalid', `Invalid lifecycle for Route ${site}/${id}.`)
   const rootKeys = Object.keys(route)
   if (rootKeys.some((key) => !['$schema', 'id', 'site', 'status', 'supersededBy', 'checkout'].includes(key))) throw failure('route_invalid', `Invalid Route ${site}/${id}.`)
   if (Object.keys(checkout).some((key) => !['mode', 'path', 'expectedBranch'].includes(key))) throw failure('route_invalid', `Invalid Checkout ${site}/${id}.`)
@@ -952,21 +1025,21 @@ async function withRouteWriterLock(input, operation) {
   await ensureSafeDirectories(input.homeRoot, root)
   const lockPath = join(root, 'routes.lock')
   const lock = await acquireRouteWriterLock(lockPath)
+  let heartbeatTask
+  const heartbeat = setInterval(() => {
+    if (heartbeatTask) return
+    heartbeatTask = refreshRouteWriterLock(lockPath, lock).catch(() => {}).finally(() => { heartbeatTask = undefined })
+  }, ROUTE_WRITER_HEARTBEAT_MS)
+  heartbeat.unref()
   routeWriterLockDepth += 1
   try {
     return await operation()
   } finally {
     routeWriterLockDepth -= 1
+    clearInterval(heartbeat)
+    await heartbeatTask
     await lock.handle.close().catch(() => {})
-    const current = await lstat(lockPath).catch(() => null)
-    if (current?.dev === lock.dev && current.ino === lock.ino) {
-      let owner
-      try { owner = JSON.parse(await readFile(lockPath, 'utf8')) } catch {}
-      if (owner?.token === lock.token) {
-        await rm(lockPath, { force: true }).catch(() => {})
-        await syncDirectory(root).catch(() => {})
-      }
-    }
+    await releaseOwnedLock(lockPath, lock, root)
   }
 }
 
@@ -989,23 +1062,95 @@ async function acquireRouteWriterLock(path, retry = true) {
     if (error.code !== 'EEXIST') throw error
     await assertRegularFile(path, 'route_writer_lock_invalid')
     const observed = await lstat(path)
+    if (observed.isSymbolicLink() || !observed.isFile()) throw failure('route_writer_lock_invalid', 'Route writer lock must be a regular file.')
     let owner
-    try { owner = JSON.parse(await readFile(path, 'utf8')) } catch { throw failure('route_writer_lock_invalid', 'Route writer lock is invalid.') }
-    if (!owner || typeof owner.token !== 'string' || !owner.token || !Number.isInteger(owner.pid) || typeof owner.startedAt !== 'string' || Number.isNaN(Date.parse(owner.startedAt))) {
-      throw failure('route_writer_lock_invalid', 'Route writer lock metadata is invalid.')
+    try { owner = JSON.parse(await readFile(path, 'utf8')) } catch {
+      if (freshHeartbeat(observed)) throw failure('route_writer_locked', 'Route writer lock is being initialized.')
+      throw failure('route_writer_lock_invalid', 'Route writer lock is invalid.')
     }
-    if (processAlive(owner.pid)) throw failure('route_writer_locked', `Route mutation is locked by process ${owner.pid}.`)
+    assertLockOwner(owner, 'route_writer_lock_invalid')
+    if (activeRouteWriter(owner, observed)) throw failure('route_writer_locked', `Route mutation is locked by process ${owner.pid}.`)
     if (!retry) throw failure('route_writer_locked', 'Route writer lock could not be recovered.')
-    const current = await lstat(path).catch(() => null)
-    if (!current || current.dev !== observed.dev || current.ino !== observed.ino) throw failure('route_writer_locked', 'Route writer lock changed during stale recovery.')
-    let currentOwner
-    try { currentOwner = JSON.parse(await readFile(path, 'utf8')) } catch { throw failure('route_writer_lock_invalid', 'Route writer lock is invalid.') }
-    if (currentOwner.token !== owner.token) throw failure('route_writer_locked', 'Route writer lock changed during stale recovery.')
-    await rm(path)
-    await syncDirectory(dirname(path))
+    await reapStaleRouteWriterLock(path, observed, owner)
     return acquireRouteWriterLock(path, false)
   }
 }
+
+async function refreshRouteWriterLock(path, lock) {
+  const current = await lstat(path)
+  if (current.dev !== lock.dev || current.ino !== lock.ino) throw failure('route_writer_lock_lost', 'Route writer lock identity changed.')
+  const owner = JSON.parse(await readFile(path, 'utf8'))
+  if (owner.token !== lock.token) throw failure('route_writer_lock_lost', 'Route writer lock token changed.')
+  const now = new Date()
+  await utimes(path, now, now)
+}
+
+async function reapStaleRouteWriterLock(path, observed, owner) {
+  const reaperPath = `${path}.reaper`
+  let reaper
+  try { reaper = await createOwnedLock(reaperPath) } catch (error) {
+    if (error.code === 'EEXIST') throw failure('route_writer_locked', 'Another process is recovering the Route writer lock.')
+    throw error
+  }
+  try {
+    if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_REAPER_REPLACE_LOCK === '1') {
+      await rm(path)
+      await writeFile(path, `${JSON.stringify({ token: 'replacement-writer', pid: process.pid, startedAt: new Date().toISOString() })}\n`, { flag: 'wx', mode: 0o600 })
+    }
+    await assertRegularFile(path, 'route_writer_lock_invalid')
+    const current = await lstat(path)
+    let currentOwner
+    try { currentOwner = JSON.parse(await readFile(path, 'utf8')) } catch { throw failure('route_writer_lock_invalid', 'Route writer lock is invalid.') }
+    assertLockOwner(currentOwner, 'route_writer_lock_invalid')
+    if (current.dev !== observed.dev || current.ino !== observed.ino || current.mtimeMs !== observed.mtimeMs || currentOwner.token !== owner.token) {
+      throw failure('route_writer_locked', 'Route writer lock changed during stale recovery.')
+    }
+    if (activeRouteWriter(currentOwner, current)) throw failure('route_writer_locked', `Route mutation is locked by process ${currentOwner.pid}.`)
+    await rm(path)
+    await syncDirectory(dirname(path))
+  } finally {
+    await reaper.handle.close().catch(() => {})
+    await releaseOwnedLock(reaperPath, reaper, dirname(path))
+  }
+}
+
+async function createOwnedLock(path) {
+  const handle = await open(path, 'wx', 0o600)
+  const token = randomUUID()
+  try {
+    await handle.writeFile(`${JSON.stringify({ token, pid: process.pid, startedAt: new Date().toISOString() })}\n`)
+    await handle.sync()
+    await syncDirectory(dirname(path))
+    const { dev, ino } = await handle.stat()
+    return { handle, dev, ino, token }
+  } catch (error) {
+    await handle.close().catch(() => {})
+    await rm(path, { force: true }).catch(() => {})
+    throw error
+  }
+}
+
+async function releaseOwnedLock(path, lock, root) {
+  const current = await lstat(path).catch(() => null)
+  if (current?.dev !== lock.dev || current.ino !== lock.ino) return
+  let owner
+  try { owner = JSON.parse(await readFile(path, 'utf8')) } catch { return }
+  if (owner.token !== lock.token) return
+  await rm(path, { force: true }).catch(() => {})
+  await syncDirectory(root).catch(() => {})
+}
+
+function assertLockOwner(owner, code) {
+  if (!owner || typeof owner.token !== 'string' || !owner.token || !Number.isInteger(owner.pid) || typeof owner.startedAt !== 'string' || Number.isNaN(Date.parse(owner.startedAt))) {
+    throw failure(code, 'Route writer lock metadata is invalid.')
+  }
+}
+
+function activeRouteWriter(owner, info) {
+  return processAlive(owner.pid) && freshHeartbeat(info)
+}
+
+function freshHeartbeat(info) { return Math.max(0, Date.now() - info.mtimeMs) <= ROUTE_WRITER_STALE_MS }
 
 function processAlive(pid) {
   if (!Number.isInteger(pid) || pid < 1) return false
@@ -1094,12 +1239,20 @@ async function ensureSafeDirectories(root, path) {
   const remainder = relative(root, path)
   for (const segment of remainder ? remainder.split(/[\\/]+/) : []) {
     current = join(current, segment)
+    let created = false
     try {
       await mkdir(current)
+      created = true
     } catch (error) {
       if (error.code !== 'EEXIST') throw error
     }
     await assertDirectory(current, 'route_migration_path_invalid')
+    if (created) {
+      await syncDirectory(dirname(current))
+      if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_FAULT_AFTER_DIRECTORY_FSYNC === relative(root, current)) {
+        throw failure('route_directory_fault', `Injected failure after syncing ${relative(root, current)}.`)
+      }
+    }
   }
 }
 
@@ -1185,11 +1338,9 @@ function assertDistinctGitDirs(checkouts) {
 }
 
 async function assertGitDirAvailable(input, evidence) {
-  for (const site of declarations(input)) {
-    for (const route of await routesFor(input, site.id)) {
-      const observed = await routeRepositoryPath(input, route).then(inspectRepository).catch(() => null)
-      if (observed?.gitDir === evidence.gitDir) throw failure('checkout_duplicate_git_dir', `${route.ref} already declares this Git checkout.`)
-    }
+  for (const route of await scanRouteGraph(input)) {
+    const observed = await routeRepositoryPath(input, route).then(inspectRepository).catch(() => null)
+    if (observed?.gitDir === evidence.gitDir) throw failure('checkout_duplicate_git_dir', `${route.ref} already declares this Git checkout.`)
   }
 }
 

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { chmod, lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, symlink, utimes, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -603,6 +603,34 @@ test('Route migration rollback resumes prepared, applying and rolling-back multi
     assert.equal(staleRecovered.status, 'migrated')
     await runtimeJson(home, ['route', 'migrate', '--rollback', staleRecovered.runId])
 
+    const expired = new Date(Date.now() - 60_000)
+    await writeFile(lockPath, `${JSON.stringify({ token: 'recycled-pid-lock', pid: process.pid, startedAt: expired.toISOString() })}\n`, { flag: 'wx' })
+    await utimes(lockPath, expired, expired)
+    const recycledRecovered = await runtimeJson(home, ['route', 'migrate', 'demo'])
+    assert.equal(recycledRecovered.status, 'migrated')
+    await runtimeJson(home, ['route', 'migrate', '--rollback', recycledRecovered.runId])
+
+    const reaperPath = `${lockPath}.reaper`
+    await writeFile(lockPath, `${JSON.stringify({ token: 'double-reap-lock', pid: process.pid, startedAt: expired.toISOString() })}\n`, { flag: 'wx' })
+    await utimes(lockPath, expired, expired)
+    await writeFile(reaperPath, 'reaper in progress\n', { flag: 'wx' })
+    await runtimeFailure(home, ['route', 'migrate', 'demo'], 'route_writer_locked')
+    assert.equal(JSON.parse(await readFile(lockPath, 'utf8')).token, 'double-reap-lock')
+    await rm(reaperPath)
+    const previousNodeEnv = process.env.NODE_ENV
+    process.env.NODE_ENV = 'test'
+    process.env.ENDROIT_TEST_REAPER_REPLACE_LOCK = '1'
+    try {
+      await runtimeFailure(home, ['route', 'migrate', 'demo'], 'route_writer_locked')
+    } finally {
+      delete process.env.ENDROIT_TEST_REAPER_REPLACE_LOCK
+      if (previousNodeEnv === undefined) delete process.env.NODE_ENV
+      else process.env.NODE_ENV = previousNodeEnv
+    }
+    assert.equal(JSON.parse(await readFile(lockPath, 'utf8')).token, 'replacement-writer')
+    assert.equal(await pathExists(reaperPath), false)
+    await rm(lockPath)
+
     const corrupt = await runtimeJson(home, ['route', 'migrate', 'demo'])
     const corruptRun = await migrationRun(home, corrupt.runId)
     const originalRoot = join(corruptRun.root, 'originals')
@@ -696,6 +724,58 @@ test('Route writer lifecycle and migration work from a separate Desk boundary', 
     assert.equal(migrated.status, 'migrated')
     assert.equal((await runtimeJson(home, ['route', 'migrate', '--rollback', migrated.runId])).status, 'rolled-back')
     assert.equal(await pathExists(join(home, '.endroit/locks/routes.lock')), false)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Route migration resumes after a fault immediately after durable directory creation', async () => {
+  const fixture = await siteFixture()
+  const previousNodeEnv = process.env.NODE_ENV
+  try {
+    const { home, repository } = fixture
+    const routePath = join(home, '.desk/routes/demo/main.json')
+    await writeLegacyRoute(routePath, {
+      $schema: 'https://endroit.org/schema/v7/route.json',
+      id: 'main',
+      site: 'demo',
+      mode: 'existing',
+      path: await realpath(repository),
+      branch: 'main',
+    })
+    process.env.NODE_ENV = 'test'
+    process.env.ENDROIT_TEST_FAULT_AFTER_DIRECTORY_FSYNC = '.endroit/migrations'
+    await runtimeFailure(home, ['route', 'migrate', 'demo'], 'route_directory_fault')
+    assert.equal(JSON.parse(await readFile(routePath, 'utf8')).$schema, 'https://endroit.org/schema/v7/route.json')
+    assert.equal(await pathExists(join(home, '.endroit/migrations')), true)
+    assert.equal(await pathExists(join(home, '.endroit/migrations/checkout-v8')), false)
+    delete process.env.ENDROIT_TEST_FAULT_AFTER_DIRECTORY_FSYNC
+    const migrated = await runtimeJson(home, ['route', 'migrate', 'demo'])
+    assert.equal(migrated.status, 'migrated')
+    assert.equal((await runtimeJson(home, ['route', 'migrate', '--rollback', migrated.runId])).status, 'rolled-back')
+  } finally {
+    delete process.env.ENDROIT_TEST_FAULT_AFTER_DIRECTORY_FSYNC
+    if (previousNodeEnv === undefined) delete process.env.NODE_ENV
+    else process.env.NODE_ENV = previousNodeEnv
+    await fixture.cleanup()
+  }
+})
+
+test('concurrent supersede and replacement removal cannot leave a dangling Route relation', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home } = fixture
+    await runtimeJson(home, ['route', 'worktree', 'demo', '--id', 'replacement', '--from', 'main', '--new-branch', 'replacement'])
+    const [supersede, remove] = await Promise.all([
+      runtimeResult(home, ['route', 'supersede', 'demo', '--id', 'main', '--by', 'replacement']),
+      runtimeResult(home, ['route', 'remove', 'demo', '--id', 'replacement', '--delete']),
+    ])
+    assert.equal([supersede, remove].filter(({ code }) => code === 0).length, 1)
+    assert.match([supersede, remove].find(({ code }) => code !== 0).stderr, /route_writer_locked|route_supersession_target|route_missing/)
+    const listed = await runtimeJson(home, ['route', 'list', 'demo'])
+    for (const route of listed.routes.filter((entry) => entry.declared.status === 'superseded')) {
+      assert.equal(listed.routes.some((entry) => entry.id === route.declared.supersededBy), true)
+    }
   } finally {
     await fixture.cleanup()
   }
@@ -807,6 +887,14 @@ async function runtimeJson(home, args, namespace = 'site') {
   const argv = namespace === 'site' && !args.includes('--json') ? [...args, '--json'] : args
   assert.equal(await dispatchRuntime(home, namespace, argv, output.io), 0, output.stderr())
   return JSON.parse(output.stdout())
+}
+
+async function runtimeResult(home, args) {
+  const output = captureIo()
+  let code
+  try { code = await dispatchRuntime(home, 'site', args.includes('--json') ? args : [...args, '--json'], output.io) }
+  catch (error) { return { code: error.exitCode ?? 4, stderr: `${error.code}: ${error.message}` } }
+  return { code, stdout: output.stdout(), stderr: output.stderr() }
 }
 
 async function runtimeFailure(home, args, code) {
