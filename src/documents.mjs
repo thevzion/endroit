@@ -234,7 +234,9 @@ function parseSections(body, path) {
   return headings.map((heading, index) => {
     const next = headings.slice(index + 1).find((candidate) => candidate.level <= heading.level)
     const content = body.slice(heading.contentStart, next?.start ?? body.length).trim()
-    const fragment = parseFragment(content, heading, path)
+    const child = headings[index + 1]
+    const directContent = body.slice(heading.contentStart, child?.start ?? body.length).trim()
+    const fragment = parseFragment(directContent, heading, path)
     return {
       heading: `${'#'.repeat(heading.level)} ${heading.title}`,
       title: heading.title,

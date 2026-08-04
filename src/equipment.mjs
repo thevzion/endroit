@@ -416,10 +416,11 @@ function normalizeManifest(manifest) {
     skills: manifest.skills?.map(normalizeAccessor),
     commands: manifest.commands?.map(normalizeAccessor),
     artifactKinds: artifact_kinds?.map((kind) => {
-      const { site_path, required_files, ...value } = kind
+      const { workplace_path, site_path, required_files, ...value } = kind
       return {
       ...value,
       owners: kind.owners.map((owner) => owner === 'workplace' ? 'home' : owner),
+      workplacePath: workplace_path,
       sitePath: site_path,
       requiredFiles: required_files,
     }}),
@@ -449,10 +450,11 @@ function serializeManifest(manifest) {
     skills: manifest.skills?.map(serializeAccessor),
     commands: manifest.commands?.map(serializeAccessor),
     artifact_kinds: manifest.artifactKinds?.map((kind) => {
-      const { sitePath, requiredFiles, ...value } = kind
+      const { workplacePath, sitePath, requiredFiles, ...value } = kind
       return {
       ...value,
       owners: kind.owners.map((owner) => owner === 'home' ? 'workplace' : owner),
+      workplace_path: kind.workplacePath,
       site_path: kind.sitePath,
       required_files: kind.requiredFiles,
     }}),

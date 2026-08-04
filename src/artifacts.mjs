@@ -1,5 +1,6 @@
 import { readFile, readdir, realpath } from 'node:fs/promises'
 import { basename, dirname, join, resolve } from 'node:path'
+import { readDocument } from './documents.mjs'
 
 export async function listArtifacts(homeRoot, deskRoot, plan) {
   const roots = []
@@ -15,6 +16,9 @@ export async function listArtifacts(homeRoot, deskRoot, plan) {
     { scope: 'home', path: join(homeRoot, 'artifacts'), legacy: true },
     ...(deskRoot ? [{ scope: 'desk', path: join(deskRoot, 'artifacts'), legacy: true }] : []),
   )
+  for (const kind of plan.artifactKinds.filter((entry) => entry.owners.includes('home') && entry.workplacePath)) {
+    roots.push({ scope: 'home', path: join(homeRoot, kind.workplacePath), kind: kind.id, legacy: false })
+  }
   for (const site of plan.sites ?? []) {
     for (const route of (plan.routes ?? []).filter((entry) => entry.site === site.id && entry.declared.status === 'active')) {
       for (const kind of plan.artifactKinds.filter((entry) => entry.owners.includes('site') && entry.sitePath)) {
@@ -22,6 +26,7 @@ export async function listArtifacts(homeRoot, deskRoot, plan) {
           scope: `site:${site.id}`,
           route: route.id,
           site: site.id,
+          kind: kind.id,
           path: join(route.declaredPath, kind.sitePath),
           legacy: false,
         })
@@ -39,9 +44,12 @@ export async function listArtifacts(homeRoot, deskRoot, plan) {
       seen.add(key)
       const directory = await realpath(dirname(path)).catch(() => dirname(path))
       try {
-        const parsed = parseArtifact(await readFile(path, 'utf8'))
+        const parsed = basename(path) === 'artifact.md'
+          ? parseArtifact(await readFile(path, 'utf8'))
+          : await readDocument(path)
         const metadata = normalizeMetadata(parsed.metadata)
         const kind = selectKind(plan, metadata.kind)
+        if (root.kind && root.kind !== kind.id) continue
         const document = basename(path)
         const legacyDocument = document === 'artifact.md' && kind.document
         if (document !== (kind.document ?? 'artifact.md') && !legacyDocument) continue
@@ -52,9 +60,13 @@ export async function listArtifacts(homeRoot, deskRoot, plan) {
           ...(room ? { room: room.id } : {}),
           ...(root.site ? { site: root.site } : {}),
           ...(root.route ? { route: root.route } : {}),
-          ref: room ? artifactRef(room, kind, metadata.id) : legacyRef(metadata, root),
+          ref: room ? artifactRef(room, kind, metadata.id) : directRef(metadata, kind, root),
           path: directory,
           document,
+          metadata,
+          body: parsed.body,
+          fragments: parsed.fragments ?? [],
+          source_digest: parsed.source_digest,
           legacy: root.legacy || Boolean(legacyDocument) || isLegacyMetadata(parsed.metadata),
         })
       } catch (error) {
@@ -82,6 +94,12 @@ function artifactRef(room, kind, id) {
 
 function legacyRef(metadata, root) {
   return `artifact:${root.scope}/${metadata.kind}/${metadata.id}@${metadata.created_at}`
+}
+
+function directRef(metadata, kind, root) {
+  if (!root.legacy && root.site) return `artifact:site/${root.site}/${kind.owner}/${kind.localId}/${metadata.id}`
+  if (!root.legacy && root.scope === 'home') return `artifact:workplace/${kind.owner}/${kind.localId}/${metadata.id}`
+  return legacyRef(metadata, root)
 }
 
 function normalizeMetadata(raw) {

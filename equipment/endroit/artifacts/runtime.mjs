@@ -5,9 +5,9 @@ import { basename, dirname, join, relative, resolve } from 'node:path'
 
 const HELP = {
   create: {
-    usage: 'endroit artifact create <kind> <id> --room <home/id|desk/id> [--status <status>] [--field <key=value>] [--derived-from <ref>] [--from <directory>] [--json]',
-    effect: 'mutating — creates one new Artifact inside its owning Room',
-    summary: 'Create a Room-owned Artifact, optionally importing a bounded directory.',
+    usage: 'endroit artifact create <kind> <id> (--room <home/id|desk/id>|--workplace|--site <site>) [--route <id>] [--status <status>] [--field <key=value>] [--derived-from <ref>] [--from <directory>] [--json]',
+    effect: 'mutating — creates one new Artifact at its explicit owner',
+    summary: 'Create a Room-, Workplace- or Site-owned Artifact.',
   },
   list: {
     usage: 'endroit artifact list [--json]',
@@ -69,10 +69,8 @@ async function route(input, command, args, flags) {
 async function createArtifact(input, kindSelector, id, flags) {
   assertId(id)
   const kind = selectKind(input.resolvedHome, kindSelector)
-  if (!kind.roomNamespace) throw failure('artifact_room_namespace_missing', `${kind.id} does not declare a Room namespace.`)
-  const room = selectRoom(input, required(flags.room, 'Room'))
-  assertSourceScope(kind, room.scope)
-  const destination = roomDestination(input, kind, id, room)
+  const target = await creationTarget(input, kind, id, flags)
+  const { destination, owner, ref, scope } = target
   if (await exists(destination)) throw failure('artifact_exists', `${relative(input.homeRoot, destination)} already exists.`)
   const name = artifactDocument(kind)
   const template = await readFile(join(kind.root, kind.template), 'utf8')
@@ -87,7 +85,7 @@ async function createArtifact(input, kindSelector, id, flags) {
       id,
       kind: kind.id,
       status: state,
-      owner: room.ref,
+      owner,
       created_at: timestamp,
       updated_at: timestamp,
       derived_from: values(flags['derived-from']),
@@ -101,9 +99,9 @@ async function createArtifact(input, kindSelector, id, flags) {
       ...extraFields(flags.field),
       id,
       kind: kind.id,
-      owner: room.ref,
+      owner,
       derived_from: values(flags['derived-from']),
-      [stateKey]: state,
+      ...(Object.hasOwn(parsed.metadata, stateKey) ? { [stateKey]: state } : {}),
     }
     body = parsed.body
   }
@@ -113,7 +111,7 @@ async function createArtifact(input, kindSelector, id, flags) {
     if (flags.from) await copyInput(flags.from, stage)
     await writeFile(join(stage, name), renderArtifact(metadata, body), { mode: 0o644 })
     await installRequiredFiles(stage, kind)
-    await validateDirectory(stage, metadata, kind, room.scope, false)
+    await validateDirectory(stage, metadata, kind, scope, false)
     await rename(stage, destination)
   } catch (error) {
     await rm(stage, { recursive: true, force: true })
@@ -123,10 +121,43 @@ async function createArtifact(input, kindSelector, id, flags) {
     status: 'created',
     id,
     kind: kind.id,
-    owner: room.ref,
-    ref: artifactRef(room, kind, id),
+    owner,
+    ref,
     path: relative(input.homeRoot, destination),
     document: name,
+  }
+}
+
+async function creationTarget(input, kind, id, flags) {
+  const selected = [flags.room ? 'room' : null, flags.workplace ? 'workplace' : null, flags.site ? 'site' : null].filter(Boolean)
+  if (!selected.length) throw failure('usage', 'Room is required unless --workplace or --site is selected.', 2)
+  if (selected.length !== 1) throw failure('usage', 'Choose exactly one owner: --room, --workplace or --site.', 2)
+  if (selected[0] === 'room') {
+    if (!kind.roomNamespace) throw failure('artifact_room_namespace_missing', `${kind.id} does not declare a Room namespace.`)
+    const room = selectRoom(input, flags.room)
+    assertSourceScope(kind, room.scope)
+    return { destination: roomDestination(input, kind, id, room), owner: room.ref, ref: artifactRef(room, kind, id), scope: room.scope }
+  }
+  if (selected[0] === 'workplace') {
+    assertSourceScope(kind, 'home')
+    if (!kind.workplacePath) throw failure('artifact_workplace_path_missing', `${kind.id} has no Workplace path.`)
+    const workplace = input.resolvedHome.home?.id ?? input.resolvedHome.workplace?.id
+    if (!workplace) throw failure('workplace_missing', 'The resolved Workplace has no identity.')
+    return {
+      destination: join(input.homeRoot, kind.workplacePath, id),
+      owner: `workplace:${workplace}`,
+      ref: `artifact:workplace/${kind.owner}/${kind.localId}/${id}`,
+      scope: 'home',
+    }
+  }
+  assertSourceScope(kind, 'site')
+  if (!kind.sitePath) throw failure('artifact_site_path_missing', `${kind.id} has no Site path.`)
+  const route = await selectRoute(input, flags.site, flags.route)
+  return {
+    destination: join(route.path, kind.sitePath, id),
+    owner: `site:${flags.site}`,
+    ref: `artifact:site/${flags.site}/${kind.owner}/${kind.localId}/${id}`,
+    scope: 'site',
   }
 }
 
@@ -243,7 +274,7 @@ async function promoteArtifact(input, selector, flags) {
 async function validateDirectory(directory, metadata, kind, ownerScope, legacy) {
   const name = artifactDocument(kind)
   if (name !== 'artifact.md') {
-    for (const key of ['$schema', 'id', 'kind', 'owner', 'contract', 'work_type', 'work_state', 'derived_from']) {
+    for (const key of ['$schema', 'id', 'kind', 'owner', 'derived_from']) {
       if (metadata[key] === undefined || metadata[key] === '') throw failure('artifact_invalid', `Artifact metadata requires ${key}.`)
     }
     if (metadata.kind !== kind.id) throw failure('artifact_invalid', `Artifact kind ${metadata.kind} does not match ${kind.id}.`)
@@ -394,12 +425,16 @@ async function treeDigest(root) {
 
 function validateMetadataSchema(metadata, schema) {
   for (const key of schema.required ?? []) if (metadata[key] === undefined) throw failure('artifact_schema_invalid', `${key} is required by the Artifact kind.`)
+  if (schema.additionalProperties === false) {
+    for (const key of Object.keys(metadata)) if (!Object.hasOwn(schema.properties ?? {}, key)) throw failure('artifact_schema_invalid', `${key} is not declared by the Artifact kind.`)
+  }
   for (const [key, rule] of Object.entries(schema.properties ?? {})) {
     if (metadata[key] === undefined) continue
     if (rule.const !== undefined && metadata[key] !== rule.const) throw failure('artifact_schema_invalid', `${key} must equal ${rule.const}.`)
     if (rule.enum && !rule.enum.includes(metadata[key])) throw failure('artifact_schema_invalid', `${key} must be one of ${rule.enum.join(', ')}.`)
     if (rule.type === 'array' && !Array.isArray(metadata[key])) throw failure('artifact_schema_invalid', `${key} must be an array.`)
     if (rule.type === 'string' && typeof metadata[key] !== 'string') throw failure('artifact_schema_invalid', `${key} must be a string.`)
+    if (rule.type === 'object' && (typeof metadata[key] !== 'object' || metadata[key] === null || Array.isArray(metadata[key]))) throw failure('artifact_schema_invalid', `${key} must be an object.`)
   }
 }
 

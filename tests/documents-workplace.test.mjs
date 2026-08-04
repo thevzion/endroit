@@ -48,6 +48,7 @@ Endroit compiles owned context.
   assert.equal(extractSection(document, 'Claim').fragment.id, 'positioning')
   assert.equal(extractSection(document, '## claim').fragment.body, 'Endroit compiles owned context.')
   assert.equal(document.fragments[0].kind, 'claim')
+  assert.equal(document.fragments.length, 1)
   const { data, ...validMetadata } = document.metadata
   await validateDocumentV9(validMetadata, 'document')
 
