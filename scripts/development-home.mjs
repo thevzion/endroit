@@ -230,7 +230,7 @@ async function run(command, args, options = {}) {
   return exec(command, args, {
     cwd: options.cwd,
     env: { ...process.env, ...options.env },
-    timeout: options.timeout ?? 120_000,
+    timeout: options.timeout ?? 300_000,
     maxBuffer: 20 * 1024 * 1024,
   })
 }
