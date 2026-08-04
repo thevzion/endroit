@@ -274,7 +274,9 @@ async function resolveExport(input, participant, route, repository) {
     throw error
   })
   assertInside(root, path, 'Resolved Site export')
-  const declaredSurfaces = (input.inspection?.artifacts ?? []).filter((artifact) => artifact.kind === 'endroit/release:public-surface' && artifact.site === participant.site)
+  const declaredSurfaces = (input.inspection?.artifacts ?? []).filter((artifact) => artifact.kind === 'endroit/release:public-surface'
+    && artifact.site === participant.site
+    && artifact.route === route.id)
   if (participant.export === './') {
     if (declaredSurfaces.length) throw failure('release_surface_bypass', `${participant.site} declares a public-surface; select its logical site_export instead of ./.`)
     return { path, digest: await trackedTreeDigest(root), surface: null, qualification: {}, preview: null }

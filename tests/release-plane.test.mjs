@@ -131,7 +131,7 @@ test('Release preview runs only the Site-declared command and records the observ
   writeFileSync(join(releasePath, 'dogfood.receipt.json'), `${JSON.stringify(dogfoodReceipt(source), null, 2)}\n`)
   const surface = {
     id: 'home', kind: 'endroit/release:public-surface', ref: 'artifact:site/example/endroit/release/public-surface/home',
-    site: 'example', path: surfacePath,
+    site: 'example', route: 'main', path: surfacePath,
     metadata: {
       $schema: 'https://endroit.org/schema/release/public-surface/v1alpha1.json', kind: 'endroit/release:public-surface', id: 'home', owner: 'site:example',
       artifact_contract: 'endroit/release/public-surface/v1alpha1', material_state: 'retained', currentness: 'current', derived_from: [],
@@ -170,6 +170,56 @@ test('Release preview runs only the Site-declared command and records the observ
     assert.equal(result.status, 0, result.stderr)
     assert.match(result.stdout, /http:\/\/127\.0\.0\.1:4321\//)
     assert.equal(JSON.parse(readFileSync(join(home, '.endroit/release-previews/demo--example.json'))).url, 'http://127.0.0.1:4321/')
+  } finally {
+    rmSync(home, { recursive: true, force: true })
+  }
+})
+
+test('Release Surface resolution is scoped to the explicitly selected Route', () => {
+  const home = realpathSync(mkdtempSync(join(tmpdir(), 'endroit-release-route-surface-')))
+  const main = join(home, 'main')
+  const release = join(home, 'release')
+  const releasePath = join(home, 'releases/demo')
+  for (const checkout of [main, release]) {
+    mkdirSync(join(checkout, 'surfaces/home'), { recursive: true })
+    writeFileSync(join(checkout, 'surfaces/home/SURFACE.md'), `# ${checkout === main ? 'Main' : 'Release'}\n`)
+    git(checkout, ['init', '--quiet', '--initial-branch=main'])
+    git(checkout, ['add', '.'])
+    git(checkout, ['-c', 'user.name=Endroit', '-c', 'user.email=local@endroit.org', 'commit', '--quiet', '-m', 'fixture'])
+  }
+  mkdirSync(releasePath, { recursive: true })
+  const source = releaseArtifact(releasePath)
+  const participant = source.fragments.find((fragment) => fragment.kind === 'release_site')
+  participant.export = './surfaces/home'; participant.metadata.export = './surfaces/home'
+  writeFileSync(join(releasePath, 'dogfood.receipt.json'), `${JSON.stringify(dogfoodReceipt(source), null, 2)}\n`)
+  const mainSurface = routeSurface('main', join(main, 'surfaces/home'))
+  const releaseSurface = routeSurface('release', join(release, 'surfaces/home'))
+  const input = {
+    homeRoot: home,
+    resolvedHome: { routes: [
+      { id: 'main', site: 'example', declaredPath: main, declared: { status: 'active' } },
+      { id: 'release', site: 'example', declaredPath: release, declared: { status: 'active' } },
+    ] },
+    inspection: { artifacts: [source, mainSurface, releaseSurface] },
+  }
+  try {
+    const inspected = run(releaseRuntime, { ...input, argv: ['inspect', 'demo', '--route', 'example=release', '--json'] })
+    assert.equal(inspected.sites[0].route, 'release')
+    assert.equal(inspected.sites[0].exported.surface, releaseSurface.ref)
+
+    const first = run(releaseRuntime, { ...input, argv: ['lock', 'demo', '--check', '--route', 'example=release', '--json'] })
+    const second = run(releaseRuntime, { ...input, argv: ['lock', 'demo', '--check', '--route', 'example=release', '--json'] })
+    assert.equal(first.lockDigest, second.lockDigest)
+
+    const rootSource = structuredClone(source)
+    const rootParticipant = rootSource.fragments.find((fragment) => fragment.kind === 'release_site')
+    rootParticipant.export = './'; rootParticipant.metadata.export = './'
+    const root = run(releaseRuntime, {
+      ...input,
+      argv: ['inspect', 'demo', '--route', 'example=release', '--json'],
+      inspection: { artifacts: [rootSource, mainSurface] },
+    })
+    assert.equal(root.sites[0].exported.surface, null)
   } finally {
     rmSync(home, { recursive: true, force: true })
   }
@@ -233,6 +283,32 @@ function dogfoodReceipt(source) {
     },
     invariants: { git: 'passed', checkouts: 'passed' },
     verifiedAt: '2026-08-04T00:00:00.000Z',
+  }
+}
+
+function routeSurface(route, path) {
+  return {
+    id: 'home',
+    kind: 'endroit/release:public-surface',
+    ref: `artifact:site/example/${route}/endroit/release/public-surface/home`,
+    site: 'example',
+    route,
+    path,
+    metadata: {
+      $schema: 'https://endroit.org/schema/release/public-surface/v1alpha1.json',
+      kind: 'endroit/release:public-surface',
+      id: 'home',
+      owner: 'site:example',
+      artifact_contract: 'endroit/release/public-surface/v1alpha1',
+      material_state: 'retained',
+      currentness: 'current',
+      derived_from: [],
+    },
+    fragments: [
+      fragment({ kind: 'surface_contract', id: 'home', entrypoint: '/' }),
+      fragment({ kind: 'site_export', id: 'home-export', name: './surfaces/home', renderer: 'render.mjs', qualification: {}, outputs: [] }),
+      fragment({ kind: 'content', id: 'hero' }),
+    ],
   }
 }
 
