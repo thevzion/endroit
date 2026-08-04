@@ -1225,7 +1225,7 @@ test('concurrent supersede and replacement removal cannot leave a dangling Route
     const lockPath = join(home, '.endroit/locks/routes.lock')
     const supersedePromise = cliResult(home, ['route', 'supersede', 'demo', '--id', 'main', '--by', 'replacement'], {
       NODE_ENV: 'test',
-      ENDROIT_TEST_HOLD_ROUTE_WRITER_MS: '250',
+      ENDROIT_TEST_HOLD_ROUTE_WRITER_MS: '2000',
     })
     await waitForPath(lockPath)
     const remove = await cliResult(home, ['checkout', 'delete', 'checkout:demo/replacement', '--approve', 'checkout:demo/replacement'])
