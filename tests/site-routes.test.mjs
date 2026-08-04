@@ -1050,6 +1050,30 @@ test('Route v8 to v9 migration rollback recovers the gap after source removal', 
   }
 })
 
+test('Route v8 to v9 rollback rejects a missing destination after completed migration', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository } = fixture
+    const source = join(home, '.desk/routes/demo/main.json')
+    const destination = routeDocumentPath(home, 'demo', 'main')
+    await writeLegacyRoute(source, {
+      $schema: 'https://endroit.org/schema/v8/route.json',
+      id: 'main',
+      site: 'demo',
+      status: 'active',
+      checkout: { mode: 'existing', path: await realpath(repository) },
+    })
+    const migrated = await runtimeJson(home, ['route', 'migrate', 'demo'])
+    await rm(destination)
+
+    await runtimeFailure(home, ['route', 'migrate', '--rollback', migrated.runId], 'route_rollback_drift')
+    assert.equal(await pathExists(source), false)
+    assert.equal(await pathExists(destination), false)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
 test('Route migration filters one Site or Route and drops legacy worktree sourceRoute metadata', async () => {
   const fixture = await siteFixture()
   try {

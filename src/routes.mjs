@@ -13,7 +13,7 @@ export function managedCheckoutPath(homeRoot, site, route) {
   return join(homeRoot, 'checkouts', assertId(site, 'Site id'), assertId(route, 'Route id'))
 }
 
-export async function loadRoutes(homeRoot, deskRoot, sites = []) {
+export async function loadRoutes(homeRoot, deskRoot, sites = [], options = {}) {
   if (!deskRoot) return []
   const declaredSites = new Set(sites.map((site) => site.id))
   const values = []
@@ -32,6 +32,7 @@ export async function loadRoutes(homeRoot, deskRoot, sites = []) {
       const documentPath = legacy ? join(siteRoot, entry.name) : join(siteRoot, entry.name, 'ROUTE.md')
       if (current) {
         const info = await lstat(documentPath).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+        if (!info && options.allowMissingRouteDocuments) continue
         if (!info || info.isSymbolicLink() || !info.isFile()) {
           throw new EndroitError('route_invalid', `${relative(homeRoot, documentPath)} must be a regular Route document.`)
         }

@@ -2186,6 +2186,7 @@ async function classifyRouteV9RollbackEntry(input, root, entry) {
   if (destinationInfo && (destinationInfo.isSymbolicLink() || !destinationInfo.isFile())) throw failure('route_rollback_drift', `${entry.declaration} changed after migration.`)
   const destination = destinationInfo ? await routeFileState(destinationPath) : null
   if (destination && (destination.sha256 !== entry.afterSha256 || destination.mode !== entry.mode)) throw failure('route_rollback_drift', `${entry.declaration} changed after migration.`)
+  if (!source && !destination && entry.progress === 'after') throw failure('route_rollback_drift', `${entry.declaration} disappeared after migration.`)
   return { entry, sourcePath, destinationPath, originalPath, source: Boolean(source), destination: Boolean(destination), directory: Boolean(directoryInfo) }
 }
 

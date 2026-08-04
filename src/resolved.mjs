@@ -12,7 +12,7 @@ import { loadSites } from './sites.mjs'
 import { loadRoutes } from './routes.mjs'
 import { listMembers } from './member.mjs'
 
-export async function resolveHome(root) {
+export async function resolveHome(root, options = {}) {
   root = await realpath(root)
   const [home, loadedDesk, loadedMembers, installed, catalog] = await Promise.all([
     loadHome(root),
@@ -42,7 +42,7 @@ export async function resolveHome(root) {
 
   const equipment = [...effective.values()].sort((left, right) => left.id.localeCompare(right.id))
   const sites = await loadSites(root)
-  const declaredRoutes = await loadRoutes(root, desk ? join(root, '.desk') : null, sites)
+  const declaredRoutes = await loadRoutes(root, desk ? join(root, '.desk') : null, sites, options)
   const accessors = await accessorRoutes(root, desk, sites)
   assertRoomIdentities(accessors.room)
   const plan = {

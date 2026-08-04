@@ -45,7 +45,11 @@ export async function runtimeTrustState(root, owner, plan) {
 }
 
 export async function dispatchRuntime(root, namespace, argv, io = process) {
-  const plan = await resolveHome(root)
+  const routeRollback = namespace === 'site'
+    && argv[0] === 'route'
+    && argv[1] === 'migrate'
+    && argv.some((argument) => argument === '--rollback' || argument.startsWith('--rollback='))
+  const plan = await resolveHome(root, { allowMissingRouteDocuments: routeRollback })
   const runtime = plan.runtimes.find((entry) => entry.namespace === namespace)
   if (!runtime) throw new EndroitError('usage', `Unknown command ${namespace}.`, { exitCode: 2 })
   const trust = await runtimeTrustState(root, runtime.owner, plan)
