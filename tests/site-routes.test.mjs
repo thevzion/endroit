@@ -994,6 +994,38 @@ test('Route v8 to v9 migration rollback recovers an interrupted source cutover',
   }
 })
 
+test('Route v8 to v9 migration rollback recovers the gap after source removal', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository } = fixture
+    const source = join(home, '.desk/routes/demo/main.json')
+    const destination = routeDocumentPath(home, 'demo', 'main')
+    const original = await writeLegacyRoute(source, {
+      $schema: 'https://endroit.org/schema/v8/route.json',
+      id: 'main',
+      site: 'demo',
+      status: 'active',
+      checkout: { mode: 'existing', path: await realpath(repository) },
+    }, 0o640)
+    const result = await cliResult(home, ['route', 'migrate', 'demo'], {
+      NODE_ENV: 'test',
+      ENDROIT_TEST_FAULT_AFTER_ROUTE_V8_REMOVE: 'checkout:demo/main',
+    })
+    assert.notEqual(result.code, 0)
+    const runId = result.stderr.match(/Migration run ([A-Za-z0-9._-]+)/)?.[1]
+    assert.ok(runId)
+    assert.equal(await pathExists(source), false)
+    assert.equal(await pathExists(destination), false)
+
+    assert.equal((await runtimeJson(home, ['route', 'migrate', '--rollback', runId])).status, 'rolled-back')
+    assert.deepEqual(await readFile(source), original)
+    assert.equal((await lstat(source)).mode & 0o777, 0o640)
+    assert.equal(await pathExists(destination), false)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
 test('Route migration filters one Site or Route and drops legacy worktree sourceRoute metadata', async () => {
   const fixture = await siteFixture()
   try {

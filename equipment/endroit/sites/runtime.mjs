@@ -673,6 +673,9 @@ async function applyRouteV9Migration(input, planned, summary) {
       if (current.sha256 !== entry.beforeSha256 || current.mode !== entry.mode) throw failure('route_migration_drift', `${entry.sourceDeclaration} changed after migration planning.`)
       await rm(source)
       await syncDirectory(dirname(source))
+      if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_FAULT_AFTER_ROUTE_V8_REMOVE === `checkout:${entry.site}/${entry.id}`) {
+        throw failure('route_migration_fault', `Injected failure after removing ${entry.sourceDeclaration}.`)
+      }
       await mkdir(dirname(destination))
       await writeBytesAtomic(destination, entry.next, entry.mode)
       await assertSafeRouteFile(input, destination)
@@ -2182,7 +2185,6 @@ async function classifyRouteV9RollbackEntry(input, root, entry) {
   if (destinationInfo && (destinationInfo.isSymbolicLink() || !destinationInfo.isFile())) throw failure('route_rollback_drift', `${entry.declaration} changed after migration.`)
   const destination = destinationInfo ? await routeFileState(destinationPath) : null
   if (destination && (destination.sha256 !== entry.afterSha256 || destination.mode !== entry.mode)) throw failure('route_rollback_drift', `${entry.declaration} changed after migration.`)
-  if (!source && !destination) throw failure('route_rollback_drift', `${entry.sourceDeclaration} and ${entry.declaration} are both missing.`)
   return { entry, sourcePath, destinationPath, originalPath, source: Boolean(source), destination: Boolean(destination), directory: Boolean(directoryInfo) }
 }
 
