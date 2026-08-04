@@ -96,7 +96,7 @@ test('Release lock is deterministic, effect-free in check mode and receipt follo
     assert.equal(existsSync(join(releasePath, 'release.receipt.json')), false)
     assert.match(runFailure(releaseRuntime, { ...input, argv: ['observe', 'demo', '--site', 'example', '--status', 'observed', '--handle', 'https://wrong.example/', '--json'] }), /observation_handle_mismatch/)
     const watch = run(releaseRuntime, { ...input, argv: ['watch', 'demo', '--timeout', '0', '--json'] })
-    assert.notEqual(watch.status, 'ready')
+    assert.equal(watch.status, 'degraded')
     assert.equal(watch.remote.ci.reason, 'ci-observer-unavailable')
 
     const receipt = run(releaseRuntime, { ...input, argv: ['observe', 'demo', '--site', 'example', '--status', 'observed', '--handle', 'https://example.test/', '--json'] })

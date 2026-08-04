@@ -134,7 +134,7 @@ async function watchRelease(input, release, flags) {
     const lock = await readJson(join(release.path, 'release.lock.json'))
     const remote = await remoteState(lock)
     if (remote.drift.length) return { status: 'drifted', id: release.id, lockDigest: verification.lockDigest, remote }
-    if (!remote.pending.length && remote.ci.status === 'unavailable') return { status: 'degraded', id: release.id, lockDigest: verification.lockDigest, remote }
+    if (remote.ci.status === 'unavailable') return { status: 'degraded', id: release.id, lockDigest: verification.lockDigest, remote }
     if (Date.now() - started >= timeout) return { status: 'timeout', id: release.id, lockDigest: verification.lockDigest, remote }
     await delay(Math.min(interval, 60_000))
   } while (true)
