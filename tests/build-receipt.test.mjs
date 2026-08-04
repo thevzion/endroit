@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict'
+import { execFile } from 'node:child_process'
 import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { isAbsolute, join } from 'node:path'
+import { promisify } from 'node:util'
 import test from 'node:test'
 import { buildHome } from '../src/build.mjs'
 import { createHome } from '../src/create.mjs'
 import { digest, removeTree } from '../src/lib/io.mjs'
 import { resolveHome } from '../src/resolved.mjs'
+
+const exec = promisify(execFile)
 
 test('build writes one deterministic receipt without installing provider or Git integration', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-build-receipt-'))
@@ -106,6 +110,37 @@ test('an unowned output collision aborts before any build write', async () => {
     assert.deepEqual(await readFile(join(home, untouched.path)), untouchedBytes)
     await assert.rejects(readFile(receiptPath), (error) => error.code === 'ENOENT')
     assert.equal((await readdir(home)).some((name) => name.startsWith('.endroit-transaction-')), false)
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
+test('upgrade-only build adoption accepts tracked HEAD bytes and rejects untracked or divergent outputs', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-build-adopt-'))
+  try {
+    const tracked = join(temporary, 'tracked')
+    await createHome(tracked)
+    const trackedReceipt = join(tracked, '.endroit/build.json')
+    const agentsPath = join(tracked, 'AGENTS.md')
+    const agentsBefore = await readFile(agentsPath)
+    await rm(trackedReceipt)
+    const workplacePath = join(tracked, 'WORKPLACE.md')
+    await writeFile(workplacePath, `${await readFile(workplacePath, 'utf8')}\nUpgrade fixture.\n`)
+    await buildHome(tracked, { adoptTracked: true })
+    assert.notDeepEqual(await readFile(agentsPath), agentsBefore)
+    assert.equal(JSON.parse(await readFile(trackedReceipt, 'utf8')).version, 1)
+
+    const untracked = join(temporary, 'untracked')
+    await createHome(untracked)
+    await rm(join(untracked, '.endroit/build.json'))
+    await exec('git', ['rm', '--cached', '--quiet', '--', 'AGENTS.md'], { cwd: untracked })
+    await assert.rejects(() => buildHome(untracked, { adoptTracked: true }), (error) => error.code === 'generated_output_collision')
+
+    const divergent = join(temporary, 'divergent')
+    await createHome(divergent)
+    await rm(join(divergent, '.endroit/build.json'))
+    await writeFile(join(divergent, 'AGENTS.md'), 'divergent\n')
+    await assert.rejects(() => buildHome(divergent, { adoptTracked: true }), (error) => error.code === 'generated_output_collision')
   } finally {
     await removeTree(temporary, { force: true })
   }

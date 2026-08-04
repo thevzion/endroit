@@ -1,5 +1,7 @@
+import { execFile } from 'node:child_process'
 import { lstat, readFile } from 'node:fs/promises'
 import { isAbsolute, join, relative, sep } from 'node:path'
+import { promisify } from 'node:util'
 import { applyTransaction } from './equipment.mjs'
 import { homeConsole, renderProviderBootstrap } from './front-door.mjs'
 import { extractSection, readDocument } from './documents.mjs'
@@ -8,6 +10,8 @@ import { digest, readJson, resolvePackageFile } from './lib/io.mjs'
 import { provider } from './providers/index.mjs'
 import { resolveHome } from './resolved.mjs'
 
+const exec = promisify(execFile)
+
 export async function buildHome(root, options = {}) {
   const plan = await resolveHome(root)
   const statePath = join(root, '.endroit', 'build.json')
@@ -15,7 +19,7 @@ export async function buildHome(root, options = {}) {
   const wanted = await providerOutputs(plan)
   wanted.sort((left, right) => compareStrings(left.path, right.path))
   assertNoOutputCollisions(wanted)
-  const mutations = await reconcileOutputs(root, previous?.outputs ?? [], wanted, Boolean(options.check))
+  const mutations = await reconcileOutputs(root, previous?.outputs ?? [], wanted, Boolean(options.check), options)
   const state = {
     version: 1,
     revision: plan.revision ?? plan.workplace?.source_digest ?? 'legacy',
@@ -106,7 +110,7 @@ async function renderAgentContract(plan) {
   return renderProviderBootstrap(plan, constitution)
 }
 
-async function reconcileOutputs(root, previous, wanted, check) {
+async function reconcileOutputs(root, previous, wanted, check, options = {}) {
   const wantedPaths = new Set(wanted.map((entry) => entry.path))
   const deletes = []
   for (const prior of previous) {
@@ -122,8 +126,12 @@ async function reconcileOutputs(root, previous, wanted, check) {
   const writes = []
   for (const entry of wanted) {
     const path = join(root, entry.path)
-    const prior = previous.find((item) => item.path === entry.path)
+    let prior = previous.find((item) => item.path === entry.path)
     const current = await generatedFile(path, entry.path)
+    if (current && !prior && options.adoptTracked) {
+      await assertTrackedHeadOutput(root, entry.path, current)
+      prior = { path: entry.path, digest: digest(current) }
+    }
     if (current && prior && digest(current) !== prior.digest) throw diverged(entry.path)
     if (current && !prior && digest(current) !== digest(entry.content)) throw new EndroitError('generated_output_collision', `${entry.path} already exists and Endroit does not own it.`, { exitCode: 5 })
     if (check && (!current || digest(current) !== digest(entry.content))) throw stale(`${entry.path} needs a rebuild.`)
@@ -138,6 +146,16 @@ async function reconcileOutputs(root, previous, wanted, check) {
     })
   }
   return { outputs, writes, deletes }
+}
+
+async function assertTrackedHeadOutput(root, path, current) {
+  try {
+    await exec('git', ['ls-files', '--error-unmatch', '--', path], { cwd: root })
+    const { stdout } = await exec('git', ['show', `HEAD:${path}`], { cwd: root, encoding: 'buffer', maxBuffer: 8 * 1024 * 1024 })
+    if (!Buffer.from(stdout).equals(current)) throw new Error('tracked output differs from HEAD')
+  } catch (error) {
+    throw new EndroitError('generated_output_collision', `${path} cannot be adopted because it is not tracked and byte-identical to HEAD.`, { exitCode: 5, cause: error })
+  }
 }
 
 async function generatedFile(path, label) {

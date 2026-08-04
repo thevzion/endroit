@@ -120,21 +120,30 @@ excluded. Foundation Skills are the six explicit gestures declared by
 ## Route and Checkout topology
 
 A v9 Route owns no physical path. Its address is derived as
-`checkouts/<site>/<route>`. The Desk-owned
-`.endroit/checkout-index.json` is versioned and partitioned by Desk ID. Each
-partition maps a conventional address/ref to the explicitly adopted absolute
-local target and a digest.
+`checkouts/<site>/<route>`. Its purpose is one of `primary`, `development`,
+`integration`, `release`, `dogfood`, `recovery` or `experiment`. Implicit
+operations select the single active `primary` Route; other purposes require an
+explicit Route.
 
-Only the active Desk partition drives resolution and reconciliation. A lost
-generated symlink can be rebuilt from that partition. Switching Desks may
-replace a conventional symlink only when its observed target is already owned
-by another valid Desk partition. An unindexed symlink is a conflict; reconcile
-does not adopt or delete it.
+The binding authority is shared by every Home worktree of the same Git
+repository at
+`<commonGitDir>/endroit/desks/<desk>/checkout-bindings.json`. A non-Git Home
+uses `.endroit/desks/<desk>/checkout-bindings.json`. The canonical v1 document
+contains sorted `{site, route, target}` bindings, absolute targets, a digest
+and a sibling lock.
 
-Managed clones/worktrees remain physical at their address. Existing checkouts
-may use a generated symlink; submodules and explicitly direct checkouts may
-occupy the address. Removing a Route updates only its Desk partition and never
-removes a physical link currently owned by another Desk.
+`.endroit/checkout-index.json` v3 is only the active Home worktree's projection:
+`{version, desk, projections}`. Each projection records its conventional
+address, bound target, link state and digest. It never owns a binding and never
+contains another Desk or Home worktree's projections. A lost owned symlink can
+be rebuilt from the shared binding; an unindexed symlink remains a conflict.
+
+Managed clones/worktrees are physical below
+`<commonGitDir>/endroit/checkouts/<site>/<route>` (or the non-Git fallback under
+`.endroit`) and normally project a symlink at their conventional Home address.
+Existing and submodule targets may be direct or linked. When the `self` target
+is the Home or an ancestor/descendant, the projection is `relational` and no
+symlink is created.
 
 Git observations are read from the resolved repository. Extra worktrees are
 enumerated only through the common Git directory of known Site repositories.
@@ -146,17 +155,18 @@ enumerated only through the common Git directory of known Site repositories.
 - v7 declarations and Route v8 are accepted only through the legacy adapter;
 - v9 plus legacy for one identity is `ambiguous_sources`;
 - ordinary mutation of legacy sources is refused;
-- Route migration advances v7→v8 first, then v8→v9;
-- v8→v9 changes only the declaration shape and preserves the Checkout index;
+- Route migration advances v7→v8 first, then v8→v9 and requires an explicit or
+  deterministic v9 purpose;
+- the Workplace upgrade core can convert v7/v8 directly to v9 while extracting
+  v1/v2 index bindings into the shared v1 authority and writing a v3 projection;
 - apply is journaled under `.endroit/migrations/`;
 - rollback restores source bytes and mode exactly;
 - migration runs no Git mutation.
 
-There is no general 0.9→0.10 mutation. Room, Site, most Equipment and Artifact,
-and `WORK.json` sources remain read-only or owner-managed compatibility
-surfaces until an explicit migration is implemented and qualified. Compatibility
-aliases and readers are removable only after that condition and zero observed
-legacy usage.
+The upgrade core exposes a digest-bound plan plus approved apply and exact
+rollback. Product-level migration of Workplace/Desk/Member declarations,
+first-party Equipment synchronization and projection rebuild are composed by
+the command layer; the Route/binding core does not claim those effects.
 
 ## Documentation delivery
 

@@ -119,19 +119,20 @@ submodule checkouts are never deleted by Route removal.
 
 ## Checkout binding
 
-The index is local and partitioned by Desk.
+Bindings are shared per Desk across Git worktrees; the Home index is a local
+projection only.
 
 ```text
 explicit adopt/creation
-  → write Desk partition
+  → lock and write commonGitDir/endroit/desks/<desk>/checkout-bindings.json
   → materialize conventional address
-  → inspect/reconcile from the same partition
+  → write this Home's .endroit/checkout-index.json v3 projection
+  → inspect/reconcile from shared truth
 ```
 
-If a generated link is lost, reconcile can rebuild it from that partition. If
-a link is unindexed, reconcile reports a conflict and performs no adoption or
-deletion. When the active Desk changes, reconcile may switch the conventional
-address only between targets already owned by valid Desk partitions.
+If a generated link is lost, reconcile can rebuild it from the shared binding.
+If a link is unindexed, reconcile reports a conflict and performs no adoption
+or deletion. Relational self targets resolve without a symlink.
 
 ## Source migration
 
@@ -145,13 +146,22 @@ legacy v8 Route
   → route migrate --check
   → journaled v8 JSON → v9 ROUTE.md
   → optional exact rollback
+
+Workplace upgrade plan
+  → deterministic purpose and binding proposal
+  → expect-plan + workplace approval + clean Home Git
+  → journaled direct v7/v8 → v9 and index v1/v2 → binding v1 + index v3
+  → verification
+  → applied or automatic exact rollback
 ```
 
 Preview is read-only and creates no lock or journal. Apply takes the exclusive
 Route writer lock, snapshots source bytes/modes, validates drift and writes one
 compatibility step. Rollback is resumable and restores bytes/modes exactly.
-Neither apply nor rollback changes a repository, branch, HEAD, working tree,
-Gitlink or Checkout index.
+Route migration changes no repository, branch, HEAD, working tree, Gitlink or
+Checkout binding. Workplace upgrade changes its declared Route/binding/index
+set transactionally but performs no Git mutation. A later explicit rollback
+refuses drift and restores exact bytes and modes.
 
 ## Projection lifecycle
 

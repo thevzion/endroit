@@ -14,13 +14,14 @@ Offer three Checkout choices:
 1. **Use an existing checkout** — create a Route and bind its conventional
    Checkout address without moving it or persisting its host path.
 2. **Create a managed checkout** — clone it physically below
-   `checkouts/<site>/<route>`.
+   `<commonGitDir>/endroit/checkouts/<site>/<route>` and project the conventional
+   `checkouts/<site>/<route>` address.
 3. **Use a submodule** — recognize a user-managed Git composition at the same
    address; Endroit never runs submodule add, init or update.
 
-`checkout adopt <site>/<route> <path>` is the only explicit association of an
-existing repository. It records the validated target in the Desk-local
-Checkout index. A missing generated link is repaired only by explicit
+`checkout adopt <site>/<route> <path> --purpose <purpose>` is the only explicit
+association of an existing repository. It records the validated target in the
+Desk's shared binding document. A missing generated link is repaired only by explicit
 `checkout reconcile`; an unindexed Route remains `unbound`. Linked worktrees
 remain an explicit Checkout operation.
 
