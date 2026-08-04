@@ -1,7 +1,7 @@
 import { lstat } from 'node:fs/promises'
 import { dirname, join, resolve } from 'node:path'
 import { EndroitError } from './lib/errors.mjs'
-import { extractSection, readDocument, validateDocumentV9 } from './documents.mjs'
+import { extractSection, inspectDocumentDeclaration, readDocument, validateDocumentV9 } from './documents.mjs'
 import { loadLegacyWorkplace } from './legacy/workplace.mjs'
 
 const requiredSections = ['Purpose', 'Constitution', 'Boundaries', 'Limits']
@@ -65,16 +65,7 @@ async function inspectCandidate(root) {
   if (legacyInfo?.isSymbolicLink()) throw new EndroitError('document_symlink', `${legacyPath} must not be a symbolic link.`)
   if (legacyInfo && !legacyInfo.isFile()) throw new EndroitError('document_type', `${legacyPath} must be a regular file.`)
 
-  let marked = false
-  if (workplaceInfo) {
-    if (!workplaceInfo.isFile()) throw new EndroitError('document_type', `${workplacePath} must be a regular file.`)
-    try {
-      const document = await readDocument(workplacePath)
-      marked = document.metadata.kind === 'endroit/workplace'
-    } catch (error) {
-      if (await looksMarked(workplacePath)) throw error
-    }
-  }
+  const marked = Boolean(await inspectDocumentDeclaration(workplacePath, 'workplace'))
   if (marked && legacyInfo) throw new EndroitError('ambiguous_sources', `${root} contains both WORKPLACE.md and legacy endroit.json declarations.`)
   if (marked) return 'v9'
   if (legacyInfo) return 'legacy'
@@ -97,15 +88,6 @@ async function resolveOwner(root, owner) {
   }
   if (!document.body.trim()) throw new EndroitError('member_invalid', `${path} must contain collaboration context.`)
   return document
-}
-
-async function looksMarked(path) {
-  const { readFile } = await import('node:fs/promises')
-  let content
-  try { content = new TextDecoder('utf-8', { fatal: true }).decode(await readFile(path)) }
-  catch { return true }
-  const frontmatter = content.match(/^---\r?\n([\s\S]*?)(?:\r?\n---|$)/)?.[1] ?? ''
-  return /^kind\s*:\s*["']?endroit\/workplace["']?\s*$/m.test(frontmatter)
 }
 
 async function safeLstat(path) {

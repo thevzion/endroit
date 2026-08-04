@@ -1,6 +1,6 @@
 import { lstat, mkdir, readFile, realpath } from 'node:fs/promises'
 import { join, relative, resolve } from 'node:path'
-import { V9_API, parseDocument, readDocument, renderDocument, validateDocumentV9 } from './documents.mjs'
+import { V9_API, inspectDocumentDeclaration, parseDocument, renderDocument, validateDocumentV9 } from './documents.mjs'
 import { git } from './git.mjs'
 import { loadHome } from './home.mjs'
 import { DESK_INSTRUCTION, renderInstructionTemplate } from './instructions.mjs'
@@ -12,7 +12,7 @@ import { loadMember } from './member.mjs'
 export async function loadDesk(root) {
   const path = join(root, '.desk', DESK_INSTRUCTION)
   const legacyPath = join(root, '.desk', 'desk.json')
-  const current = await exists(path)
+  const current = await inspectDocumentDeclaration(path, 'desk')
   const legacy = await exists(legacyPath)
   if (current && legacy) throw new EndroitError('ambiguous_sources', `${root}/.desk contains both DESK.md and legacy desk.json declarations.`)
   if (!current && !legacy) return null
@@ -21,19 +21,18 @@ export async function loadDesk(root) {
     await loadMember(root, desk.member)
     return desk
   }
-  const document = await readDocument(path)
-  await validateDocumentV9(document.metadata, 'desk')
-  const member = document.metadata.owner.replace(/^member:/, '')
+  await validateDocumentV9(current.metadata, 'desk')
+  const member = current.metadata.owner.replace(/^member:/, '')
   await loadMember(root, member)
-  if (!document.body.trim()) throw new EndroitError('desk_invalid', `${path} must contain collaboration context.`)
+  if (!current.body.trim()) throw new EndroitError('desk_invalid', `${path} must contain collaboration context.`)
   return {
-    ...document.metadata,
+    ...current.metadata,
     member,
-    settings: document.metadata.settings ?? {},
-    body: document.body,
-    sections: document.sections,
-    fragments: document.fragments,
-    source_digest: document.source_digest,
+    settings: current.metadata.settings ?? {},
+    body: current.body,
+    sections: current.sections,
+    fragments: current.fragments,
+    source_digest: current.source_digest,
     path: relative(root, path),
     legacy: false,
   }

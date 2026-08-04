@@ -42,6 +42,20 @@ export async function readDocument(path) {
   return { ...parseDocument(bytes, { path }), path }
 }
 
+export async function inspectDocumentDeclaration(path, type) {
+  const schema = V9_API[type]
+  if (!schema) throw new EndroitError('document_unsupported', `Unsupported v9 document type ${type}.`)
+  try {
+    const document = await readDocument(path)
+    return document.metadata.kind === `endroit/${type}` || document.metadata.$schema === schema ? document : null
+  } catch (error) {
+    if (error.code === 'document_missing') return null
+    if (['document_symlink', 'document_type', 'document_encoding'].includes(error.code)) throw error
+    if (await sourceClaimsDeclaration(path, `endroit/${type}`, schema)) throw error
+    return null
+  }
+}
+
 export async function readSourceText(path) {
   return decodeSource(await readSourceBytes(path), path)
 }
@@ -153,6 +167,20 @@ function decodeSource(bytes, path) {
   } catch (error) {
     throw new EndroitError('document_encoding', `${path} must be valid UTF-8.`, { cause: error })
   }
+}
+
+async function sourceClaimsDeclaration(path, kind, schema) {
+  let content
+  try { content = decodeSource(await readFile(path), path) }
+  catch { return true }
+  const frontmatter = content.match(/^---\r?\n([\s\S]*?)(?:\r?\n---|$)/)?.[1] ?? ''
+  return frontmatter.split(/\r?\n/).some((line) => {
+    const separator = line.indexOf(':')
+    if (separator < 1) return false
+    const key = line.slice(0, separator).trim()
+    const value = line.slice(separator + 1).trim().replace(/^["']|["']$/g, '')
+    return (key === 'kind' && value === kind) || (key === '$schema' && value === schema)
+  })
 }
 
 function parseMetadata(source, path) {

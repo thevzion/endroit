@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rm, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -123,6 +123,60 @@ test('Workplace discovery ignores unmarked documents and fails closed on marked 
     await writeFile(join(root, 'nested', 'WORKPLACE.md'), await readFile(join(root, 'WORKPLACE.md')))
     await writeFile(join(root, 'nested', 'endroit.json'), '{}\n')
     await assert.rejects(() => findWorkplace(nested), (error) => error.code === 'ambiguous_sources')
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
+test('Desk discovery keeps legacy Guidance distinct from v9 declarations', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-desk-discovery-'))
+  try {
+    await mkdir(join(temporary, '.desk'), { recursive: true })
+    await mkdir(join(temporary, 'members', 'owner'), { recursive: true })
+    await writeFile(join(temporary, 'members', 'owner', 'MEMBER.md'), `---
+$schema: "https://endroit.org/schema/v7/member.json"
+id: "owner"
+name: "Owner"
+status: "active"
+accounts: []
+---
+
+# Owner
+`)
+    const legacyPath = join(temporary, '.desk', 'desk.json')
+    const deskPath = join(temporary, '.desk', 'DESK.md')
+    await writeFile(legacyPath, `${JSON.stringify({
+      $schema: 'https://endroit.org/schema/v7/desk.json',
+      id: 'local',
+      member: 'owner',
+    })}\n`)
+    await writeFile(deskPath, '# Local Desk\n\nLegacy collaboration Guidance.\n')
+
+    const legacy = await loadDesk(temporary)
+    assert.equal(legacy.legacy, true)
+    assert.equal(legacy.id, 'local')
+
+    const v9Source = renderDocument({
+      metadata: {
+        $schema: V9_API.desk,
+        kind: 'endroit/desk',
+        id: 'current',
+        owner: 'member:owner',
+        desk_state: 'active',
+      },
+      body: '# Current Desk\n\nCurrent collaboration context.',
+    })
+    await writeFile(deskPath, v9Source)
+    await assert.rejects(() => loadDesk(temporary), (error) => error.code === 'ambiguous_sources')
+
+    await writeFile(deskPath, '---\n$schema: "https://endroit.org/schema/v9/desk.json"\nkind: "endroit/desk"\nid: [broken\n---\n')
+    await assert.rejects(() => loadDesk(temporary), (error) => error.code === 'document_frontmatter_value_invalid')
+
+    await writeFile(deskPath, v9Source)
+    await rm(legacyPath)
+    const current = await loadDesk(temporary)
+    assert.equal(current.legacy, false)
+    assert.equal(current.id, 'current')
   } finally {
     await removeTree(temporary, { force: true })
   }
