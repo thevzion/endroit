@@ -238,6 +238,44 @@ export async function syncEquipment(root, selector, options = {}) {
   return results
 }
 
+export async function planFirstPartyEquipmentUpgrade(root, options = {}) {
+  const deskOverrides = (await installedEquipment(root, { scope: 'desk' }))
+    .filter((entry) => !entry.invalid && entry.id.startsWith('endroit/'))
+  if (deskOverrides.length) {
+    throw new EndroitError('workplace_upgrade_equipment_override', `First-party Desk overrides must be promoted or removed before upgrade: ${deskOverrides.map((entry) => entry.id).join(', ')}.`)
+  }
+  const installedFirstParty = (await installedEquipment(root, { scope: 'home' })).filter((entry) => entry.id.startsWith('endroit/'))
+  if (!installedFirstParty.length) return { writes: [], deletes: [], equipment: [] }
+  const sourceCommit = String(options.sourceCommit ?? '')
+  if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(sourceCommit)) {
+    throw new EndroitError('workplace_upgrade_target_source_required', 'A target source commit is required to synchronize first-party Equipment.')
+  }
+  const writes = []
+  const deletes = []
+  const equipment = []
+  for (const installed of installedFirstParty) {
+    await requireValid(installed)
+    const status = await equipmentStatus(installed)
+    if (status.state !== 'clean') {
+      throw new EndroitError('workplace_upgrade_equipment_customized', `${installed.id} has customized, missing or invalid source-owned files.`, { details: status })
+    }
+    const upstream = await resolveEquipment(root, `@endroit/${installed.id.split('/').at(-1)}`)
+    assertSameEquipment(installed, upstream)
+    if (options.targetVersion && upstream.manifest.version !== options.targetVersion) {
+      throw new EndroitError('workplace_upgrade_target_version_mismatch', `${installed.id} is ${upstream.manifest.version}, expected ${options.targetVersion}.`)
+    }
+    const target = { ...upstream, requestedRef: sourceCommit, resolvedCommit: sourceCommit }
+    for (const file of target.files) writes.push({ path: join(installed.root, file.path), content: file.content, kind: 'equipment-file' })
+    writes.push({ path: installed.path, content: manifestBytes(installedManifest(target, 'source')), kind: 'equipment-manifest' })
+    const next = new Set(target.files.map((file) => file.path))
+    for (const path of Object.keys(installed.manifest.origin.baseDigests)) {
+      if (!next.has(path)) deletes.push({ path: join(installed.root, path), kind: 'equipment-file-remove' })
+    }
+    equipment.push({ id: installed.id, version: target.manifest.version, requestedRef: sourceCommit, resolvedCommit: sourceCommit })
+  }
+  return { writes, deletes, equipment }
+}
+
 export async function removeEquipment(root, selector, options = {}) {
   const installed = await requireValid(await findInstalled(root, selector, options))
   const current = await equipmentStatus(installed)

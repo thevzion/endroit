@@ -21,6 +21,7 @@ import { publicPlan, resolveHome } from './resolved.mjs'
 import { dispatchRuntime, runtimeTrust } from './runtime.mjs'
 import { createMember, doctorMembers, inspectMember, listMembers, parseAccounts } from './member.mjs'
 import { findWorkplace } from './workplace.mjs'
+import { applyWorkplaceUpgrade, planWorkplaceUpgrade, rollbackWorkplaceUpgrade } from './workplace-upgrade.mjs'
 
 export async function runCli(argv = process.argv.slice(2), io = process, dependencies = {}) {
   const { positionals, flags } = parseArguments(argv)
@@ -47,6 +48,7 @@ async function route(command, action, rest, flags, argv, io, dependencies) {
     return validateEquipmentSource(workplaceFlag(flags) ?? process.cwd(), required(rest[0], 'Equipment source'))
   }
   const root = await findWorkplace(workplaceFlag(flags) ?? process.cwd())
+  if (command === 'workplace' && action === 'upgrade') return workplaceUpgradeRoute(root, flags)
   await assertRuntime(root)
   if (command === 'desk') return deskRoute(root, action, rest, flags)
   if (command === 'member') return memberRoute(root, action, rest, flags)
@@ -60,6 +62,31 @@ async function route(command, action, rest, flags, argv, io, dependencies) {
   }
   const runtimeArgs = withoutWorkplaceFlag(argv.slice(argv.indexOf(command) + 1))
   return { passthrough: true, exitCode: await dispatchRuntime(root, command, runtimeArgs, io) }
+}
+
+async function workplaceUpgradeRoute(root, flags) {
+  const selected = [booleanFlag(flags.check), booleanFlag(flags.apply), flags.rollback !== undefined].filter(Boolean).length
+  if (selected !== 1) throw usage('Use exactly one of workplace upgrade --check, --apply or --rollback <run-id>.')
+  if (flags.rollback !== undefined) return rollbackWorkplaceUpgrade(root, required(flags.rollback === true ? undefined : flags.rollback, 'Upgrade run id'))
+  const options = {
+    targetVersion: flags['target-version'],
+    sourceCommit: flags['source-commit'],
+    packageDigest: flags['package-digest'],
+    packageIntegrity: flags['package-integrity'],
+    purposes: purposeMappings(values(flags.purpose)),
+  }
+  if (booleanFlag(flags.check)) return planWorkplaceUpgrade(root, options)
+  return applyWorkplaceUpgrade(root, {
+    ...options,
+    expectPlan: required(flags['expect-plan'], 'Plan digest'),
+    approve: required(flags.approve, 'Approval'),
+    verify: async () => {
+      await resolveHome(root)
+      await buildHome(root, { adoptTracked: true })
+      const doctor = await doctorHome(root)
+      return { status: doctor.status === 'ready' ? 'ready' : 'failed', doctor }
+    },
+  })
 }
 
 async function initRoute(destination, flags) {
@@ -199,6 +226,7 @@ function help() {
       'room create|list|inspect|doctor', 'site add|list|inspect|doctor|remove',
       'route list|inspect|park|activate|supersede|migrate|remove',
       'checkout list|inspect|resolve|adopt|clone|worktree|reconcile|delete',
+      'workplace upgrade --check|--apply|--rollback <run-id>',
       'validate', 'build [--check]', 'doctor',
       '<Equipment runtime namespace> <command...>',
     ],
@@ -252,6 +280,16 @@ async function confirm(io, preview) {
 
 function csv(value) { return value === undefined ? undefined : String(value).split(',').map((entry) => entry.trim()).filter(Boolean) }
 function values(value) { return value === undefined ? [] : Array.isArray(value) ? value : [value] }
+function purposeMappings(entries) {
+  if (!entries.length) return undefined
+  const result = {}
+  for (const entry of entries) {
+    const separator = String(entry).indexOf('=')
+    if (separator < 1 || separator === String(entry).length - 1) throw usage('--purpose must use site/route=purpose.')
+    result[String(entry).slice(0, separator)] = String(entry).slice(separator + 1)
+  }
+  return result
+}
 function deskStrategy(value, fallback) {
   const strategy = value === undefined ? fallback : String(value)
   if (!['tracked', 'separate', 'later'].includes(strategy)) throw usage('--desk must be tracked, separate or later.')

@@ -3,7 +3,8 @@ import { execFile } from 'node:child_process'
 import { lstat, mkdir, open, readFile, readdir, realpath, rm } from 'node:fs/promises'
 import { basename, dirname, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import { parseDocument } from './documents.mjs'
+import { parseDocument, renderDocument, V9_API } from './documents.mjs'
+import { planFirstPartyEquipmentUpgrade } from './equipment.mjs'
 import {
   checkoutBindingsDocument,
   checkoutIndexDocument,
@@ -42,6 +43,7 @@ export async function applyWorkplaceUpgrade(homeRoot, options = {}) {
     const runRoot = join(homeRoot, '.endroit', 'upgrades', 'workplace-v1', runId)
     const snapshotRoot = join(runRoot, 'snapshots')
     await mkdir(snapshotRoot, { recursive: true })
+    const projectionBefore = await captureProjectionState(homeRoot)
     const entries = []
     for (const [index, write] of plan.writes.entries()) {
       const snapshot = write.before ? join(snapshotRoot, `${String(index).padStart(4, '0')}-${sha256(write.path)}-${basename(write.path)}`) : null
@@ -87,8 +89,10 @@ export async function applyWorkplaceUpgrade(homeRoot, options = {}) {
       }
       const verification = await options.verify({ homeRoot, plan: publicPlan(plan) })
       if (verification === false || verification?.status === 'failed') throw new EndroitError('workplace_upgrade_verification_failed', 'Workplace upgrade verification failed.')
+      journal = await recordProjectionChanges(homeRoot, snapshotRoot, journalPath, journal, projectionBefore)
     } catch (error) {
       try {
+        journal = await recordProjectionChanges(homeRoot, snapshotRoot, journalPath, journal, projectionBefore)
         journal = await rollbackJournal(journalPath, journal)
         error.message = `${error.message} Upgrade run ${runId} was rolled back exactly.`
       } catch (rollbackError) {
@@ -145,6 +149,19 @@ async function buildPlan(homeRoot, options) {
   const routes = await scanRoutes(deskRoot)
   const routePurposeMap = proposeRoutePurposes(routes, options.purposes)
   const writes = []
+  const target = {
+    version: options.targetVersion ?? null,
+    sourceCommit: options.sourceCommit ?? null,
+    packageDigest: options.packageDigest ?? null,
+    packageIntegrity: options.packageIntegrity ?? null,
+  }
+  writes.push(...await planLegacySources(homeRoot, deskRoot, target))
+  const equipmentPlan = await planFirstPartyEquipmentUpgrade(homeRoot, {
+    targetVersion: target.version,
+    sourceCommit: target.sourceCommit,
+  })
+  for (const write of equipmentPlan.writes) await addPlannedWrite(writes, write.kind, write.path, write.content, 0o644)
+  for (const deletion of equipmentPlan.deletes) await addPlannedWrite(writes, deletion.kind, deletion.path, null, 0o644)
   const routePurposes = []
   for (const route of routes) {
     const purpose = routePurposeMap.get(`${route.site}/${route.id}`)
@@ -244,17 +261,148 @@ async function buildPlan(homeRoot, options) {
     desk,
     workplace,
     homeGit,
-    target: {
-      version: options.targetVersion ?? null,
-      sourceCommit: options.sourceCommit ?? null,
-      packageDigest: options.packageDigest ?? null,
-      packageIntegrity: options.packageIntegrity ?? null,
-    },
+    target,
+    equipment: equipmentPlan.equipment,
     routes,
     routePurposes,
     writes,
     bindingLockPaths: [...new Set(bindingLockPaths)].sort(),
   }
+}
+
+async function planLegacySources(homeRoot, deskRoot, target) {
+  const writes = []
+  const legacyHomePath = join(homeRoot, 'endroit.json')
+  const workplacePath = join(homeRoot, 'WORKPLACE.md')
+  const legacyHome = await fileState(legacyHomePath)
+  const currentWorkplace = await fileState(workplacePath)
+  if (legacyHome && currentWorkplace) throw new EndroitError('ambiguous_sources', `${homeRoot} contains both WORKPLACE.md and legacy endroit.json declarations.`)
+  if (legacyHome) {
+    if (!target.version) throw new EndroitError('workplace_upgrade_target_version_required', 'Pass the target Endroit version for a legacy Workplace upgrade.')
+    let home
+    try { home = JSON.parse(legacyHome.bytes) } catch { throw new EndroitError('legacy_document_invalid', `${legacyHomePath} is invalid JSON.`) }
+    const homeBodyPath = join(homeRoot, 'HOME.md')
+    const homeBody = await fileState(homeBodyPath)
+    if (!homeBody) throw new EndroitError('legacy_workplace_missing', `${homeBodyPath} does not exist.`)
+    const owner = await legacyOwner(homeRoot)
+    const body = legacyWorkplaceBody(homeBody.bytes.toString('utf8'), home.name)
+    const metadata = {
+      $schema: V9_API.workplace,
+      kind: 'endroit/workplace',
+      id: home.name,
+      owner: `member:${owner}`,
+      profile: 'endroit/0.10',
+      protocol: 'open-workplace/0.2-draft',
+      runtime: `@endroit/cli@${target.version}`,
+      providers: home.providers,
+      ...(home.prefix ? { prefix: home.prefix } : {}),
+      ...(home.emoji ? { emoji: home.emoji } : {}),
+      ...(home.settings && Object.keys(home.settings).length ? { settings: home.settings } : {}),
+    }
+    await addPlannedWrite(writes, 'workplace-v9', workplacePath, renderDocument({ metadata, body }), homeBody.mode)
+    await addPlannedWrite(writes, 'workplace-legacy-remove', legacyHomePath, null, legacyHome.mode)
+    await addPlannedWrite(writes, 'home-instruction-legacy-remove', homeBodyPath, null, homeBody.mode)
+  } else if (currentWorkplace && target.version) {
+    const document = parseDocument(currentWorkplace.bytes, { path: workplacePath })
+    const runtime = `@endroit/cli@${target.version}`
+    if (document.metadata.runtime !== runtime) {
+      await addPlannedWrite(writes, 'workplace-runtime', workplacePath, renderDocument({ metadata: { ...document.metadata, runtime }, body: document.body }), currentWorkplace.mode)
+    }
+  }
+
+  const legacyDeskPath = join(deskRoot, 'desk.json')
+  const deskPath = join(deskRoot, 'DESK.md')
+  const legacyDesk = await fileState(legacyDeskPath)
+  if (legacyDesk) {
+    let desk
+    try { desk = JSON.parse(legacyDesk.bytes) } catch { throw new EndroitError('legacy_document_invalid', `${legacyDeskPath} is invalid JSON.`) }
+    const body = await fileState(deskPath)
+    if (!body) throw new EndroitError('legacy_desk_missing', `${deskPath} does not exist.`)
+    const metadata = {
+      $schema: V9_API.desk,
+      kind: 'endroit/desk',
+      id: desk.id,
+      owner: `member:${desk.member}`,
+      desk_state: 'active',
+      ...(desk.settings && Object.keys(desk.settings).length ? { settings: desk.settings } : {}),
+    }
+    await addPlannedWrite(writes, 'desk-v9', deskPath, renderDocument({ metadata, body: body.bytes.toString('utf8') }), body.mode)
+    await addPlannedWrite(writes, 'desk-legacy-remove', legacyDeskPath, null, legacyDesk.mode)
+  }
+
+  for (const memberId of await directoryNames(join(homeRoot, 'members'))) {
+    const path = join(homeRoot, 'members', memberId, 'MEMBER.md')
+    const state = await fileState(path)
+    if (!state) continue
+    const document = parseDocument(state.bytes, { path })
+    if (document.metadata.$schema !== 'https://endroit.org/schema/v7/member.json') continue
+    const metadata = {
+      $schema: V9_API.member,
+      kind: 'endroit/member',
+      id: document.metadata.id,
+      owner: `member:${document.metadata.id}`,
+      name: document.metadata.name,
+      membership_state: document.metadata.status,
+      accounts: document.metadata.accounts,
+    }
+    await addPlannedWrite(writes, 'member-v9', path, renderDocument({ metadata, body: document.body }), state.mode)
+  }
+  return writes
+}
+
+async function legacyOwner(homeRoot) {
+  const ids = await directoryNames(join(homeRoot, 'members'))
+  if (ids.includes('owner')) return 'owner'
+  if (ids.length === 1) return ids[0]
+  throw new EndroitError('workplace_owner_ambiguous', `${homeRoot}/endroit.json cannot resolve one legacy Member owner.`)
+}
+
+function legacyWorkplaceBody(source, fallbackTitle) {
+  const titleMatch = source.match(/^#\s+(.+)\r?\n/)
+  const title = titleMatch?.[1].trim() || fallbackTitle
+  const constitution = nestHeadings(titleMatch ? source.slice(titleMatch[0].length) : source).trim()
+  return [
+    `# ${title}`,
+    '',
+    '## Purpose',
+    '',
+    `Operate ${fallbackTitle} as one durable, local and inspectable Workplace.`,
+    '',
+    '## Constitution',
+    '',
+    '<!-- Migrated from HOME.md; its content remains authoritative here. -->',
+    '',
+    constitution,
+    '',
+    '## Boundaries',
+    '',
+    'Resolve only this declared Workplace and the sources required for the current work.',
+    '',
+    '## Limits',
+    '',
+    'External access and generated projections never grant authority or replace owned sources.',
+    '',
+  ].join('\n')
+}
+
+function nestHeadings(source) {
+  let fence = null
+  return source.split(/(?<=\n)/).map((line) => {
+    const marker = line.match(/^\s*(`{3,}|~{3,})/)?.[1]
+    if (marker) {
+      if (fence === marker[0]) fence = null
+      else if (!fence) fence = marker[0]
+      return line
+    }
+    return fence ? line : line.replace(/^(#{1,4})(?=\s)/, '##$1')
+  }).join('')
+}
+
+async function addPlannedWrite(writes, kind, path, after, mode) {
+  const before = await fileState(path)
+  const bytes = after === null ? null : Buffer.from(after)
+  if ((before?.sha256 ?? null) === (bytes ? sha256(bytes) : null) && (before?.mode ?? null) === (bytes ? mode : null)) return
+  writes.push({ kind, path, after: bytes, mode: bytes ? (before?.mode ?? mode) : mode, before })
 }
 
 async function scanRoutes(deskRoot) {
@@ -331,12 +479,15 @@ async function readLegacyIndex(path, currentDesk) {
 
 function publicPlan(plan) {
   const writes = plan.writes.map((write) => ({ kind: write.kind, path: displayPath(plan.homeRoot, write.path), before: write.before?.sha256 ?? null, after: write.after ? sha256(write.after) : null }))
+  const compatibility = ['rooms', 'sites', 'artifacts', 'work']
   const contract = {
     workplace: plan.workplace,
     desk: plan.desk,
     target: plan.target,
     homeHead: plan.homeGit.head,
-    sources: ['route-v7-json', 'route-v8-json', 'route-v9-markdown', 'checkout-index-v1', 'checkout-index-v2', 'checkout-index-v3'],
+    sources: ['workplace-v7', 'desk-v7', 'member-v7', 'route-v7-json', 'route-v8-json', 'route-v9-markdown', 'checkout-index-v1', 'checkout-index-v2', 'checkout-index-v3', 'installed-first-party-equipment'],
+    compatibility,
+    equipment: plan.equipment,
     writes,
     routePurposes: plan.routePurposes,
     invariants: ['no-git-mutation', 'binding-targets-preserved', 'checkout-addresses-preserved', 'exact-snapshot-rollback'],
@@ -350,6 +501,8 @@ function publicPlan(plan) {
     target: plan.target,
     homeGit: plan.homeGit,
     sources: contract.sources,
+    compatibility,
+    equipment: plan.equipment,
     writes,
     invariants: contract.invariants,
     rollback: 'workplace upgrade --rollback <run-id>',
@@ -391,12 +544,17 @@ function renderRouteV9(route, desk, purpose) {
 
 async function readDeskId(deskRoot) {
   const current = join(deskRoot, 'DESK.md')
+  let currentError
   try {
     const document = parseDocument(await readFile(current, 'utf8'), { path: current })
     if (document.metadata.id) return document.metadata.id
-  } catch (error) { if (error.code !== 'ENOENT') throw error }
+  } catch (error) { currentError = error }
   try { return JSON.parse(await readFile(join(deskRoot, 'desk.json'), 'utf8')).id }
-  catch (error) { if (error.code === 'ENOENT') throw new EndroitError('desk_missing', 'Configure a Desk before upgrading the Workplace.'); throw error }
+  catch (error) {
+    if (error.code === 'ENOENT' && currentError?.code !== 'ENOENT') throw currentError
+    if (error.code === 'ENOENT') throw new EndroitError('desk_missing', 'Configure a Desk before upgrading the Workplace.')
+    throw error
+  }
 }
 
 async function readWorkplaceId(homeRoot) {
@@ -470,16 +628,20 @@ async function rollbackJournal(journalPath, journal) {
     const entry = journal.entries[index]
     const current = await fileState(entry.path)
     const currentSha = current?.sha256 ?? null
-    if (currentSha !== entry.afterSha256 && currentSha !== entry.beforeSha256) {
+    const currentMode = current?.mode ?? null
+    const isAfter = currentSha === entry.afterSha256 && currentMode === entry.afterMode
+    const isBefore = currentSha === entry.beforeSha256 && currentMode === entry.beforeMode
+    if (!isAfter && !isBefore) {
       throw new EndroitError('workplace_upgrade_rollback_drift', `${entry.path} changed after the upgrade.`)
     }
-    if (currentSha === entry.afterSha256) {
+    if (isAfter) {
       if (entry.snapshot) {
         const bytes = await readFile(entry.snapshot)
         if (sha256(bytes) !== entry.beforeSha256) throw new EndroitError('workplace_upgrade_snapshot_corrupt', `${entry.snapshot} changed after the upgrade.`)
         await writeFileAtomic(entry.path, bytes, entry.beforeMode)
       } else if (current) {
         await rm(entry.path)
+        await removeEmptyProjectionParents(entry.path, journal.homeRoot)
       }
     }
     journal.entries[index].progress = 'before'
@@ -489,6 +651,70 @@ async function rollbackJournal(journalPath, journal) {
   journal = { ...journal, status: 'rolled-back', rolledBackAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
   await writeJournal(journalPath, journal)
   return journal
+}
+
+async function captureProjectionState(homeRoot) {
+  const paths = [
+    join(homeRoot, 'AGENTS.md'),
+    join(homeRoot, 'CLAUDE.md'),
+    join(homeRoot, 'endroit.mjs'),
+    join(homeRoot, '.endroit', 'build.json'),
+    join(homeRoot, '.agents', 'skills'),
+    join(homeRoot, '.claude', 'skills'),
+  ]
+  const state = new Map()
+  for (const path of paths) await captureProjectionPath(path, state)
+  return state
+}
+
+async function captureProjectionPath(path, state) {
+  const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+  if (!info) return
+  if (info.isSymbolicLink()) throw new EndroitError('workplace_upgrade_projection_invalid', `${path} must not be a symbolic link.`)
+  if (info.isFile()) {
+    const bytes = await readFile(path)
+    state.set(path, { bytes, mode: info.mode & 0o777, sha256: sha256(bytes) })
+    return
+  }
+  if (!info.isDirectory()) throw new EndroitError('workplace_upgrade_projection_invalid', `${path} must be a regular projection path.`)
+  for (const entry of await readdir(path, { withFileTypes: true })) await captureProjectionPath(join(path, entry.name), state)
+}
+
+async function recordProjectionChanges(homeRoot, snapshotRoot, journalPath, journal, before) {
+  if (journal.entries.some((entry) => entry.kind === 'build-projection')) return journal
+  const after = await captureProjectionState(homeRoot)
+  const paths = [...new Set([...before.keys(), ...after.keys()])].sort()
+  for (const path of paths) {
+    const prior = before.get(path) ?? null
+    const current = after.get(path) ?? null
+    if ((prior?.sha256 ?? null) === (current?.sha256 ?? null) && (prior?.mode ?? null) === (current?.mode ?? null)) continue
+    const snapshot = prior ? join(snapshotRoot, `projection-${sha256(path)}-${basename(path)}`) : null
+    if (snapshot) await writeFileAtomic(snapshot, prior.bytes, prior.mode)
+    journal.entries.push({
+      kind: 'build-projection',
+      path,
+      beforeSha256: prior?.sha256 ?? null,
+      beforeMode: prior?.mode ?? null,
+      afterSha256: current?.sha256 ?? null,
+      afterMode: current?.mode ?? null,
+      snapshot,
+      progress: 'after',
+    })
+  }
+  journal = { ...journal, updatedAt: new Date().toISOString() }
+  await writeJournal(journalPath, journal)
+  return journal
+}
+
+async function removeEmptyProjectionParents(path, homeRoot) {
+  const roots = [join(homeRoot, '.agents', 'skills'), join(homeRoot, '.claude', 'skills')]
+  const stop = roots.find((root) => path === root || path.startsWith(`${root}/`))
+  if (!stop) return
+  let current = dirname(path)
+  while (current !== stop) {
+    try { await rm(current) } catch { break }
+    current = dirname(current)
+  }
 }
 
 async function acquireUpgradeLocks(plan) {
