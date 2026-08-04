@@ -26,7 +26,7 @@ test('Document parsing is strict, deterministic and exposes sections and typed F
 $schema: "https://endroit.org/schema/v9/document.json"
 kind: "endroit/material"
 id: "proof"
-owner: "room:desk/endroit"
+owner: "room:desk/demo"
 document_role: "material"
 data: {"z":1,"a":[true,"x"]}
 ---
@@ -87,7 +87,7 @@ test('the single schema registry validates v9 Documents, PROFILE.md and Work v1a
     $schema: 'https://endroit.org/schema/work/v1alpha2.json',
     kind: 'endroit/work:item',
     id: 'proof',
-    owner: 'room:desk/endroit',
+    owner: 'room:desk/demo',
     contract: 'endroit/work/v1alpha2',
     work_type: null,
     work_state: 'active',

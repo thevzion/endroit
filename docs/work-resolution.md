@@ -21,9 +21,9 @@ The frontmatter uses snake_case and declares the Work Item contract:
 $schema: "https://endroit.org/schema/work/v1alpha2.json"
 kind: "endroit/work:item"
 id: "public-proof"
-owner: "room:desk/endroit"
+owner: "room:desk/demo"
 contract: "endroit/work/v1alpha2"
-work_type: "endroit/public-proof"
+work_type: "demo/public-proof"
 work_state: "active"
 derived_from: []
 ---
@@ -45,7 +45,7 @@ kind: "claim"
 id: "workplace-positioning"
 currentness: "current"
 maturity: "supported"
-evidence: ["decision:desk/endroit/0008"]
+evidence: ["decision:desk/demo/0001"]
 ```
 
 Endroit compiles human-owned Markdown into provider context.

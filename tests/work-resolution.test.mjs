@@ -30,7 +30,7 @@ test('WORK.md resolves typed fragments and derives completion from its contract 
     assert.equal(executable.value.frontier, 'execution-ready')
     assert.equal(executable.value.frontiers.closureReady, false)
     assert.equal(executable.value.completion.status, 'incomplete')
-    assert.deepEqual(executable.value.authority.sources, ['decision:endroit/0007'])
+    assert.deepEqual(executable.value.authority.sources, ['decision:desk/demo/0001'])
 
     await writeFile(workPath, completeWorkMarkdown())
     const closed = await command(home, ['resolve', artifact.ref, '--json'])
@@ -65,10 +65,10 @@ test('record-review mutates only addressable WORK.md metadata and preserves pros
     const review = await command(home, ['review', first.ref, '--json'])
     assert.equal(review.code, 0, review.stderr)
     assert.equal(review.value.items[0].availability.status, 'available')
-    assert.equal(review.value.items[0].owner, 'site:endroit')
+    assert.equal(review.value.items[0].owner, 'site:demo')
 
     const recorded = await command(home, [
-      'record-review', first.ref, 'endroit-readme', '--status', 'changes-requested', '--note', 'Tighten the maturity claim.', '--json',
+      'record-review', first.ref, 'demo-readme', '--status', 'changes-requested', '--note', 'Tighten the maturity claim.', '--json',
     ])
     assert.equal(recorded.code, 0, recorded.stderr)
     assert.equal(recorded.value.lifecycleChanged, false)
@@ -163,7 +163,7 @@ contract: "endroit/work/v1alpha2"
 kind: "endroit/work:item"
 id: "${id}"
 owner: "room:home/home"
-work_type: "endroit/public-proof"
+work_type: "demo/public-proof"
 work_state: "active"
 derived_from: []
 ---
@@ -172,7 +172,7 @@ derived_from: []
 
 ## Objective
 
-Qualify the public Endroit surface.
+Qualify a public demo product surface.
 
 ## Expected effect
 
@@ -183,7 +183,7 @@ Every claim is locally inspectable and correctly qualified.
 \`\`\`endroit
 kind: "source"
 id: "authority"
-ref: "decision:endroit/0007"
+ref: "decision:desk/demo/0001"
 role: "authority"
 \`\`\`
 
@@ -192,7 +192,7 @@ role: "authority"
 \`\`\`endroit
 kind: "source"
 id: "site"
-ref: "site:endroit"
+ref: "site:demo"
 role: "context"
 \`\`\`
 
@@ -223,21 +223,21 @@ ${contradiction ? `
 \`\`\`endroit
 kind: "contradiction"
 id: "published-status"
-sources: ["site:endroit"]
+sources: ["site:demo"]
 status: "${contradiction}"
 resolution: null
 evidence: []
 \`\`\`
 A candidate was presented as published.
 ` : ''}
-## Endroit core assignment
+## Demo site assignment
 
 \`\`\`endroit
 kind: "assignment"
-id: "endroit-core"
+id: "demo-site"
 role: "engineer"
-sources: ["decision:endroit/0007", "site:endroit"]
-destination: {"owner":"site:endroit","site":"endroit","route":"integrated-main"}
+sources: ["decision:desk/demo/0001", "site:demo"]
+destination: {"owner":"site:demo","site":"demo","route":"main"}
 expected_effect: "The candidate passes Work Resolution tests."
 verification: ["native-gates"]
 status: "${assignment}"
@@ -252,7 +252,7 @@ id: "native-gates"
 status: "${verification}"
 evidence: ["test:native-gates"]
 \`\`\`
-Run native Endroit gates.
+Run the demo product gates.
 ${observed ? `
 ## Observed result
 
@@ -264,15 +264,15 @@ evidence: ["test:native-gates"]
 \`\`\`
 The local candidate is qualified.
 ` : ''}
-## Endroit README review
+## Demo README review
 
 \`\`\`endroit
 kind: "review"
-id: "endroit-readme"
-label: "Endroit README"
+id: "demo-readme"
+label: "Demo README"
 target_kind: "file"
 target: "WORKPLACE.md"
-owner: "site:endroit"
+owner: "site:demo"
 status: "${review}"
 note: null
 \`\`\`
@@ -300,16 +300,16 @@ function legacyWork() {
   return {
     $schema: 'https://endroit.org/schema/work/v1alpha1.json',
     version: 'endroit/work/v1alpha1',
-    objective: 'Qualify the public Endroit surface.',
-    workType: 'endroit/public-proof',
+    objective: 'Qualify a public demo product surface.',
+    workType: 'demo/public-proof',
     expectedEffect: 'Every claim is locally inspectable and correctly qualified.',
-    sources: [{ ref: 'decision:endroit/0007', role: 'authority' }],
+    sources: [{ ref: 'decision:desk/demo/0001', role: 'authority' }],
     claims: [],
     obligations: [{ id: 'no-remote', description: 'Perform no remote effect.', required: true, status: 'satisfied', evidence: ['plan:authority-boundary'] }],
     contradictions: [],
     assignments: [],
     verification: [],
     observedResult: { status: 'complete', summary: 'The local candidate is qualified.', evidence: ['test:native-gates'] },
-    review: [{ id: 'endroit-readme', label: 'Endroit README', kind: 'file', target: 'HOME.md', question: 'Is it clear?', owner: 'site:endroit', status: 'accepted', note: null }],
+    review: [{ id: 'demo-readme', label: 'Demo README', kind: 'file', target: 'HOME.md', question: 'Is it clear?', owner: 'site:demo', status: 'accepted', note: null }],
   }
 }

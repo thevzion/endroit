@@ -119,6 +119,27 @@ assert.equal(
 )
 const all = await files(root)
 const allPaths = new Set(all.map((path) => resolve(path)))
+const workExamplePaths = new Set([
+  join(root, 'docs/work-resolution.md'),
+  join(root, 'tests/documents-workplace.test.mjs'),
+  join(root, 'tests/work-resolution.test.mjs'),
+  ...(await files(join(root, 'equipment/endroit/work'))),
+].map((path) => resolve(path)))
+const homeSpecificWorkExamples = [
+  ['room:desk', 'endroit'].join('/'),
+  ['decision:desk', 'endroit'].join('/'),
+  ['decision', 'endroit'].join(':'),
+  ['site', 'endroit'].join(':'),
+  ['integrated', 'main'].join('-'),
+  ['endroit', 'public-proof'].join('/'),
+  ['endroit', 'readme'].join('-'),
+]
+for (const path of workExamplePaths) {
+  const body = await readFile(path, 'utf8')
+  for (const identifier of homeSpecificWorkExamples) {
+    assert.equal(body.includes(identifier), false, `${relative(root, path)} contains Home-specific Work example ${identifier}`)
+  }
+}
 for (const path of all.filter((candidate) => candidate.endsWith('.md'))) {
   const body = await readFile(path, 'utf8')
   for (const match of body.matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
