@@ -1,0 +1,52 @@
+{
+  "$schema": "https://endroit.org/schema/v9/equipment.json",
+  "name": "endroit/release",
+  "version": "0.10.0-alpha.0",
+  "description": "Resolve, preview, lock, verify and observe multi-Site Releases without delivering them.",
+  "prefix": "release",
+  "files": [
+    "capabilities/manage.md",
+    "schemas/public-surface.schema.json",
+    "schemas/release.schema.json",
+    "templates/SURFACE.md",
+    "templates/RELEASE.md",
+    "runtime.mjs"
+  ],
+  "capabilities": [
+    {
+      "id": "manage",
+      "path": "capabilities/manage.md",
+      "description": "Resolve and qualify Workplace-owned Releases over Site-owned exports."
+    }
+  ],
+  "artifact_kinds": [
+    {
+      "id": "public-surface",
+      "schema": "schemas/public-surface.schema.json",
+      "template": "templates/SURFACE.md",
+      "document": "SURFACE.md",
+      "owners": ["site"],
+      "site_path": "surfaces"
+    },
+    {
+      "id": "release",
+      "schema": "schemas/release.schema.json",
+      "template": "templates/RELEASE.md",
+      "document": "RELEASE.md",
+      "owners": ["workplace"],
+      "workplace_path": "releases"
+    }
+  ],
+  "runtime": {
+    "namespace": "release",
+    "entry": "runtime.mjs",
+    "commands": [
+      { "name": "inspect", "description": "Resolve one Release and its logical Site exports." },
+      { "name": "preview", "description": "Run a declared Site preview in the foreground." },
+      { "name": "lock", "description": "Check or write a deterministic Release lock." },
+      { "name": "verify", "description": "Verify a locked Release against current local evidence." },
+      { "name": "watch", "description": "Wait read-only for a locked Release to become current." },
+      { "name": "observe", "description": "Record an explicitly observed Site effect." }
+    ]
+  }
+}

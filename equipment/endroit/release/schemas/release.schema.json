@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/release/release/v1alpha1.json",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["$schema", "kind", "id", "owner", "artifact_contract", "material_state", "currentness", "derived_from"],
+  "properties": {
+    "$schema": { "const": "https://endroit.org/schema/release/release/v1alpha1.json" },
+    "kind": { "const": "endroit/release:release" },
+    "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9._-]{0,127}$" },
+    "owner": { "type": "string", "pattern": "^workplace:[a-z0-9][a-z0-9._-]{0,127}$" },
+    "artifact_contract": { "const": "endroit/release/release/v1alpha1" },
+    "material_state": { "enum": ["retained", "archived"] },
+    "currentness": { "enum": ["current", "superseded", "withdrawn"] },
+    "derived_from": { "type": "array", "uniqueItems": true, "items": { "type": "string", "minLength": 1 } }
+  }
+}
