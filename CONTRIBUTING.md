@@ -22,7 +22,7 @@ Site. Use
 repositories and rolls back a failed replacement. The scripts never create a
 remote, commit or push.
 
-Edit `HOME.md`, `DESK.md` or the relevant Equipment Instruction as canonical
+Edit `WORKPLACE.md`, `DESK.md` or the relevant Equipment Instruction as canonical
 source. Never edit `AGENTS.md` or `CLAUDE.md`; they are fully owned provider
 projections. The development reconciler preserves these source-owned
 instructions and refuses an incomplete Desk.

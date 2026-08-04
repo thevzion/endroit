@@ -108,6 +108,11 @@ assert.equal(
   'ADOPT.md must be byte-identical to the Onboarding Equipment adoption reference',
 )
 assert.equal(
+  await readFile(join(root, 'schemas/work/v1alpha1.json'), 'utf8'),
+  await readFile(join(root, 'equipment/endroit/work/schemas/work.schema.json'), 'utf8'),
+  'the public Work v1alpha1 schema must be byte-identical to its compatibility source',
+)
+assert.equal(
   await readFile(join(root, 'schemas/work/v1alpha2.json'), 'utf8'),
   await readFile(join(root, 'equipment/endroit/work/schemas/v1alpha2.schema.json'), 'utf8'),
   'the public Work schema projection must be byte-identical to its Equipment source',
