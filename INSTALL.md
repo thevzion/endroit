@@ -73,9 +73,10 @@ separate explicit operation and is not implied by installation.
 
 ## Existing 0.9 data
 
-Endroit 0.10 reads frozen v7/v8 declarations through its compatibility adapter.
-It does not offer a whole-Workplace migration command. Keep the existing source
-intact until its owner-specific migration is documented and verified.
+Endroit 0.10 reads frozen v7 declarations and Route v8 through its compatibility
+adapter. It does not accept the earlier unversioned v6 contracts or offer a
+whole-Workplace migration command. Keep the existing source intact until its
+owner-specific migration is documented and verified.
 
 Route conversion is the only general source migration included in this
 candidate:

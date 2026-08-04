@@ -97,6 +97,10 @@ assert.match(installDocument, /The agent guides\. The CLI applies\. The human ap
 const workResolveCapability = await readFile(join(root, 'equipment/endroit/work/capabilities/resolve.md'), 'utf8')
 assert.match(workResolveCapability, /declares `kind` plus `id`/)
 assert.doesNotMatch(workResolveCapability, /declares `fragment` plus `id`/)
+const profileDocument = await readFile(join(root, 'PROFILE.md'), 'utf8')
+assert.match(profileDocument, /reads frozen v7 declarations and Route v8/)
+assert.match(profileDocument, /unversioned v6 contracts remain published and frozen, but\nare not accepted/)
+assert.doesNotMatch(profileDocument, /reads the frozen 0\.7 and 0\.8 source contracts/)
 await validateDocumentV9((await readDocument(join(root, 'PROFILE.md'))).metadata, 'profile')
 assert.equal(
   await readFile(join(root, 'ADOPT.md'), 'utf8'),

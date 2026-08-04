@@ -198,11 +198,12 @@ observed Site effect. Neither implies completion, currentness or archival.
 
 ## Compatibility
 
-0.10 reads frozen v7/v8 sources only when no v9 source claims the same
-responsibility. Its native writers currently cover Workplace, Member, Desk and
-Route Documents plus `WORK.md` v1alpha2. Bundled Room, Site and most Equipment
-and Artifact operations retain their compatible source shapes in this alpha;
-they do not have a general v9 migration command. Endroit never dual-writes.
+0.10 reads frozen v7 declarations and Route v8 only when no v9 source claims
+the same responsibility. Its native writers currently cover Workplace, Member,
+Desk and Route Documents plus `WORK.md` v1alpha2. Bundled Room, Site and most
+Equipment and Artifact operations retain their compatible source shapes in
+this alpha; they do not have a general v9 migration command. Endroit never
+dual-writes.
 
 Route migration supports an effect-free preview, a local journaled apply and
 byte/mode-exact rollback without Git effects. There is no supported in-place

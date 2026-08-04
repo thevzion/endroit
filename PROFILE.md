@@ -118,8 +118,10 @@ delivery.
 
 ## Compatibility
 
-Endroit 0.10 reads the frozen 0.7 and 0.8 source contracts through one legacy
-adapter. Native writers produce v9 Workplace, Member, Desk and Route Documents;
+Endroit 0.10 reads frozen v7 declarations and Route v8 through one legacy
+adapter. The earlier unversioned v6 contracts remain published and frozen, but
+are not accepted by the 0.10 adapter. Native writers produce v9 Workplace,
+Member, Desk and Route Documents;
 Work Resolution writes `WORK.md` v1alpha2. Bundled Room, Site and most Equipment
 and Artifact operations retain their compatible source shapes in this alpha.
 Only Route has an automated v7→v8→v9 migration. New and legacy declarations for

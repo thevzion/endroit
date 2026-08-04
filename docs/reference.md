@@ -12,7 +12,7 @@ It does not imply registry publication.
 | Protocol target | `open-workplace/0.2-draft` |
 | Canonical schemas | `https://endroit.org/schema/v9/*` |
 | Work contract | `endroit/work/v1alpha2` |
-| Legacy read window | v7/v8 through 0.10 |
+| Legacy read window | v7 declarations plus Route v8 through 0.10 |
 | Legacy removal target | 0.11 |
 
 ## Source format support

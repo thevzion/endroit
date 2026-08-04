@@ -143,7 +143,7 @@ enumerated only through the common Git directory of known Site repositories.
 
 0.10 uses `read_old, write_new` only where a native v9 writer exists:
 
-- v7/v8 sources are accepted only through the legacy adapter;
+- v7 declarations and Route v8 are accepted only through the legacy adapter;
 - v9 plus legacy for one identity is `ambiguous_sources`;
 - ordinary mutation of legacy sources is refused;
 - Route migration advances v7→v8 first, then v8→v9;
