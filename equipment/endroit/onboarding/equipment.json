@@ -1,8 +1,8 @@
 {
   "$schema": "https://endroit.org/schema/v7/equipment.json",
   "name": "endroit/onboarding",
-  "version": "0.9.0-alpha.0",
-  "description": "A consent-first orientation and adoption path for an Endroit Home or Desk.",
+  "version": "0.10.0-alpha.0",
+  "description": "A consent-first orientation and adoption path for an Endroit Workplace or Desk.",
   "prefix": "endroit",
   "files": [
     "capabilities/onboard.md",
@@ -13,28 +13,28 @@
     {
       "id": "onboard",
       "path": "capabilities/onboard.md",
-      "description": "Configure or adopt the smallest useful Home and Desk through conversation."
+      "description": "Configure or adopt the smallest useful Workplace and Desk through conversation."
     }
   ],
   "skills": [
     {
       "id": "onboarding",
       "capability": "onboard",
-      "description": "Configure or adopt this Home and your Desk through a consent-first conversation."
+      "description": "Configure or adopt this Workplace and your Desk through a consent-first conversation."
     }
   ],
   "commands": [
     {
       "id": "onboarding",
       "capability": "onboard",
-      "description": "Configure or adopt this Home and your Desk through a consent-first conversation."
+      "description": "Configure or adopt this Workplace and your Desk through a consent-first conversation."
     }
   ],
   "references": [
     {
       "id": "adopt",
       "path": "references/adopt.md",
-      "description": "The portable, consent-gated process for creating or recognizing a Workplace before a Home exists."
+      "description": "The portable, consent-gated process for creating or recognizing a Workplace before one is selected."
     }
   ],
   "settings": {

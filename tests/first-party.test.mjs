@@ -94,7 +94,7 @@ test('HUD exposes deterministic human, JSON and agent-prompt views without follo
       [['home', true], ['demo', true]],
     )
     assert.equal(model.items.rooms[1].emoji, '🎛️')
-    assert.ok(model.items.capabilities.some(({ id }) => id === 'endroit-home'))
+    assert.ok(model.items.capabilities.some(({ id }) => id === 'endroit-workplace'))
     assert.deepEqual(Object.keys(model.attention), ['blocking', 'warning', 'advisory'])
 
     const prompt = captureIo()

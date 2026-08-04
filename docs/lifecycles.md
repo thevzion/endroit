@@ -1,194 +1,167 @@
-# Lifecycles
+# Endroit 0.10 lifecycles
 
-## Workplace adoption
+Endroit keeps independent questions independent. Producing text does not make
+it durable, true, accepted, complete or delivered.
 
-The portable source for this pre-Home process is [ADOPT.md](../ADOPT.md).
+## Workplace resolution
 
-```text
-approved starting directory
-  ├─ find endroit.json in current directory or parents → enter Front Door
-  └─ no Home
-       ├─ Start fresh → proposed create
-       └─ Bring what you have
-            → approve roots
-            → shallow read-only inventory
-            → compare candidates
-            → select candidate (analysis only)
-            → provenance-backed map
-            → "Apply this map"
-            → existing CLI operations → build → doctor → fresh session
+```mermaid
+stateDiagram-v2
+  [*] --> candidate
+  candidate --> resolved: one valid authority
+  candidate --> degraded: optional machinery unavailable
+  candidate --> ambiguous: competing authority
+  degraded --> resolved: capability restored
+  ambiguous --> resolved: conflict removed explicitly
 ```
 
-Recognition and application are separate authority boundaries. Adoption never
-moves existing Site sources or checkouts merely to match the proposed map.
+An invalid marked `WORKPLACE.md` stops discovery. Endroit does not search past
+it for a more convenient authority.
 
-## Home bootstrap
+## Work event and Material
 
-```text
-standalone: create <directory> → Git → Member → tracked Desk → Equipment → build → doctor → commit
-embedded:   init [repository]  → Member → separate Desk → Site self/Route embedded:. → build → doctor
-deferred:   init --desk later  → Member → Site self → desk init → explicit checkout adopt → build
-```
-
-`create` refuses an existing destination. `init` requires an existing Git
-repository and refuses an existing Home, Desk or canonical instruction source.
-It preserves existing product files.
-
-## Desk
+Every provider session begins as an ephemeral Meeting.
 
 ```text
---desk tracked  → Desk sources share the Home Git; Routes/checkouts stay ignored
---desk separate → .desk is an ignored nested Git repository
---desk later    → Member exists; desk init or desk clone later
+ephemeral candidate
+  ├─ retain  → retained Material
+  ├─ accept  → acceptance for an exact revision
+  ├─ discard → no durable record
+  └─ deliver → only through a revalidated Route, with observed result
 ```
 
-Every Desk references one Home-owned human Member. The Desk ID identifies the
-workstation/context, not the person. Desk paths are never promoted to Home
-settings.
-
-An embedded Route is Desk-owned, so `init --desk later` cannot create it.
-After `desk init`, adopt it explicitly with `checkout adopt self . --id embedded`.
-
-## Equipment
+Material lifecycle is:
 
 ```text
-validate → preview → explicit install → build
-                          ├─ edit source → customized
-                          ├─ sync --check → upstream diff
-                          ├─ override → Desk variant → promote
-                          └─ remove declared files only
+ephemeral | retained | archived
 ```
 
-Runtime trust is separate:
+Acceptance is a separate revision-bound record. It does not automatically
+retain, archive, complete or deliver the Material. Archival removes Material
+from the active set without erasing history.
+
+A review stays a Fragment of `WORK.md` unless it needs independent mutation,
+acceptance or lifecycle; only then does it become autonomous Material such as
+`REVIEW.md`.
+
+## Claim state
+
+Currentness:
 
 ```text
-exact bundled bytes → bundled
-exact local approval → approved
-changed bytes        → pending
+current | superseded | withdrawn
 ```
 
-## Room, Meeting and Material
+Claim maturity:
 
 ```text
-Room persists
-  └─ Meeting begins with hot context
-       ├─ leave candidate ephemeral
-       ├─ retain safe Material → add relative active link
-       ├─ accept decision → update Current truth
-       └─ deliver through a revalidated local Route → truth unchanged
-retained or accepted Material → archive explicitly → remove active link
+proposed | supported | demonstrated
 ```
 
-Chat creation alone writes nothing. `meetings/` is reserved for explicitly
-retained records. Transcripts, hidden reasoning and credentials are never
-canonical Material.
+A demonstrated claim may be withdrawn. A current claim may still be proposed.
+Neither axis implies human acceptance.
 
-`ROOM.md` separates accepted `Current truth` from relative links under
-`Active retained Material`. Candidate notes have no persistent section or
-file.
+## Work activity and completion
 
-The Workplace Equipment exposes provider-targeted gestures for all four
-transitions. Endroit objects and operations remain their owners; the provider
-projection only activates them. They are never silently performed by the
-Core.
-
-## Advancing work
+Work activity:
 
 ```text
-actionable result or plan → resolve owners and Routes
-                          → revalidate before mutation
-                          → delegate independent boundaries when available
-                          → integrate → verify → report
+active | paused | closed
 ```
 
-`advance-this` is an optional provider projection of the same behavior normal
-conversation can request. It does not imply a lifecycle transition, commit,
-push or delivery. Durable multi-Site continuity composes optional Planning
-Equipment only with human authority.
-
-## Home Hygiene
+Completion:
 
 ```text
-maintain → read-only findings by category
-repair --finding <id> --approve <same-id> → existing operation → maintain again
+complete | incomplete | blocked
 ```
 
-Inspection never moves, deletes, archives, pushes or delivers. No daemon or
-periodic cleanup is created.
+Completion is calculated for an exact `(contract, revision, evidence)` tuple.
+It is never stored as `final` or as a boolean in `WORK.md`. Any source digest
+change creates a new revision and invalidates the prior completion result.
 
-## Site and Route
+A revision may be complete for one contract while its Work remains active and
+modifiable.
+
+## Delivery
+
+Delivery observation:
 
 ```text
-site add remote                  → remote-only Site
-site add existing checkout       → Site + existing Route main
-checkout adopt                   → existing | embedded | submodule
-checkout clone                   → managed-clone under checkouts/
-checkout worktree                → managed-worktree under checkouts/
-checkout reconcile --check       → preview the physical index
-checkout reconcile --apply       → reconcile owned symlinks only
-route park                       → active Route metadata becomes parked
-route activate                   → one parked Route becomes active
-route supersede --by <route>     → active Route names its active successor
-checkout list|inspect|resolve    → declared metadata + fresh Git observation
-route migrate --check            → preview v7 → v8 metadata only
-route migrate                    → v8 cutover + exact local rollback run
-route inspect                    → deterministic Git evidence
-route remove                     → metadata only
-checkout delete --approve        → guarded managed-checkout deletion
-site remove                      → only after all Routes are gone
+succeeded | partial | failed
 ```
 
-These operations belong to first-party `endroit/sites`; the root `site` and
-`route` commands are CLI façades over that Equipment runtime. For a submodule,
-the Home Git repository owns the Gitlink pin and `.gitmodules`, while checkout
-initialization and lifecycle remain user-owned.
+Delivery is an observed effect in a sovereign Site. It requires:
 
-Managed worktree creation resolves local refs and revalidates repository,
-branch and HEAD. It never fetches or copies dirty source changes.
+1. an explicitly selected Site and Route;
+2. current Route and Checkout revalidation;
+3. separate host permission and human consent for the intended mutation;
+4. execution in the Site-owned repository or system;
+5. observation of the resulting effect.
 
-Managed removal refuses dirty, locked, prunable, unavailable or dependent
-checkouts. Endroit does not delete branches or manage submodule lifecycle.
-Removing a Route removes only its generated index link; an unknown path is
-never touched.
+A successful delivery does not imply acceptance, completion, archival or
+currentness. A failed or partial delivery advances none of those axes.
 
-Parked and superseded Routes remain declared and inspectable but are excluded
-from implicit or operational selection. Lifecycle writes, Route migration and
-rollback do not change a checkout, branch, HEAD, working tree or repository.
+## Route lifecycle
 
-## Build and Front Door
+```mermaid
+stateDiagram-v2
+  [*] --> active
+  active --> parked: route park
+  parked --> active: route activate
+  active --> superseded: route supersede --by replacement
+```
+
+These transitions modify Route metadata only. They do not move, clean, switch
+or delete a Checkout.
+
+Managed Checkout deletion is a distinct approved operation. Existing and
+submodule checkouts are never deleted by Route removal.
+
+## Checkout binding
+
+The index is local and partitioned by Desk.
 
 ```text
-owned sources → resolve → static Floor Plan → provider projections
-                                      └────→ optional Wake-up/HUD
+explicit adopt/creation
+  → write Desk partition
+  → materialize conventional address
+  → inspect/reconcile from the same partition
 ```
 
-Build is deterministic. The HUD is observational and executes no other
-Equipment runtime. Its absence degrades live orientation, not the Home.
+If a generated link is lost, reconcile can rebuild it from that partition. If
+a link is unindexed, reconcile reports a conflict and performs no adoption or
+deletion. When the active Desk changes, reconcile may switch the conventional
+address only between targets already owned by valid Desk partitions.
 
-## Artifact promotion
+## Source migration
 
 ```text
-create/import in Room → validate → promote to broader Room or Site
-                                   └─ source remains
+legacy v7 Route
+  → route migrate --check
+  → journaled v7 → v8
+  → optional exact rollback
+
+legacy v8 Route
+  → route migrate --check
+  → journaled v8 JSON → v9 ROUTE.md
+  → optional exact rollback
 ```
 
-Promotion records lineage and never deletes the source. Remote publication is
-complete only after an external result is observed.
+Preview is read-only and creates no lock or journal. Apply takes the exclusive
+Route writer lock, snapshots source bytes/modes, validates drift and writes one
+compatibility step. Rollback is resumable and restores bytes/modes exactly.
+Neither apply nor rollback changes a repository, branch, HEAD, working tree,
+Gitlink or Checkout index.
 
-## Publishing Work migration
+## Projection lifecycle
 
 ```text
-resolved Rooms → discover editorial-work-v1 mapping.json files
-               → inspect → prepare → apply → verify → cutover
-                                             └──────→ rollback
+owned source change
+  → ResolvedWorkplace revision changes
+  → build --check reports stale
+  → build writes atomically
+  → .endroit/build.json records digests
 ```
 
-The migration derives its Rooms, scopes and counts from the resolved Home and
-the discovered mappings. `prepare` snapshots only mapped Publications and the
-Handles that point to them. Unmapped legacy Publications and their Handles are
-reported as retained and are neither rejected nor modified. `rollback`
-restores the mapped snapshot and removes only paths recorded by the migration.
-
-`publishing list|inspect|validate` exposes the resulting Work, Candidate and
-Publication graph. These local operations do not grant publication consent or
-claim an external effect.
+Provider projections are disposable. Editing one never advances a source
+lifecycle; a divergent generated path must be rebuilt from its owner.

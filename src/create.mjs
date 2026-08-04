@@ -33,7 +33,7 @@ export async function createHome(destination, options = {}) {
     const doctor = await doctorHome(stage)
     if (doctor.status !== 'ready') throw new EndroitError('create_qualification_failed', `Created Workplace is ${doctor.status}: ${doctor.limits.join(', ')}.`)
     await git(['add', '--all'], { cwd: stage })
-    await git(['-c', 'user.name=Endroit', '-c', 'user.email=local@endroit.org', 'commit', '--quiet', '-m', 'chore: initialize Endroit Home'], { cwd: stage })
+    await git(['-c', 'user.name=Endroit', '-c', 'user.email=local@endroit.org', 'commit', '--quiet', '-m', 'chore: initialize Endroit Workplace'], { cwd: stage })
     if (await git(['remote'], { cwd: stage })) throw new EndroitError('workplace_remote_forbidden', 'Workplace creation must not configure a remote.')
     await rename(stage, site)
     return {
@@ -91,7 +91,7 @@ export async function initializeExistingHome(destination = process.cwd(), option
     await bootstrapHomeRoom(root)
     const site = await writeSite(root, {
       id: options.siteId ?? 'self',
-      summary: 'The repository that contains this embedded Home.',
+      summary: 'The repository that contains this embedded Workplace.',
       when: ['Working on this repository.'],
     })
     if (deskStrategy !== 'later') {
@@ -128,7 +128,7 @@ async function preflightEmbeddedProjections(root, options) {
     await bootstrapHomeRoom(stage)
     const site = await writeSite(stage, {
       id: options.siteId ?? 'self',
-      summary: 'The repository that contains this embedded Home.',
+      summary: 'The repository that contains this embedded Workplace.',
       when: ['Working on this repository.'],
     })
     if (options.deskStrategy !== 'later') {

@@ -2,8 +2,7 @@
 
 Resolve one semantic owner before persisting durable work.
 
-- A Home Room under `rooms/<id>/` is shared with the inhabitants of
-  the Home.
+- A shared Room under `rooms/<id>/` belongs to the Workplace boundary.
 - A Desk Room under `.desk/rooms/<id>/` is personal to the current
   collaborator.
 - Use the explicit Room named by the human, otherwise continue the single

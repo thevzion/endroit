@@ -22,14 +22,14 @@ async function renderWizard(options) {
 
   prompts.intro(`${CREATE_WORDMARK}\n\nOwn the place where your agents work.`, common)
   prompts.note([
-    'A Home owns shared rules and Rooms.',
+    'A Workplace owns its declaration and shared Rooms.',
     'Your Desk keeps personal continuity.',
     'Sites keep their repositories and history.',
   ].join('\n'), 'What Endroit owns', common)
 
   const selected = options.selected ?? []
   prompts.note([
-    `Home        ${resolve(options.destination)}`,
+    `Workplace   ${resolve(options.destination)}`,
     `Desk        ${options.desk}`,
     `Providers   ${options.providers.join(', ')}`,
     `Foundation  ${options.foundation.join(', ')}`,
@@ -39,7 +39,7 @@ async function renderWizard(options) {
   if (!options.yes) {
     const accepted = await prompts.confirm({
       ...common,
-      message: 'Create this Home?',
+      message: 'Create this Workplace?',
       active: 'Create',
       inactive: 'Cancel',
       initialValue: true,
@@ -52,13 +52,13 @@ async function renderWizard(options) {
   }
 
   const progress = prompts.spinner({ output: options.io.stdout })
-  progress.start('Creating and validating the Home')
+  progress.start('Creating and validating the Workplace')
   let result
   try {
     result = await options.create({ selected })
-    progress.stop('Home created and verified')
+    progress.stop('Workplace created and verified')
   } catch (error) {
-    progress.error('Home creation failed')
+    progress.error('Workplace creation failed')
     throw error
   }
 
@@ -68,8 +68,8 @@ async function renderWizard(options) {
       '        Then describe what you are working on in normal language.',
       `        Optional onboarding shortcut: ${entry.onboarding}.`,
     ]),
-  ].join('\n'), 'Open your Home', common)
-  prompts.outro(`Ready at ${result.home}`, common)
+  ].join('\n'), 'Open your Workplace', common)
+  prompts.outro(`Ready at ${result.workplace}`, common)
   return { rendered: true, exitCode: 0, result }
 }
 

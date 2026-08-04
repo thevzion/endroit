@@ -1,8 +1,8 @@
 {
   "$schema": "https://endroit.org/schema/v7/equipment.json",
   "name": "endroit/rooms",
-  "version": "0.9.0-alpha.0",
-  "description": "Scoped shared and personal continuity for an Endroit Home.",
+  "version": "0.10.0-alpha.0",
+  "description": "Scoped shared and personal continuity for an Endroit Workplace.",
   "prefix": "endroit",
   "files": [
     "capabilities/route.md",
@@ -19,7 +19,7 @@
     {
       "id": "route",
       "path": "capabilities/route.md",
-      "description": "Resolve or create the one Home or Desk Room that owns durable work."
+      "description": "Resolve or create the one shared or Desk Room that owns durable work."
     },
     {
       "id": "inbox",
@@ -46,7 +46,7 @@
     {
       "id": "room",
       "capability": "route",
-      "description": "Use when durable work needs one explicit shared Home or personal Desk owner."
+      "description": "Use when durable work needs one explicit shared Workplace or personal Desk owner."
     },
     {
       "id": "room-inbox",
@@ -102,11 +102,11 @@
     "commands": [
       {
         "name": "create",
-        "description": "Create one atomic Home or Desk Room."
+        "description": "Create one atomic shared or Desk Room."
       },
       {
         "name": "list",
-        "description": "List Rooms across Home and the current Desk."
+        "description": "List shared Rooms and Rooms from the current Desk."
       },
       {
         "name": "inspect",

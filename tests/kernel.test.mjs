@@ -593,9 +593,9 @@ test('separate Desk projections remain local while Desk sources stay in the nest
     await buildHome(home)
     const projection = '.agents/skills/review-review/SKILL.md'
     assert.match(await readFile(join(home, projection), 'utf8'), /my Desk/)
-    assert.equal((await exec('git', ['check-ignore', '-q', projection], { cwd: home }).then(() => true, () => false)), true)
+    assert.equal((await exec('git', ['check-ignore', '-q', projection], { cwd: home }).then(() => true, () => false)), false)
     const prompt = captureIo()
-    assert.equal(await runCli(['hud', 'prompt', '--home', home], prompt.io), 0, prompt.stderr())
+    assert.equal(await runCli(['hud', 'prompt', '--workplace', home], prompt.io), 0, prompt.stderr())
     assert.doesNotMatch(prompt.stdout(), /Reply in French|<instruction/)
     assert.ok(Buffer.byteLength(prompt.stdout()) <= 4096)
   } finally {

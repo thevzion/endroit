@@ -37,7 +37,7 @@ async function createRoom(input, id, flags) {
   if (!['home', 'desk'].includes(scope)) throw failure('room_scope_invalid', 'Room scope must be home or desk.', 2)
   if (id === 'home' && scope !== 'home') throw failure('room_id_reserved', 'Room id home is reserved for Home scope.')
   const current = await listRooms(input)
-  if (current.some((entry) => entry.id === id)) throw failure('room_exists', `Room ${id} already exists in the Resolved Home.`)
+  if (current.some((entry) => entry.id === id)) throw failure('room_exists', `Room ${id} already exists in the Resolved Workplace.`)
   const root = roomRoot(input, scope)
   if (!root) throw failure('desk_missing', 'A configured Desk is required for a Desk Room.')
   const segments = id.split('/')

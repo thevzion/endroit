@@ -1,37 +1,37 @@
 {
   "$schema": "https://endroit.org/schema/v7/equipment.json",
   "name": "endroit/hygiene",
-  "version": "0.9.0-alpha.0",
-  "description": "Read-only whole-Home health inspection and explicitly approved bounded repair.",
+  "version": "0.10.0-alpha.0",
+  "description": "Read-only whole-Workplace health inspection and explicitly approved bounded repair.",
   "files": ["capabilities/maintain.md", "runtime.mjs"],
   "capabilities": [
     {
       "id": "maintain",
       "path": "capabilities/maintain.md",
-      "description": "Maintain the Home by composing existing doctors and explaining bounded findings."
+      "description": "Maintain the Workplace by composing existing doctors and explaining bounded findings."
     }
   ],
   "skills": [
     {
-      "id": "maintain-home",
+      "id": "maintain-workplace",
       "capability": "maintain",
-      "description": "Use when the whole Home needs a read-only health inspection or one approved repair.",
-      "projectedName": "maintain-the-home"
+      "description": "Use when the whole Workplace needs a read-only health inspection or one approved repair.",
+      "projectedName": "maintain-workplace"
     }
   ],
   "commands": [
     {
-      "id": "maintain-home",
+      "id": "maintain-workplace",
       "capability": "maintain",
-      "description": "Inspect and maintain the whole Home without implicit cleanup.",
-      "projectedName": "maintain-the-home"
+      "description": "Inspect and maintain the whole Workplace without implicit cleanup.",
+      "projectedName": "maintain-workplace"
     }
   ],
   "runtime": {
     "namespace": "hygiene",
     "entry": "runtime.mjs",
     "commands": [
-      { "name": "maintain", "description": "Inspect whole-Home health without mutation." },
+      { "name": "maintain", "description": "Inspect whole-Workplace health without mutation." },
       { "name": "repair", "description": "Apply one selected and exactly approved bounded repair, then inspect again." }
     ]
   }

@@ -10,12 +10,10 @@ status applies only to the evidence named here.
 | Other runtimes | L0 | Unqualified | ordinary Markdown may be readable, but Static-compatible requires observed evidence |
 
 `npm run check:providers` proves static semantic parity between generated
-Codex and Claude projections. The Node 22/24, package and Development Home
+Codex and Claude projections. The Node 22/24, package and Development Workplace
 gates prove deterministic generation and execute wrapper scripts outside the
-provider hosts. They do not prove that a provider accepted its hook, performed
-provider-hosted delegation or completed the full workplace journey. This
-includes the static `advance-this` Skill/Command projection, not a claim that a
-host actually spawned subagents.
+provider hosts. They do not prove that a provider accepted its integration,
+performed provider-hosted delegation or completed the full Workplace journey.
 
 ## Status vocabulary
 
@@ -35,11 +33,10 @@ When a required host mechanism is unavailable, a projected operation returns
 upgrades Static-compatible evidence to Qualified.
 
 Plan modes, subagent APIs, control protocols and workflow harnesses remain
-provider or third-party responsibilities. `advance-this` propagates their
-already-authorized scope when present; Endroit does not implement them.
+provider or third-party responsibilities. Endroit does not implement them.
 
 L2–L4 remain unclaimed. Advancing Codex or Claude requires a dated smoke in the
 real provider host, from the packed candidate, covering entry/Wake-up and the
-`call`/`work-as`/`use` journey through retain, accept, deliver and Hygiene. The
+journey through Site routing, retain, accept, archive and deliver. The
 evidence must distinguish successful provider-hosted behavior from an expected
 `blocked` result.

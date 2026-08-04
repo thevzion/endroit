@@ -1,8 +1,9 @@
 # Migrate Route metadata to v8
 
-Endroit 0.9 reads frozen v7 Route documents and v8 Route documents, but every
-new Route write uses v8. The migration changes only Desk metadata. It does not
-move, initialize, modify or delete a Git checkout or index link.
+Endroit 0.10 preserves the frozen 0.9 v7→v8 migration as the first
+compatibility step. New sources use v9; after this run, use the separate
+[v8→v9 migration](migration-route-v9.md). This step changes only Desk metadata.
+It does not move, initialize, modify or delete a Git checkout or index link.
 
 Preview every v7 Route without writing:
 
@@ -66,7 +67,7 @@ The v8 declaration separates lifecycle and Checkout configuration:
 }
 ```
 
-`embedded` resolves from the Home context. `managed-clone` and
+`embedded` resolves from the Workplace context. `managed-clone` and
 `managed-worktree` derive `checkouts/<site>/<route>` and therefore persist no
 path. `existing` and `submodule` persist their path. v8 has no `sourceRoute`
 and never stores observed Git state. A legacy `branch` becomes a branch

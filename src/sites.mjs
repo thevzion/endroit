@@ -71,7 +71,7 @@ function frontmatter(content, path) {
 function renderSite(site) {
   const lines = ['---']
   for (const [key, value] of Object.entries(site)) lines.push(`${key}: ${JSON.stringify(value)}`)
-  lines.push('---', '', `# ${site.id}`, '', site.summary ?? 'A sovereign Site connected to this Home.', '')
+  lines.push('---', '', `# ${site.id}`, '', site.summary ?? 'A sovereign Site connected to this Workplace.', '')
   return lines.join('\n')
 }
 

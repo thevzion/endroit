@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile } from 'node:fs/promises'
+import { mkdtemp, readFile, readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { buildHome } from '../src/build.mjs'
@@ -14,14 +14,18 @@ try {
   await createHome(home)
   await addEquipment(home, ['@endroit/scratch'])
   await buildHome(home)
-  for (const id of [
-    'endroit-home', 'endroit-onboarding', 'endroit-artifacts', 'endroit-site-manage',
-    'endroit-site-map', 'endroit-scratch', 'enter-the-home', 'enter-the-home-room',
-    'call-the-researcher', 'work-as-an-engineer', 'use-research', 'retain-this',
-    'advance-this', 'resolve-work', 'click-and-review', 'accept-this', 'deliver-this', 'archive-this', 'maintain-the-home',
-  ]) {
-    const codex = await readFile(join(home, '.agents/skills', id, 'SKILL.md'), 'utf8')
-    const claude = await readFile(join(home, '.claude/skills', id, 'SKILL.md'), 'utf8')
+  const codexRoot = join(home, '.agents/skills')
+  const claudeRoot = join(home, '.claude/skills')
+  const ids = (await readdir(codexRoot)).sort()
+  assert.deepEqual(ids, (await readdir(claudeRoot)).sort())
+  for (const id of ['enter-workplace', 'work-on-site', 'retain-this', 'accept-this', 'archive-this', 'deliver-this']) {
+    assert.ok(ids.includes(id), `missing foundation Skill ${id}`)
+  }
+  assert.ok(!ids.includes('work-on-self'), 'Sites must not generate per-Site Skills')
+  assert.ok(!ids.includes('enter-the-home-room'), 'Rooms must not generate per-Room Skills')
+  for (const id of ids) {
+    const codex = await readFile(join(codexRoot, id, 'SKILL.md'), 'utf8')
+    const claude = await readFile(join(claudeRoot, id, 'SKILL.md'), 'utf8')
     assert.equal(codex.replaceAll(`$${id}`, id).replaceAll('.agents', '.provider'), claude.replaceAll(`/${id}`, id).replaceAll('.claude', '.provider'))
   }
   console.log('provider parity passed')

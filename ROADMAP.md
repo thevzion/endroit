@@ -1,66 +1,40 @@
-# Endroit Roadmap
+# Endroit roadmap
 
-Endroit is actively maintained and dogfooded. This public roadmap communicates
-direction without release dates.
+Endroit is pre-1.0. This roadmap communicates direction, not release dates or
+availability.
 
-## Available
+## Candidate: 0.10 Golden Workplace Slice
 
-- local-first Homes with source-owned instructions and provider projections;
-- independent Sites reached through explicit Desk Routes;
-- Room-owned Material and first-party Research, Planning and Publishing
-  methods;
-- Codex and Claude first-party projections with static parity evidence.
-
-## In progress
-
-The 0.9 Checkout/Route v8 cutover is the current release line. It preserves the
-complete static Workplace-first journey:
+The local `0.10.0-alpha.0` candidate moves the product baseline to:
 
 ```text
-create/init → enter → call/work-as/use
-            → retain → accept → work-on/deliver
-            → maintain-the-home
+WORKPLACE.md
+→ deterministic ResolvedWorkplace
+→ compact Codex/Claude projections
+→ explicit Material transition
+→ Desk-scoped Route/Checkout revalidation
+→ observed Site effect
 ```
 
-The release adds Home-owned Members, tracked/separate/later Desk bootstrap,
-human projected gestures, whole-Home Hygiene and Site/Route separation with
-visible root-level checkouts and optional rebuildable Mounts for existing
-Routes. Local qualification, dogfood and a packed npm smoke test gate the
-alpha; cold reads and the first external Home feed the next alpha and gate
-beta.
+The slice includes v9 human-readable Documents, one parser and AJV registry,
+pathless Routes, Desk-partitioned Checkout bindings, `WORK.md` v1alpha2,
+revision-bound completion and explicit v7/v8 compatibility migration.
 
-The cutover reads frozen v7 Route metadata, writes v8, separates declared
-Checkout configuration from observation and provides metadata-only migration
-with rollback. The `endroit/0.8` Workplace Profile remains the active protocol
-specialization; package and Profile versions are independent.
+Qualification requires Node 22/24, check, tests, conformance, providers, pack,
+lab and real provider smoke evidence. Candidate behavior must not be presented
+as a published release.
 
-## Exploring
+## Next
 
-Provider portability is the next bounded initiative. Evidence is recorded at
-five levels:
+- remove the 0.10 legacy adapter and `home` aliases in 0.11 after zero legacy
+  sources are observed;
+- deliver source-pinned documentation projections without creating a second
+  canon;
+- qualify provider-hosted entry and resumption beyond static projection parity;
+- migrate real Workplaces only through approved, previewed plans.
 
-| Level | Meaning |
-|---|---|
-| L0 | authoritative Home files are readable |
-| L1 | static instructions and capabilities project without loss |
-| L2 | provider-hosted invocation can call an Occupant and apply a Role |
-| L3 | entry/Wake-up restores place-owned continuity |
-| L4 | the full Workplace-first slice passes local qualification and dogfood |
+## Excluded
 
-Codex and Claude are currently projection-qualified at L1. L2–L4 require
-dated smoke evidence in each real provider host; Endroit does not infer runtime
-support from file similarity.
-
-Adaptive workplaces remain an uncommitted direction. Dynamic titles,
-automatic placement and inferred structure need evidence before they become an
-Initiative.
-
-## Later
-
-Presence may make current Occupants, activity and handoffs observable without
-turning Endroit into a persistent agent runtime. It remains explicitly after
-the static 0.8 baseline.
-
-Still excluded: automatic transcript retention, implicit acceptance or
-delivery, a daemon, a persistent agent registry, required SaaS storage and
-submodule lifecycle management.
+No automatic transcript retention, inferred acceptance/delivery, global
+project scan, daemon, graph database, persistent agent registry, required SaaS
+storage or ownership transfer from Sites to a Workplace.

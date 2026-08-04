@@ -1,371 +1,243 @@
-# Endroit 0.9 reference
+# Endroit 0.10 reference
 
-Endroit is the local-first, headless, file-based application framework for
-building and operating Open Workplaces. This reference describes the local
-`0.9.0-alpha.0` candidate and labels its unobserved publication explicitly;
-the [migration guide](migration-0.8.md) is the only 0.7 → 0.8 vocabulary map.
+This reference describes the local `@endroit/cli@0.10.0-alpha.0` candidate.
+It does not imply registry publication.
 
-## Framework contract
+## Version contract
 
-The framework composes four independently owned concerns:
+| Surface | Version |
+| --- | --- |
+| Package | `0.10.0-alpha.0` |
+| Profile | `endroit/0.10` |
+| Protocol target | `open-workplace/0.2-draft` |
+| Canonical schemas | `https://endroit.org/schema/v9/*` |
+| Work contract | `endroit/work/v1alpha2` |
+| Legacy read window | v7/v8 through 0.10 |
+| Legacy removal target | 0.11 |
 
-- `open-workplace/0.1` defines the protocol;
-- `endroit/0.8` defines the Endroit Workplace Profile;
-- a Resolved Home instantiates that Profile from Home, Member, Desk, Room,
-  Equipment, Site and Route sources;
-- generated Front Doors and optional Equipment runtimes let humans and
-  temporary agents use the instance without becoming its owner.
+## Root declaration
 
-This is an application framework for the Workplace around agentic work. It is
-not a web framework, model runtime, agent registry or replacement for the
-sovereign applications represented as Sites.
+`WORKPLACE.md` must be a regular, non-symlink UTF-8 file.
 
-## Requirements
+```markdown
+---
+$schema: "https://endroit.org/schema/v9/workplace.json"
+kind: "endroit/workplace"
+id: "studio"
+owner: "member:alexis"
+profile: "endroit/0.10"
+protocol: "open-workplace/0.2-draft"
+runtime: "@endroit/cli@0.10.0-alpha.0"
+providers: ["codex","claude"]
+---
 
-- Node.js 22 or newer;
-- Git;
-- Codex and/or Claude for L1 Projection-qualified provider surfaces.
+# Studio
 
-## Workplace profile
+## Purpose
 
-The [WORKPLACE.md](../WORKPLACE.md) release candidate is the
-self-contained `endroit/0.8` alpha Profile of `open-workplace/0.1` for an existing Home:
-Workplace-centered continuity, temporary Occupants, owned objects, Front Door
-entry, sovereign Sites, explicit lifecycle transitions and a static file-based
-foundation. `endroit/workplace` injects its canonical Instruction once into
-both generated provider contracts and is included in the local
-`0.9.0-alpha.0` package candidate.
+Why this Workplace exists.
 
-## Adoption guide
+## Constitution
 
-The [ADOPT.md](../ADOPT.md) release candidate is the portable pre-Home
-entrypoint included in the local `0.9.0-alpha.0` package candidate.
-It first detects an existing Home from an explicitly selected directory and
-its parents. Otherwise it guides **Start fresh** or **Bring what you have**.
+Short provider-facing rules.
 
-Brownfield recognition is agent-led and read-only: approved roots, shallow
-inventory, multiple candidates, one evidence-backed recommendation, candidate
-selection for deeper analysis, then a separately approved **Apply this map**.
-It adds no `adopt` command, automatic scanner, runtime or schema. [INSTALL.md](../INSTALL.md)
-is the deterministic CLI appendix.
+## Boundaries
 
-## CLI surfaces
+What the Workplace owns and relates to.
 
-Core commands:
+## Limits
+
+What it cannot authorize or prove.
+```
+
+The four sections are mandatory and non-empty. The owner must resolve to a
+Member.
+
+## Selection
+
+Canonical selectors:
 
 ```text
-create <directory> [--desk tracked|separate|later] [--member <id>] [--with <ids|all|none>]
-init [repository] [--desk tracked|separate|later] [--member <id>] [--with <ids|all|none>]
-member create|list|inspect|doctor
-desk init|clone
-equipment validate|add|status|sync|remove|override|promote|catalog|trust
-validate
-build [--check]
-doctor
+--workplace <path>
+ENDROIT_WORKPLACE_PATH=<path>
 ```
 
-Bundled foundation Equipment is available through the same console:
+Deprecated 0.10 aliases:
 
 ```text
-room create|list|inspect|doctor
-site add|list|inspect|doctor|remove
-route list|inspect|park|activate|supersede|migrate|remove
-checkout list|inspect|resolve|adopt|clone|worktree|reconcile|delete
-artifact <command>
-hud show|prompt|json|activity
-hygiene maintain|repair
-<Equipment runtime namespace> <arguments...>
+--home <path>
+ENDROIT_HOME_PATH=<path>
 ```
 
-After bootstrap, prefer the tracked Home Console:
+If both CLI flags are present, they must identify the same directory.
 
-```bash
-node ./endroit.mjs doctor
-```
-
-`--home <path>` selects a Home for direct CLI use. Core responses support
-`--json`; Equipment runtimes own their stdout, stderr and exit codes. Root
-`room`, `site`, `route` and `checkout` commands are façades over their foundation
-Equipment runtimes, not duplicate Kernel implementations.
-
-## Sources and projections
-
-Canonical sources:
+## Kernel commands
 
 ```text
-endroit.json
-HOME.md
-rooms/<room>/ROOM.md
-members/<member>/MEMBER.md
-equipment/<owner>/<equipment>/equipment.json
-sites/<site>/SITE.md
-.desk/desk.json
-.desk/DESK.md
-.desk/rooms/<room>/ROOM.md
-.desk/routes/<site>/<route>.json     ignored local source
+endroit create <workplace> [--desk tracked|separate|later]
+endroit init [repository] [--desk tracked|separate|later]
+
+endroit member create|list|inspect|doctor
+endroit desk init|clone
+endroit equipment validate|add|status|sync|remove|override|promote|catalog|trust
+endroit room create|list|inspect|doctor
+endroit site add|list|inspect|doctor|remove
+endroit route list|inspect|park|activate|supersede|migrate|remove
+endroit checkout list|inspect|resolve|adopt|clone|worktree|reconcile|delete
+
+endroit validate
+endroit build [--check]
+endroit doctor
 ```
 
-Generated or rebuildable state:
+The tracked invocation is always:
+
+```sh
+node ./endroit.mjs <command> [...arguments]
+```
+
+JSON output is selected with `--json`. Public JSON fields use
+`snake_case`; compatibility-only responses may retain historical fields until
+0.11.
+
+## Files and owners
+
+| Path | Owner | Role |
+| --- | --- | --- |
+| `WORKPLACE.md` | Workplace | Declaration source |
+| `members/<id>/MEMBER.md` | Workplace | Member source |
+| `.desk/DESK.md` | Desk | Desk source |
+| `rooms/**/ROOM.md` | Workplace/Desk | Room source |
+| `sites/<id>/SITE.md` | Site identity | Site declaration |
+| `.desk/routes/<site>/<route>/ROUTE.md` | Desk | Route source |
+| `equipment/**/equipment.json` | Equipment owner | Machine manifest |
+| `WORK.md` | Declared Material owner | Work source |
+| `AGENTS.md`, `CLAUDE.md` | build | Provider projection |
+| `.agents/skills/`, `.claude/skills/` | build | Provider projection |
+| `endroit.mjs` | build | Tracked console |
+| `.endroit/build.json` | build | Local receipt |
+| `.endroit/checkout-index.json` | Desk partitions | Local binding index |
+| `.endroit/migrations/` | migration command | Local rollback receipt |
+
+## Routes and Checkouts
+
+Route states:
 
 ```text
-AGENTS.md
-CLAUDE.md
-.agents/
-.claude/
-.codex/
-.endroit/
-checkouts/<site>/<route>/
+active | parked | superseded
 ```
 
-`checkouts/` contains ignored managed Git checkouts and generated index links. It is
-physical access, not Route metadata or Site identity.
-
-## Home, Member and Desk
-
-`endroit.json` declares the Home name, runtime, providers, optional prefix,
-Front Door and namespaced Equipment settings. `HOME.md` contains shared house
-rules. Endroit 0.8 has no `solo|team` mode; a legacy `mode` field is rejected
-with a migration error.
-
-A Member is a human represented by Home-owned
-`members/<id>/MEMBER.md`. Frontmatter contains `id`, `name`, `status` and
-non-secret external accounts `{ service, scope, identifier, handle? }`; the
-Markdown body owns durable responsibilities and shared collaboration context.
-Credentials never belong in a Member.
-
-Every `desk.json` names both an independent Desk `id` and its required
-`member`. Agents remain temporary Occupants and may receive a Role for one
-Meeting; neither becomes a Member or a registry entry.
-
-A Desk contains local instructions, Rooms, Equipment overrides and Routes.
-`create` defaults to a Desk tracked in the Home Git repository. `init` defaults
-to a separate nested Git repository under ignored `.desk/`. Either accepts
-`--desk tracked|separate|later`; `later` creates the Member but no Desk.
-Machine paths stay Desk-owned in every topology. For embedded `init --desk
-later`, Site `self` is declared immediately but its embedded Route is deferred;
-after `desk init`, adopt it explicitly with `checkout adopt self . --id embedded`.
-
-## Rooms and Meetings
-
-A Room is a durable domain under `rooms/` or `.desk/rooms/`. Each live Room has
-`ROOM.md` and `inbox.md`. Rooms may be nested directly below another Room;
-their slash-separated path is their ID. The same full ID cannot exist in both
-Home and Desk scope.
-
-```bash
-node ./endroit.mjs room create product --scope home
-node ./endroit.mjs room create product/api --scope home
-```
-
-The parent must already be a valid Room. `room list`, `inspect` and `doctor`
-use the full scoped identity, for example `room:home/product/api`.
-
-`meetings/<id>/MEETING.md` is reserved for an explicitly retained Meeting
-record. Opening a chat does not create it. Endroit 0.8 does not persist chat
-transcripts or provide a persistent Meeting runtime.
-
-## Equipment
-
-Equipment is a source-owned reusable way of working. `equipment.json` may
-declare instructions, capabilities, provider accessors, Artifact contracts,
-settings, setup functions and one runtime namespace.
-
-Installation is transactional and does not execute the Equipment runtime.
-First-party runtime bytes are `bundled`; third-party bytes must be approved by
-their exact digest. Any byte change returns an approved runtime to `pending`.
-
-Skills and Commands are projections of Equipment functions. They are not the
-canonical Equipment source. An accessor may declare a literal `projectedName`
-or a template containing `{route}`. The resolver expands the final name and
-rejects provider-surface collisions before build; omitted names retain the
-prefix composition fallback.
-
-The first-party Workplace Equipment projects human gestures such as
-`enter-the-home`, `enter-the-<room>-room`, `work-on-<site>`,
-`call-the-researcher`, `work-as-an-engineer`, `use-research`, `retain-this`,
-`advance-this`, `accept-this`, `deliver-this` and `archive-this`. Entry reloads authoritative
-sources and creates no global active-Room state. Provider-hosted call and Role
-operations return `blocked` when the mechanism is unavailable; they never
-simulate an Occupant.
-
-`advance-this` consumes the current actionable result, resolves its Room,
-Sites, Routes and owners, delegates independent boundaries when the provider
-supports it, then integrates and verifies. It never infers continuity or a
-retain, accept, deliver, commit or push transition.
-
-## Versioned contracts
-
-The 0.9 package validates offline from its bundled schemas. Home, Desk,
-Equipment, Site and runtime contracts remain at their immutable v7 identifiers.
-The frozen v7 Route remains readable; new Route writes use v8:
+Checkout modes:
 
 ```text
-https://endroit.org/schema/v7/home.json
-https://endroit.org/schema/v7/desk.json
-https://endroit.org/schema/v7/member.json
-https://endroit.org/schema/v7/equipment.json
-https://endroit.org/schema/v7/site.json
-https://endroit.org/schema/v7/route.json
-https://endroit.org/schema/v7/runtime.json
-https://endroit.org/schema/v7/artifact.json
-https://endroit.org/schema/v8/route.json
+embedded | existing | managed-clone | managed-worktree | submodule
 ```
 
-Equipment runtimes receive protocol `endroit.org/runtime/v2alpha1`. Public
-schema URLs identify and document contracts; the CLI never needs network
-access to validate a Home. Historical unversioned 0.7 contracts remain frozen
-at `home.json`, `desk.json`, `asset.json`, `runtime.json` and `artifact.json`;
-they are not aliases for v7.
+A managed worktree requires a branch or commit revision. A submodule cannot
+declare one because its parent Gitlink owns the pin.
 
-## Sites
+Commands:
 
-The first-party `endroit/sites` Equipment owns Site and Route lifecycle behind
-the root CLI façade. Core validates and resolves the resulting sources but
-does not implement these lifecycle operations.
+```sh
+node ./endroit.mjs checkout adopt <site> <path> --id <route>
+node ./endroit.mjs checkout clone <site> --id <route> [--branch <name>]
+node ./endroit.mjs checkout worktree <site> --id <route> --from <route> \
+  (--branch <existing> | --new-branch <name> | --detach <ref>)
+node ./endroit.mjs checkout inspect checkout:<site>/<route>
+node ./endroit.mjs checkout reconcile --check
+node ./endroit.mjs checkout reconcile --apply
+```
 
-A Site is a shared sovereignty declaration:
+`reconcile --apply` may create or replace a generated link only from a valid
+Desk partition. It reports `checkout_index_conflict` for an unindexed link
+and leaves both the link and index unchanged.
+
+Logical references:
 
 ```text
-sites/<site>/SITE.md
+checkout:<site>/<route>
+checkout:<site>/<route>#<relative-path>
 ```
 
-Required frontmatter: `$schema`, `id`, `kind: site`, and `status`. `repository`
-and `source` are optional so an embedded or non-Git remote Site can still be
-declared honestly.
+Absolute suffixes, `..` and symlink escapes outside the Checkout are rejected.
 
-`site add` accepts a remote source or an existing Git checkout. An existing
-checkout is also bound as Route `main` when a Desk is configured. A remote URL
-creates a remote-only Site until a Route is added.
+## Route migration
 
-`site remove` refuses a Site with Routes or additional Site-owned Material.
+`route migrate` advances one compatibility step per run:
 
-## Routes
+```sh
+node ./endroit.mjs route migrate [site] [--id <route>] --check --json
+node ./endroit.mjs route migrate [site] [--id <route>] --json
+node ./endroit.mjs route migrate --rollback <run-id> --json
+```
 
-A Route is a Desk-local JSON declaration:
+v7→v8 normalizes the existing JSON document. v8→v9 writes
+`<route>/ROUTE.md` and removes the old JSON source. Preview creates no lock,
+journal or source change. Apply and rollback never run Git mutations.
+
+## Work
+
+A v1alpha2 `WORK.md` frontmatter declares identity, owner, contract, work type,
+activity and derivation. The first `endroit` block in a section types its
+Fragment.
+
+Runtime commands:
 
 ```text
-.desk/routes/<site>/<route>.json
+endroit work inspect
+endroit work resolve
+endroit work review
+endroit work record-review
 ```
 
-```json
-{
-  "$schema": "https://endroit.org/schema/v8/route.json",
-  "id": "main",
-  "site": "product",
-  "status": "active",
-  "checkout": {
-    "mode": "existing",
-    "path": "/absolute/local/checkout"
-  },
-  "revision": { "kind": "branch", "name": "main" }
-}
+The v1alpha1 `WORK.json` reader is compatibility-only and read-only. Recording
+new review state requires explicit migration to `WORK.md`.
+
+## Build receipt
+
+`.endroit/build.json` records:
+
+- `revision`;
+- sorted input source paths, owners and digests;
+- each output path, provider, owner, sources and digest.
+
+`build --check` does not write. It fails when an output or receipt is missing,
+stale, divergent or colliding with an unowned file.
+
+## Resolution and diagnostics
+
+Main resolution states:
+
+```text
+candidate | resolved | degraded | ambiguous
 ```
 
-A Checkout is addressed as `checkout:<site>/<route>`. It is an Endroit
-implementation object, not an additional Open Workplace object. `checkout
-list|inspect|resolve` keeps the declared Route separate from observed Git and
-physical-index evidence.
+Representative errors:
 
-Home settings may opt specific Sites into Git-owned composition:
+| Code | Meaning |
+| --- | --- |
+| `document_frontmatter_duplicate` | A metadata key appears twice. |
+| `schema_version_mismatch` | The source contract is unsupported. |
+| `ambiguous_sources` | Legacy and v9 sources claim one identity. |
+| `route_source_collision` | Two Route documents claim one Route. |
+| `checkout_unbound` | A pathless Route has no current Desk binding. |
+| `checkout_index_conflict` | A physical address is not owned by the applicable index state. |
+| `route_migration_drift` | A migration input changed after validation. |
+| `generated_output_collision` | Build would overwrite an unowned path. |
+| `build_stale` | A projection or receipt needs rebuilding. |
+| `context_budget_exceeded` | A provider context exceeds a fixed limit. |
 
-```json
-{ "settings": { "endroit/sites": { "pinnedSites": ["product"] } } }
-```
+Exit code 2 indicates usage/selection errors; validation and runtime errors use
+their declared non-zero codes. Callers should consume the JSON error object
+rather than parse human text.
 
-Each pinned Site must be an initialized `submodule` Route at
-`checkouts/<site>/main` whose gitlink, remote and commit match. Endroit validates
-that state but never runs `submodule add|init|update`. Desk settings choose
-whether unrouted worktrees are only reported or surfaced as generated links:
+## Fixed provider budgets
 
-```json
-{ "settings": { "endroit/sites": { "observedWorktrees": "surface" } } }
-```
-
-Supported modes:
-
-| Mode | Physical form | Lifecycle |
-|---|---|---|
-| `embedded` | Home and Site share root `.` | existing repository |
-| `existing` | checkout elsewhere | Endroit removes only Route metadata |
-| `managed-clone` | `checkouts/<site>/<route>/` | explicit clean deletion |
-| `managed-worktree` | `checkouts/<site>/<route>/` | explicit `git worktree remove` |
-| `submodule` | user-managed submodule path | recognized, never lifecycle-managed |
-
-`embedded` resolves from the Home context. Managed modes derive
-`checkouts/<site>/<route>` and persist no path. Existing and submodule modes
-carry a path. `revision` optionally constrains a branch or exact commit;
-managed worktrees require it and submodules forbid it because the parent
-gitlink owns their pin. HEAD, dirty state and other observations never enter
-Route metadata.
-
-`route park`, `activate` and `supersede` change metadata only. Parked and
-superseded Routes remain inspectable but are excluded from implicit and
-operational selection. A superseded Route names its same-Site successor with
-`supersededBy`.
-
-The Home Git repository owns a submodule's Gitlink commit pin and
-`.gitmodules` declaration. Checkout initialization and submodule lifecycle
-remain user-owned; the Route only records how the Desk addresses it.
-
-Every non-embedded Checkout has the conventional address
-`checkouts/<site>/<route>`. Existing repositories are exposed there through a
-rebuildable symlink. `checkout reconcile` is read-only by default; `--apply`
-changes only links recorded in `.endroit/checkout-index.json`. Doctor reports
-direct, linked, missing, broken, divergent or conflicting index state.
-
-`checkout worktree` uses only local refs. It never fetches, forces, copies working
-tree changes, deletes branches, prunes, repairs or unlocks Git metadata.
-
-`checkout delete <ref> --approve <ref>` is required for managed checkouts. Dirty, locked,
-prunable, unavailable or dependent worktrees block deletion. Existing,
-embedded and submodule Routes remove only their JSON declaration and generated
-index link through `route remove`.
-
-Endroit reads v7 and v8 Route documents and writes v8 only. `route migrate
---check` previews a zero-effect metadata cutover; `route migrate` applies it
-and returns an exact rollback run. See [Route v8 migration](migration-route-v8.md).
-
-## Resolver and build
-
-The resolver validates canonical sources, composes Home and Desk Equipment,
-indexes Rooms, retained Meetings and Sites, validates runtime namespaces and
-builds provider-neutral accessors.
-
-`build` projects owned sources into Codex and Claude front doors. The Floor
-Plan is static and authoritative. A configured Wake-up adds optional live
-orientation; its failure cannot remove the Floor Plan.
-
-## First-party Equipment
-
-- `endroit/onboarding`: consent-first fresh and existing-environment adoption;
-- `endroit/hud`: `show|prompt|json|activity` live orientation;
-- `endroit/rooms`: `create|list|inspect|doctor`;
-- `endroit/artifacts`: Room-owned validated results and promotion;
-- `endroit/sites`: Site, Route and deterministic Git inspection;
-- `endroit/workplace`: provider-projected entry, Occupant, Role, method,
-  advance and lifecycle gestures;
-- `endroit/work`: `inspect|resolve|review|record-review` for proof-carrying,
-  Room-owned Work Items;
-- `endroit/hygiene`: read-only `maintain-the-home` inspection and one exactly
-  approved bounded repair;
-- `endroit/publishing`: optional `list|inspect|validate` Work graph operations
-  plus the explicit `editorial-work-v1` migration;
-- `endroit/research`, `planning`, `scratch`: optional methods;
-- `endroit/project`: Endroit's own maintenance method.
-
-## Alpha boundaries
-
-- `0.9.0-alpha.0` is a local release candidate; registry availability is not
-  claimed until the exact artifact is observed;
-- schemas and grammar may still break before 1.0;
-- Codex and Claude are L1 Projection-qualified first-party targets; L2–L4 live
-runtime qualification remains unclaimed until provider-hosted smoke evidence;
-- provider status and portability levels are recorded in [providers](providers.md);
-- no daemon, semantic index, graph or persistent agent is required;
-- Work Resolution remains an experimental Endroit extension; see
-  [Work Resolution](work-resolution.md);
-- no automatic environment scanner, 0.7 Home migration or submodule manager
-  ships in 0.9; Route v7-to-v8 metadata migration is explicit and local;
-- generated index links are rebuildable views for `existing` Routes; Routes
-  always resolve their source checkout directly;
-- Endroit never infers remote success or upgrades model intelligence.
+| Output/context | Maximum |
+| --- | ---: |
+| `AGENTS.md` | 4,096 bytes |
+| `CLAUDE.md` | 4,096 bytes |
+| HUD prompt | 4,096 bytes |
+| Constitution section | 2,048 bytes |
+| Desk guidance | 1,024 bytes |
+| Model-facing descriptions | 4,096 bytes total |

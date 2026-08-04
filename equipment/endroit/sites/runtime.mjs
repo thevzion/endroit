@@ -1074,7 +1074,7 @@ async function writeSite(input, site) {
   await mkdir(sitesRoot, { recursive: true })
   await mkdir(destination)
   try {
-    const lines = ['---', ...Object.entries(site).map(([key, entry]) => `${key}: ${JSON.stringify(entry)}`), '---', '', `# ${site.id}`, '', site.summary ?? 'A sovereign Site connected to this Home.', '']
+    const lines = ['---', ...Object.entries(site).map(([key, entry]) => `${key}: ${JSON.stringify(entry)}`), '---', '', `# ${site.id}`, '', site.summary ?? 'A sovereign Site connected to this Workplace.', '']
     await writeFile(join(destination, 'SITE.md'), lines.join('\n'), { mode: 0o644 })
   } catch (error) {
     await rm(destination, { recursive: true, force: true })
@@ -1283,7 +1283,7 @@ function validateRoute(route, site, id, input) {
     || !['branch', 'commit'].includes(revision.kind))) throw failure('route_invalid', `Invalid revision for Route ${site}/${id}.`)
   if (checkout.mode === 'managed-worktree' && !revision) throw failure('route_invalid', `Managed worktree Route ${site}/${id} requires a revision.`)
   if (checkout.mode === 'submodule' && revision) throw failure('route_invalid', `Submodule Route ${site}/${id} cannot declare a revision.`)
-  if (pathMode && !isAbsolute(checkout.path) && checkout.path.split(/[\\/]+/).includes('..')) throw failure('route_path_invalid', `Route ${site}/${id} path must not escape its Home context.`)
+  if (pathMode && !isAbsolute(checkout.path) && checkout.path.split(/[\\/]+/).includes('..')) throw failure('route_path_invalid', `Route ${site}/${id} path must not escape its Workplace context.`)
   if (route.status === 'superseded' ? !validId(route.supersededBy) || route.supersededBy === id : Boolean(route.supersededBy)) throw failure('route_invalid', `Invalid lifecycle for Route ${site}/${id}.`)
   const rootKeys = Object.keys(route)
   if (rootKeys.some((key) => !['$schema', 'id', 'site', 'status', 'supersededBy', 'checkout', 'revision'].includes(key))) throw failure('route_invalid', `Invalid Route ${site}/${id}.`)
@@ -2282,12 +2282,12 @@ function migrationDocumentFromV7(input, route, bytes, options = {}) {
     && (legacy.sourceRoute === undefined || validId(legacy.sourceRoute))
     && !keys.some((key) => !allowed.includes(key))
   if (!valid) throw failure('route_migration_drift', `${relative(input.homeRoot, route.documentPath)} is no longer the planned v7 Route.`)
-  if (legacy.mode === 'embedded' && legacy.path !== '.') throw failure('route_path_invalid', `Embedded Route ${legacy.site}/${legacy.id} must resolve from its Home context.`)
+  if (legacy.mode === 'embedded' && legacy.path !== '.') throw failure('route_path_invalid', `Embedded Route ${legacy.site}/${legacy.id} must resolve from its Workplace context.`)
   if (legacy.mode.startsWith('managed-') && resolve(input.homeRoot, legacy.path) !== managedPath(input, legacy.site, legacy.id)) {
     throw failure('route_path_invalid', `Managed Route ${legacy.site}/${legacy.id} must use its derived checkout path.`)
   }
   if (['existing', 'submodule'].includes(legacy.mode) && !isAbsolute(legacy.path) && legacy.path.split(/[\\/]+/).includes('..')) {
-    throw failure('route_path_invalid', `Route ${legacy.site}/${legacy.id} path cannot migrate outside its Home context.`)
+    throw failure('route_path_invalid', `Route ${legacy.site}/${legacy.id} path cannot migrate outside its Workplace context.`)
   }
   const migrated = {
     $schema: 'https://endroit.org/schema/v8/route.json',

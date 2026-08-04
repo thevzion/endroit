@@ -3,7 +3,8 @@ import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { readFile, readdir } from 'node:fs/promises'
 import { join, relative } from 'node:path'
-import { compileSchemas, validateDocument } from '../src/contracts.mjs'
+import { compileSchemas, compileSchemasV9, validateDocument, validateDocumentV9 } from '../src/contracts.mjs'
+import { readDocument } from '../src/documents.mjs'
 
 const root = new URL('../', import.meta.url).pathname
 const legacyBrand = new RegExp(['hair', 'ness'].join(''), 'i')
@@ -38,6 +39,7 @@ async function files(directory) {
 }
 
 assert.deepEqual(await compileSchemas(), schemaNames)
+assert.deepEqual(await compileSchemasV9(), ['document', 'profile', 'workplace', 'member', 'desk', 'room', 'site', 'route', 'equipment', 'artifact'])
 assert.deepEqual(
   (await readdir(join(root, 'schemas/v7'))).sort(),
   schemaNames.map((name) => `${name}.schema.json`).sort(),
@@ -74,11 +76,12 @@ for (const name of ['onboarding', 'hud', 'artifacts', 'sites', 'rooms', 'workpla
 await validateDocument({
   $schema: 'https://endroit.org/schema/v7/home.json',
   name: 'check',
-  runtime: '@endroit/cli@0.9.0-alpha.0',
+  runtime: '@endroit/cli@0.10.0-alpha.0',
   providers: ['codex'],
   frontDoor: { wakeUp: 'endroit/hud:prompt' },
 }, 'home')
 const packageDocument = JSON.parse(await readFile(join(root, 'package.json'), 'utf8'))
+assert.equal(packageDocument.version, '0.10.0-alpha.0')
 assert.equal(packageDocument.publishConfig.tag, 'next')
 assert.match(await readFile(join(root, 'scripts/release-packages.mjs'), 'utf8'), /tag: 'next'/)
 const providersDocument = await readFile(join(root, 'docs/providers.md'), 'utf8')
@@ -86,24 +89,20 @@ assert.match(providersDocument, /\| Codex \| L1 \| Projection-qualified \|/)
 assert.match(providersDocument, /\| Claude \| L1 \| Projection-qualified \|/)
 assert.doesNotMatch(providersDocument, /\| (?:Codex|Claude) \| L[234] \| Qualified \|/)
 const releaseWorkflow = await readFile(join(root, '.github/workflows/release.yml'), 'utf8')
-assert.match(releaseWorkflow, /RELEASE_ARTIFACT: endroit-0\.9-release-candidate/)
+assert.match(releaseWorkflow, /RELEASE_ARTIFACT: endroit-0\.10-release-candidate/)
 assert.match(releaseWorkflow, /smoke-next:/)
 const installDocument = await readFile(join(root, 'INSTALL.md'), 'utf8')
-assert.match(installDocument, /@endroit\/cli@0\.9\.0-alpha\.0/)
+assert.match(installDocument, /@endroit\/cli@0\.10\.0-alpha\.0/)
 assert.match(installDocument, /The agent guides\. The CLI applies\. The human approves\./)
-assert.equal(
-  await readFile(join(root, 'WORKPLACE.md'), 'utf8'),
-  await readFile(join(root, 'equipment/endroit/workplace/instructions/profile.md'), 'utf8'),
-  'WORKPLACE.md must be byte-identical to the Workplace Equipment Profile instruction',
-)
+await validateDocumentV9((await readDocument(join(root, 'PROFILE.md'))).metadata, 'profile')
 assert.equal(
   await readFile(join(root, 'ADOPT.md'), 'utf8'),
   await readFile(join(root, 'equipment/endroit/onboarding/references/adopt.md'), 'utf8'),
   'ADOPT.md must be byte-identical to the Onboarding Equipment adoption reference',
 )
 assert.equal(
-  await readFile(join(root, 'schemas/work/v1alpha1.json'), 'utf8'),
-  await readFile(join(root, 'equipment/endroit/work/schemas/work.schema.json'), 'utf8'),
+  await readFile(join(root, 'schemas/work/v1alpha2.json'), 'utf8'),
+  await readFile(join(root, 'equipment/endroit/work/schemas/v1alpha2.schema.json'), 'utf8'),
   'the public Work schema projection must be byte-identical to its Equipment source',
 )
 const all = await files(root)

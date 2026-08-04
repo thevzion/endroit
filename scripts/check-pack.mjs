@@ -19,12 +19,23 @@ for (const required of [
   'schemas/v7/runtime.schema.json',
   'schemas/v7/artifact.schema.json',
   'schemas/v8/route.schema.json',
-  'schemas/work/v1alpha1.json',
-  'WORKPLACE.md',
+  'schemas/v9/document.schema.json',
+  'schemas/v9/profile.schema.json',
+  'schemas/v9/workplace.schema.json',
+  'schemas/v9/member.schema.json',
+  'schemas/v9/desk.schema.json',
+  'schemas/v9/room.schema.json',
+  'schemas/v9/site.schema.json',
+  'schemas/v9/route.schema.json',
+  'schemas/v9/equipment.schema.json',
+  'schemas/v9/artifact.schema.json',
+  'schemas/work/v1alpha2.json',
+  'PROFILE.md',
   'ADOPT.md',
   'INSTALL.md',
   'docs/migration-route-v8.md',
-  'templates/HOME.md',
+  'docs/migration-route-v9.md',
+  'templates/WORKPLACE.md',
   'templates/DESK.md',
   'templates/MEMBER.md',
   'equipment/endroit/onboarding/equipment.json',
@@ -34,8 +45,6 @@ for (const required of [
   'equipment/endroit/sites/equipment.json',
   'equipment/endroit/rooms/equipment.json',
   'equipment/endroit/workplace/equipment.json',
-  'equipment/endroit/workplace/instructions/profile.md',
-  'equipment/endroit/workplace/capabilities/advance.md',
   'equipment/endroit/work/equipment.json',
   'equipment/endroit/work/runtime.mjs',
   'equipment/endroit/work/schemas/work.schema.json',
@@ -46,4 +55,5 @@ for (const required of [
 assert.equal(paths.some((path) => path.startsWith('equipment/endroit/project/')), false)
 assert.equal(paths.includes('scripts/development-home.mjs'), false)
 assert.equal(pack.name, '@endroit/cli')
+assert.equal(pack.version, '0.10.0-alpha.0')
 console.log(`package contents passed (${paths.length} files)`)

@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.10.0-alpha.0
+
+- Replace the root `endroit.json + HOME.md` contract with human-owned
+  `WORKPLACE.md` and v9 Documents.
+- Add deterministic `ResolvedWorkplace` revisions, fixed provider budgets and
+  compact Codex/Claude projections.
+- Write pathless `ROUTE.md` sources while preserving the 0.9 Checkout
+  index/reconcile topology with Desk-partitioned bindings.
+- Add explicit v8→v9 Route migration with read-only preview, resumable journal
+  and byte/mode-exact rollback without Git effects.
+- Move Work source to `WORK.md` v1alpha2 and calculate completion for an exact
+  contract, revision and evidence tuple.
+
 ## 0.9.0-alpha.0
 
 - Add the v8 Route schema with nested Checkout configuration and explicit

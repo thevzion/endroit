@@ -23,7 +23,7 @@ export async function buildHome(root, options = {}) {
     outputs: mutations.outputs,
   }
   if (options.check) {
-    if (previous && JSON.stringify(previous) !== JSON.stringify(state)) throw stale('Local build state does not match the resolved Home.')
+    if (previous && JSON.stringify(previous) !== JSON.stringify(state)) throw stale('Local build state does not match the Resolved Workplace.')
   } else {
     mutations.writes.push({ path: statePath, content: Buffer.from(`${JSON.stringify(state, null, 2)}\n`) })
   }
@@ -102,7 +102,7 @@ async function renderAgentContract(plan) {
     return renderProviderBootstrap(plan, extractSection(document, 'Constitution')?.body)
   }
   const source = declarationSource(plan)
-  const constitution = await readFile(await resolvePackageFile(source.root, source.path, 'Home Instruction'), 'utf8')
+  const constitution = await readFile(await resolvePackageFile(source.root, source.path, 'Workplace Instruction'), 'utf8')
   return renderProviderBootstrap(plan, constitution)
 }
 

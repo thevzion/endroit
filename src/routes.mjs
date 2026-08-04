@@ -72,7 +72,7 @@ export async function resolveCheckout(homeRoot, document, options = {}) {
   const declared = version === 9 ? declaredV9(document) : version === 8 ? declaredV8(document) : declaredV7(homeRoot, document)
   if (version === 8 && ['existing', 'submodule'].includes(declared.checkout.mode) && !isAbsolute(declared.checkout.path)) {
     const segments = declared.checkout.path.split(/[\\/]+/)
-    if (segments.includes('..')) throw new EndroitError('route_path_invalid', `Route ${site}/${id} path must not escape its Home context.`)
+    if (segments.includes('..')) throw new EndroitError('route_path_invalid', `Route ${site}/${id} path must not escape its Workplace context.`)
   }
   const declaredPath = version === 9 && declared.checkout.mode !== 'embedded'
     ? managedCheckoutPath(homeRoot, site, id)
@@ -166,7 +166,7 @@ function declaredV9(document) {
 
 function declaredV7(homeRoot, document) {
   if (document.mode === 'embedded' && document.path !== '.') {
-    throw new EndroitError('route_path_invalid', `Embedded Route ${document.site}/${document.id} must resolve from its Home context.`)
+    throw new EndroitError('route_path_invalid', `Embedded Route ${document.site}/${document.id} must resolve from its Workplace context.`)
   }
   if (document.mode.startsWith('managed-') && resolve(homeRoot, document.path) !== managedCheckoutPath(homeRoot, document.site, document.id)) {
     throw new EndroitError('route_path_invalid', `Managed Route ${document.site}/${document.id} must use its derived checkout path.`)
