@@ -70,7 +70,10 @@ test('Release lock is deterministic, effect-free in check mode and receipt follo
     assert.deepEqual(blocked.decision.blockers, ['dogfood:missing'])
     assert.match(runFailure(releaseRuntime, { ...input, argv: ['lock', 'demo', '--check', '--json'] }), /release_dogfood_required/)
 
-    const dogfood = { version: 1, release: 'demo', sourceDigest: source.source_digest, status: 'passed' }
+    writeFileSync(join(releasePath, 'dogfood.receipt.json'), `${JSON.stringify({ version: 1, release: 'demo', sourceDigest: source.source_digest, status: 'passed' }, null, 2)}\n`)
+    assert.equal(run(releaseRuntime, { ...input, argv: ['inspect', 'demo', '--json'] }).dogfood.status, 'invalid')
+
+    const dogfood = dogfoodReceipt(source)
     writeFileSync(join(releasePath, 'dogfood.receipt.json'), `${JSON.stringify(dogfood, null, 2)}\n`)
     const inspection = run(releaseRuntime, { ...input, argv: ['inspect', 'demo', '--json'] })
     assert.equal(inspection.state, 'resolved')
@@ -125,7 +128,7 @@ test('Release preview runs only the Site-declared command and records the observ
   const source = releaseArtifact(releasePath)
   const participant = source.fragments.find((fragment) => fragment.kind === 'release_site')
   participant.export = './surfaces/home'; participant.metadata.export = './surfaces/home'
-  writeFileSync(join(releasePath, 'dogfood.receipt.json'), `${JSON.stringify({ version: 1, release: 'demo', sourceDigest: source.source_digest, status: 'passed' }, null, 2)}\n`)
+  writeFileSync(join(releasePath, 'dogfood.receipt.json'), `${JSON.stringify(dogfoodReceipt(source), null, 2)}\n`)
   const surface = {
     id: 'home', kind: 'endroit/release:public-surface', ref: 'artifact:site/example/endroit/release/public-surface/home',
     site: 'example', path: surfacePath,
@@ -208,6 +211,28 @@ function releaseArtifact(path) {
       fragment({ kind: 'release_dogfood', id: 'workplace', required: true }),
       fragment({ kind: 'release_site', id: 'example', site: 'example', export: './', effects: ['publish-main'], expected_handle: 'https://example.test/', depends_on: [] }),
     ],
+  }
+}
+
+function dogfoodReceipt(source) {
+  return {
+    version: 1,
+    release: 'demo',
+    status: 'passed',
+    sourceDigest: source.source_digest,
+    home: { baseCommit: 'a'.repeat(40), revision: 'https://endroit.org/schema/v9/workplace.json' },
+    package: {
+      version: '0.10.0-alpha.0',
+      sourceCommit: 'b'.repeat(40),
+      digest: `sha256:${'c'.repeat(64)}`,
+      sri: `sha512-${Buffer.from('fixture').toString('base64')}`,
+    },
+    upgrade: { planDigest: `sha256:${'d'.repeat(64)}`, revision: 'https://endroit.org/schema/v9/workplace.json' },
+    checks: {
+      validate: 'passed', build: 'passed', doctor: 'passed', roomDoctor: 'passed', siteDoctor: 'passed', checkout: 'passed',
+    },
+    invariants: { git: 'passed', checkouts: 'passed' },
+    verifiedAt: '2026-08-04T00:00:00.000Z',
   }
 }
 

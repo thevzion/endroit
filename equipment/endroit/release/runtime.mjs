@@ -238,16 +238,32 @@ function releaseContract(release) {
 async function dogfoodEvidence(release, declaration) {
   const receipt = await readJson(join(release.path, 'dogfood.receipt.json'), null)
   if (!receipt) return { id: declaration.id, required: true, status: 'missing', receiptDigest: null }
-  const valid = receipt.version === 1
-    && receipt.release === release.id
-    && receipt.sourceDigest === release.source_digest
-    && receipt.status === 'passed'
+  const valid = validDogfoodReceipt(receipt, release)
   return {
     id: declaration.id,
     required: true,
     status: valid ? 'passed' : 'invalid',
     receiptDigest: objectDigest(receipt),
   }
+}
+
+function validDogfoodReceipt(receipt, release) {
+  const passed = (value) => value === 'passed'
+  return receipt?.version === 1
+    && receipt.release === release.id
+    && receipt.sourceDigest === release.source_digest
+    && receipt.status === 'passed'
+    && /^[a-f0-9]{40,64}$/.test(receipt.home?.baseCommit ?? '')
+    && typeof receipt.home?.revision === 'string' && receipt.home.revision.length > 0
+    && typeof receipt.package?.version === 'string' && receipt.package.version.length > 0
+    && /^[a-f0-9]{40,64}$/.test(receipt.package?.sourceCommit ?? '')
+    && /^sha256:[a-f0-9]{64}$/.test(receipt.package?.digest ?? '')
+    && /^sha512-[A-Za-z0-9+/]+={0,2}$/.test(receipt.package?.sri ?? '')
+    && /^sha256:[a-f0-9]{64}$/.test(receipt.upgrade?.planDigest ?? '')
+    && typeof receipt.upgrade?.revision === 'string' && receipt.upgrade.revision.length > 0
+    && ['validate', 'build', 'doctor', 'roomDoctor', 'siteDoctor', 'checkout'].every((key) => passed(receipt.checks?.[key]))
+    && ['git', 'checkouts'].every((key) => passed(receipt.invariants?.[key]))
+    && typeof receipt.verifiedAt === 'string' && !Number.isNaN(Date.parse(receipt.verifiedAt))
 }
 
 async function resolveExport(input, participant, route, repository) {
