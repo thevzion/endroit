@@ -76,6 +76,30 @@ test('create and init choose explicit Desk Git boundaries around Workplace-owned
   }
 })
 
+test('Desk init refuses to write v9 from a legacy Workplace declaration', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-legacy-desk-init-'))
+  try {
+    const home = join(temporary, 'home')
+    await createHome(home, { deskStrategy: 'later' })
+    await rm(join(home, 'WORKPLACE.md'))
+    await writeFile(join(home, 'endroit.json'), `${JSON.stringify({
+      $schema: 'https://endroit.org/schema/v7/home.json',
+      name: 'home',
+      runtime: '@endroit/cli@0.10.0-alpha.0',
+      providers: ['codex', 'claude'],
+    }, null, 2)}\n`)
+    await writeFile(join(home, 'HOME.md'), '# Legacy Workplace\n\nReadable compatibility source.\n')
+
+    await assert.rejects(
+      () => initDesk(home, { id: 'local', member: 'owner', repository: 'tracked' }),
+      (error) => error.code === 'legacy_source_read_only',
+    )
+    await assert.rejects(readFile(join(home, '.desk/DESK.md')), (error) => error.code === 'ENOENT')
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
 test('Member CLI validates accounts and Desk references without accepting secret fields', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-member-cli-'))
   try {

@@ -93,6 +93,30 @@ test('Site worktrees are created, classified, discovered and adopted explicitly'
   }
 })
 
+test('v9 Checkout writers reject legacy Workplace and Desk declarations', async () => {
+  for (const legacy of ['workplace', 'desk']) {
+    const fixture = await siteFixture()
+    try {
+      const { home, repository } = fixture
+      if (legacy === 'workplace') await useLegacyWorkplace(home)
+      else await useLegacyDesk(home)
+      const index = await readFile(join(home, '.endroit/checkout-index.json'))
+
+      await runtimeFailure(home, ['checkout', 'adopt', 'demo', repository, '--id', 'main'], 'legacy_source_read_only')
+      await runtimeFailure(home, ['checkout', 'clone', 'demo', '--id', `${legacy}-clone`], 'legacy_source_read_only')
+      await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', `${legacy}-worktree`, '--from', 'main', '--new-branch', `${legacy}-worktree`], 'legacy_source_read_only')
+
+      assert.equal(await pathExists(routeDocumentPath(home, 'demo', `${legacy}-clone`)), false)
+      assert.equal(await pathExists(routeDocumentPath(home, 'demo', `${legacy}-worktree`)), false)
+      assert.equal(await pathExists(join(home, 'checkouts/demo', `${legacy}-clone`)), false)
+      assert.equal(await pathExists(join(home, 'checkouts/demo', `${legacy}-worktree`)), false)
+      assert.deepEqual(await readFile(join(home, '.endroit/checkout-index.json')), index)
+    } finally {
+      await fixture.cleanup()
+    }
+  }
+})
+
 test('Site worktree validation rejects ambiguous or unsafe creation without implicit Git effects', async () => {
   const fixture = await siteFixture()
   try {
@@ -1313,6 +1337,26 @@ async function writeLegacyRoute(path, document, mode = 0o600) {
   await writeFile(path, bytes)
   await chmod(path, mode)
   return bytes
+}
+
+async function useLegacyWorkplace(home) {
+  await rm(join(home, 'WORKPLACE.md'))
+  await writeFile(join(home, 'endroit.json'), `${JSON.stringify({
+    $schema: 'https://endroit.org/schema/v7/home.json',
+    name: 'home',
+    runtime: '@endroit/cli@0.10.0-alpha.0',
+    providers: ['codex', 'claude'],
+  }, null, 2)}\n`)
+  await writeFile(join(home, 'HOME.md'), '# Legacy Workplace\n\nReadable compatibility source.\n')
+}
+
+async function useLegacyDesk(home) {
+  await rm(join(home, '.desk/DESK.md'))
+  await writeFile(join(home, '.desk/desk.json'), `${JSON.stringify({
+    $schema: 'https://endroit.org/schema/v7/desk.json',
+    id: 'local',
+    member: 'owner',
+  }, null, 2)}\n`)
 }
 
 function routeDocumentPath(home, site, route) {

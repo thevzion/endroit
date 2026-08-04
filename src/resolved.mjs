@@ -56,9 +56,9 @@ export async function resolveHome(root) {
       owner: 'endroit/workplace',
       scope: 'home',
       root,
-      path: WORKPLACE_INSTRUCTION,
+      path: home.legacy ? 'HOME.md' : WORKPLACE_INSTRUCTION,
     },
-    deskInstruction: desk ? {
+    deskInstruction: desk && !desk.legacy ? {
       id: 'desk',
       owner: 'endroit/desk',
       scope: 'desk',

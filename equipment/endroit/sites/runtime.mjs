@@ -367,6 +367,7 @@ async function removeSite(input, id) {
 }
 
 async function bindRoute(input, id, repositoryPath, routeId = 'main', declaredSite, flags = {}) {
+  requireCurrentRouteSources(input)
   return withRouteWriterLock(input, () => bindRouteUnlocked(input, id, repositoryPath, routeId, declaredSite, flags))
 }
 
@@ -796,7 +797,7 @@ async function rollbackRouteV9Migration(input, runId) {
 }
 
 async function cloneRoute(input, id, routeId = 'main', flags = {}) {
-  requireDesk(input)
+  requireCurrentRouteSources(input)
   assertId(routeId)
   const site = declaration(input, id)
   if (!site.source) throw failure('site_source_missing', `Site ${id} has no clone source.`)
@@ -825,7 +826,7 @@ async function cloneRoute(input, id, routeId = 'main', flags = {}) {
 }
 
 async function createWorktree(input, id, flags) {
-  requireDesk(input)
+  requireCurrentRouteSources(input)
   const routeId = required(flags.id, 'Route id')
   assertId(routeId)
   await assertRouteAvailable(input, id, routeId)
@@ -2524,6 +2525,12 @@ function help(surface, command) {
   return `Usage: ${entries[command]}`
 }
 function requireDesk(input) { if (!input.deskRoot) throw failure('desk_missing', 'Configure a Desk before managing Routes.') }
+function requireCurrentRouteSources(input) {
+  requireDesk(input)
+  if (input.resolvedHome.home?.legacy || input.resolvedHome.desk?.legacy) {
+    throw failure('legacy_source_read_only', 'Legacy Workplace and Desk declarations are read-only; migrate them before writing v9 Routes.', 3)
+  }
+}
 function required(value, label) { if (!value) throw failure('usage', `${label} is required.`, 2); return value }
 function truthy(value) { return value === true || value === 'true' || value === 'yes' || value === '1' }
 function value(input) { return input === undefined ? undefined : String(input).trim() }

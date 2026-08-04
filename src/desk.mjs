@@ -41,6 +41,9 @@ export async function loadDesk(root) {
 
 export async function initDesk(root, options = {}) {
   const workplace = await loadHome(root)
+  if (workplace.legacy) {
+    throw new EndroitError('legacy_source_read_only', 'Legacy Workplace declarations are read-only; migrate to WORKPLACE.md before initializing a v9 Desk.', { exitCode: 3 })
+  }
   const directory = join(root, '.desk')
   if (await exists(directory)) throw new EndroitError('desk_exists', 'This Workplace already has a Desk directory.')
   const member = options.member ?? 'owner'
