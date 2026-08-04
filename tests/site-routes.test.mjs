@@ -861,6 +861,96 @@ test('Route migration checks without effect and rollback preserves Git and index
   }
 })
 
+test('Route v8 to v9 migration is effect-free in check and rolls back exact bytes without Git effects', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository } = fixture
+    const source = join(home, '.desk/routes/demo/main.json')
+    const destination = routeDocumentPath(home, 'demo', 'main')
+    const original = await writeLegacyRoute(source, {
+      $schema: 'https://endroit.org/schema/v8/route.json',
+      id: 'main',
+      site: 'demo',
+      status: 'active',
+      checkout: { mode: 'existing', path: await realpath(repository) },
+    }, 0o640)
+    await writeFile(join(repository, 'dirty.txt'), 'preserve me\n')
+    const address = join(home, 'checkouts/demo/main')
+    const invariant = await checkoutInvariant(repository, address)
+    const index = await readFile(join(home, '.endroit/checkout-index.json'))
+    const migrationsRoot = join(home, '.endroit/migrations/checkout-v9')
+
+    const checked = await runtimeJson(home, ['route', 'migrate', 'demo', '--check'])
+    assert.deepEqual(checked.routes, [{
+      ref: 'checkout:demo/main',
+      declaration: '.desk/routes/demo/main/ROUTE.md',
+      from: 8,
+      to: 9,
+    }])
+    assert.deepEqual(await readFile(source), original)
+    assert.equal(await pathExists(destination), false)
+    assert.equal(await pathExists(migrationsRoot), false)
+    assert.deepEqual(await checkoutInvariant(repository, address), invariant)
+
+    const migrated = await runtimeJson(home, ['route', 'migrate', 'demo'])
+    assert.equal(migrated.status, 'migrated')
+    assert.equal(await pathExists(source), false)
+    const applied = await readFile(destination)
+    assert.equal((await lstat(destination)).mode & 0o777, 0o640)
+    const route = await routeMetadata(home, 'demo', 'main')
+    assert.equal(route.$schema, 'https://endroit.org/schema/v9/route.json')
+    assert.equal(route.checkout_mode, 'existing')
+    assert.equal('path' in route, false)
+    assert.deepEqual(await readFile(join(home, '.endroit/checkout-index.json')), index)
+    assert.deepEqual(await checkoutInvariant(repository, address), invariant)
+
+    await writeFile(destination, Buffer.concat([applied, Buffer.from('\nchanged\n')]))
+    await runtimeFailure(home, ['route', 'migrate', '--rollback', migrated.runId], 'route_rollback_drift')
+    await writeFile(destination, applied)
+    await chmod(destination, 0o640)
+    const rolledBack = await runtimeJson(home, ['route', 'migrate', '--rollback', migrated.runId])
+    assert.equal(rolledBack.status, 'rolled-back')
+    assert.deepEqual(await readFile(source), original)
+    assert.equal((await lstat(source)).mode & 0o777, 0o640)
+    assert.equal(await pathExists(destination), false)
+    assert.deepEqual(await readFile(join(home, '.endroit/checkout-index.json')), index)
+    assert.deepEqual(await checkoutInvariant(repository, address), invariant)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
+test('Route v8 to v9 migration rollback recovers an interrupted source cutover', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository } = fixture
+    const source = join(home, '.desk/routes/demo/main.json')
+    const destination = routeDocumentPath(home, 'demo', 'main')
+    const original = await writeLegacyRoute(source, {
+      $schema: 'https://endroit.org/schema/v8/route.json',
+      id: 'main',
+      site: 'demo',
+      status: 'active',
+      checkout: { mode: 'existing', path: await realpath(repository) },
+    })
+    const result = await cliResult(home, ['route', 'migrate', 'demo'], {
+      NODE_ENV: 'test',
+      ENDROIT_TEST_FAULT_AFTER_ROUTE_V9_WRITE: 'checkout:demo/main',
+    })
+    assert.notEqual(result.code, 0)
+    const runId = result.stderr.match(/Migration run ([A-Za-z0-9._-]+)/)?.[1]
+    assert.ok(runId)
+    assert.equal(await pathExists(source), false)
+    assert.equal(await pathExists(destination), true)
+
+    assert.equal((await runtimeJson(home, ['route', 'migrate', '--rollback', runId])).status, 'rolled-back')
+    assert.deepEqual(await readFile(source), original)
+    assert.equal(await pathExists(destination), false)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
 test('Route migration filters one Site or Route and drops legacy worktree sourceRoute metadata', async () => {
   const fixture = await siteFixture()
   try {

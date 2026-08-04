@@ -464,12 +464,13 @@ async function migrateRoutes(input, siteId, flags) {
   if (flags.id && !siteId) throw failure('usage', '--id requires a Site id.', 2)
   if (siteId) declaration(input, siteId)
   if (truthy(flags.check)) {
-    const { summary } = await planRouteMigrations(input, siteId, flags)
+    const { summary } = await planNextRouteMigration(input, siteId, flags)
     return { status: 'checked', readOnly: true, changes: summary.length, routes: summary }
   }
   return withRouteWriterLock(input, async () => {
-    const { planned, summary } = await planRouteMigrations(input, siteId, flags)
+    const { planned, summary, target } = await planNextRouteMigration(input, siteId, flags)
     if (!summary.length) return { status: 'current', changes: 0, routes: [] }
+    if (target === 9) return applyRouteV9Migration(input, planned, summary)
     const runId = migrationRunId()
     const root = join(migrationRoot(input), runId)
     await ensureSafeDirectories(input.homeRoot, join(root, 'originals'))
@@ -529,6 +530,12 @@ async function migrateRoutes(input, siteId, flags) {
   })
 }
 
+async function planNextRouteMigration(input, siteId, flags) {
+  const legacy = await planRouteMigrations(input, siteId, flags)
+  if (legacy.summary.length) return { ...legacy, target: 8 }
+  return { ...await planRouteV9Migrations(input, siteId, flags), target: 9 }
+}
+
 async function planRouteMigrations(input, siteId, flags) {
   const allRoutes = await scanRouteGraph(input)
   const candidates = allRoutes
@@ -569,10 +576,130 @@ async function planRouteMigrations(input, siteId, flags) {
   return { planned, summary }
 }
 
+async function planRouteV9Migrations(input, siteId, flags) {
+  const allRoutes = await scanRouteGraph(input)
+  const candidates = allRoutes
+    .filter((route) => route.schemaVersion === 8 && (!siteId || route.site === siteId) && (!flags.id || route.id === flags.id))
+  const manifest = candidates.some((route) => ['existing', 'submodule'].includes(route.mode))
+    ? await readIndexManifest(input)
+    : { version: 1, links: [] }
+  const planned = []
+  for (const route of candidates) {
+    await assertSafeRouteFile(input, route.documentPath)
+    const destination = join(dirname(route.documentPath), route.id, 'ROUTE.md')
+    if (await exists(dirname(destination))) throw failure('route_source_collision', `Route ${route.site}/${route.id} already has a v9 declaration directory.`)
+    if (['existing', 'submodule'].includes(route.mode)) {
+      const address = checkoutAddress(input, route)
+      const target = await canonicalPath(route.declaredPath)
+      if (address !== target) {
+        const local = relative(input.homeRoot, address)
+        const entry = manifest.links.find((link) => link.path === local && link.ref === route.ref)
+        if (!entry || await canonicalPath(entry.target) !== target) {
+          throw failure('route_migration_checkout_unindexed', `${route.ref} requires a current Checkout index before v9 migration.`)
+        }
+      }
+    }
+    const document = {
+      $schema: 'https://endroit.org/schema/v9/route.json',
+      kind: 'endroit/route',
+      id: route.id,
+      owner: `desk:${input.resolvedHome.desk.id}`,
+      site: route.site,
+      route_state: route.status,
+      checkout_mode: route.mode,
+      ...(route.revision ? { revision: { ...route.revision } } : {}),
+      ...(route.supersededBy ? { superseded_by: route.supersededBy } : {}),
+    }
+    validateRouteV9(document, route.site, route.id)
+    planned.push({
+      route,
+      original: route.sourceBytes,
+      mode: route.fileMode,
+      destination,
+      next: Buffer.from(renderRouteMarkdown(document)),
+    })
+  }
+  const summary = planned.map(({ route, destination }) => ({
+    ref: route.ref,
+    declaration: relative(input.homeRoot, destination),
+    from: 8,
+    to: 9,
+  }))
+  return { planned, summary }
+}
+
+async function applyRouteV9Migration(input, planned, summary) {
+  const runId = migrationRunId()
+  const root = join(routeV9MigrationRoot(input), runId)
+  await ensureSafeDirectories(input.homeRoot, join(root, 'originals'))
+  const entries = []
+  for (const { route, original, mode, destination, next } of planned) {
+    const originalPath = join(root, 'originals', route.site, `${route.id}.json`)
+    await ensureSafeDirectories(root, dirname(originalPath))
+    await writeBytesAtomic(originalPath, original, 0o600)
+    await assertSafeFileUnder(join(root, 'originals'), originalPath, 'route_migration_corrupt')
+    entries.push({
+      site: route.site,
+      id: route.id,
+      sourceDeclaration: relative(input.homeRoot, route.documentPath),
+      declaration: relative(input.homeRoot, destination),
+      original: relative(root, originalPath),
+      mode,
+      beforeSha256: sha256(original),
+      afterSha256: sha256(next),
+      progress: 'original',
+      next,
+    })
+  }
+  let journal = {
+    version: 1,
+    runId,
+    kind: 'checkout-v9-route-migration',
+    status: 'prepared',
+    createdAt: new Date().toISOString(),
+    routes: entries.map(({ next: _next, ...entry }) => entry),
+  }
+  await writeRouteV9Journal(input, root, journal)
+  journal = { ...journal, status: 'applying', updatedAt: new Date().toISOString() }
+  await writeRouteV9Journal(input, root, journal)
+  try {
+    for (const entry of entries) {
+      const source = resolve(input.homeRoot, entry.sourceDeclaration)
+      const destination = resolve(input.homeRoot, entry.declaration)
+      await assertSafeRouteFile(input, source)
+      const current = await routeFileState(source)
+      if (current.sha256 !== entry.beforeSha256 || current.mode !== entry.mode) throw failure('route_migration_drift', `${entry.sourceDeclaration} changed after migration planning.`)
+      await rm(source)
+      await syncDirectory(dirname(source))
+      await mkdir(dirname(destination))
+      await writeBytesAtomic(destination, entry.next, entry.mode)
+      await assertSafeRouteFile(input, destination)
+      const written = await routeFileState(destination)
+      if (written.sha256 !== entry.afterSha256 || written.mode !== entry.mode) throw failure('route_migration_write_failed', `${entry.declaration} did not match its v9 digest and mode.`)
+      if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_FAULT_AFTER_ROUTE_V9_WRITE === `checkout:${entry.site}/${entry.id}`) {
+        throw failure('route_migration_fault', `Injected failure after writing ${entry.declaration}.`)
+      }
+      const progress = journal.routes.map((route) => route.site === entry.site && route.id === entry.id ? { ...route, progress: 'after' } : route)
+      journal = { ...journal, routes: progress, updatedAt: new Date().toISOString() }
+      await writeRouteV9Journal(input, root, journal)
+    }
+  } catch (error) {
+    error.message = `${error.message} Migration run ${runId} remains recoverable with route migrate --rollback ${runId}.`
+    throw error
+  }
+  journal = { ...journal, status: 'applied', appliedAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+  await writeRouteV9Journal(input, root, journal)
+  return { status: 'migrated', runId, changes: summary.length, routes: summary, rollback: `route migrate --rollback ${runId}` }
+}
+
 async function rollbackRouteMigration(input, runId, flags) {
   requireDesk(input)
   if (truthy(flags.check) || flags.id) throw failure('usage', '--rollback cannot be combined with --check or --id.', 2)
   if (!/^[a-z0-9][a-z0-9._-]{0,127}$/i.test(runId)) throw failure('route_migration_run_invalid', `Invalid migration run ${runId}.`, 2)
+  const legacyRun = join(migrationRoot(input), runId, 'journal.json')
+  const v9Run = join(routeV9MigrationRoot(input), runId, 'journal.json')
+  if (await exists(legacyRun) && await exists(v9Run)) throw failure('route_migration_ambiguous', `Migration run ${runId} exists for both v8 and v9.`)
+  if (await exists(v9Run)) return rollbackRouteV9Migration(input, runId)
   return withRouteWriterLock(input, async () => {
     const root = join(migrationRoot(input), runId)
     let journal = await readJournal(input, root, runId)
@@ -614,6 +741,51 @@ async function rollbackRouteMigration(input, runId, flags) {
       runId,
       changes,
       routes: classified.map(({ entry }) => ({ ref: `checkout:${entry.site}/${entry.id}`, declaration: entry.declaration, from: 8, to: 7 })),
+    }
+  })
+}
+
+async function rollbackRouteV9Migration(input, runId) {
+  return withRouteWriterLock(input, async () => {
+    const root = join(routeV9MigrationRoot(input), runId)
+    let journal = await readRouteV9Journal(input, root, runId)
+    if (journal.status === 'rolled-back') return { status: 'current', runId, changes: 0, routes: [] }
+    if (!['prepared', 'applying', 'rolling-back', 'applied'].includes(journal.status)) {
+      throw failure('route_migration_state_invalid', `Migration run ${runId} cannot be rolled back from ${journal.status}.`)
+    }
+    const classified = []
+    for (const entry of journal.routes) classified.push(await classifyRouteV9RollbackEntry(input, root, entry))
+    journal = { ...journal, status: 'rolling-back', updatedAt: new Date().toISOString() }
+    await writeRouteV9Journal(input, root, journal)
+    let changes = 0
+    for (const item of classified) {
+      if (!item.source) {
+        const original = await readFile(item.originalPath)
+        await writeBytesAtomic(item.sourcePath, original, item.entry.mode)
+        const restored = await routeFileState(item.sourcePath)
+        if (restored.sha256 !== item.entry.beforeSha256 || restored.mode !== item.entry.mode) {
+          throw failure('route_rollback_write_failed', `${item.entry.sourceDeclaration} did not restore its v8 digest and mode.`)
+        }
+        changes += 1
+      }
+      if (item.destination) {
+        await rm(item.destinationPath)
+        await removeEmpty(dirname(item.destinationPath), join(input.deskRoot, 'routes'))
+        changes += item.source ? 1 : 0
+      } else if (item.directory) {
+        await removeEmpty(dirname(item.destinationPath), join(input.deskRoot, 'routes'))
+      }
+      const progress = journal.routes.map((route) => route.site === item.entry.site && route.id === item.entry.id ? { ...route, progress: 'original' } : route)
+      journal = { ...journal, routes: progress, updatedAt: new Date().toISOString() }
+      await writeRouteV9Journal(input, root, journal)
+    }
+    journal = { ...journal, status: 'rolled-back', rolledBackAt: new Date().toISOString(), updatedAt: new Date().toISOString() }
+    await writeRouteV9Journal(input, root, journal)
+    return {
+      status: 'rolled-back',
+      runId,
+      changes,
+      routes: classified.map(({ entry }) => ({ ref: `checkout:${entry.site}/${entry.id}`, declaration: entry.sourceDeclaration, from: 9, to: 8 })),
     }
   })
 }
@@ -1741,6 +1913,7 @@ function revisionMatches(revision, evidence) {
 }
 
 function migrationRoot(input) { return join(input.homeRoot, '.endroit', 'migrations', 'checkout-v8') }
+function routeV9MigrationRoot(input) { return join(input.homeRoot, '.endroit', 'migrations', 'checkout-v9') }
 function routeWriterRoot(input) { return join(input.homeRoot, '.endroit', 'locks') }
 
 async function withRouteWriterLock(input, operation) {
@@ -1851,6 +2024,70 @@ async function readJournal(input, root, runId) {
   const refs = journal.routes.map((entry) => `${entry?.site}/${entry?.id}`)
   if (new Set(refs).size !== refs.length) throw failure('route_rollback_corrupt', `Migration run ${runId} repeats a Route.`)
   return journal
+}
+
+async function writeRouteV9Journal(input, root, journal) {
+  await assertSafeDirectoryUnder(routeV9MigrationRoot(input), root, 'route_migration_corrupt')
+  const path = join(root, 'journal.json')
+  if (await exists(path)) await assertRegularFile(path, 'route_migration_corrupt')
+  await writeJsonAtomic(path, journal)
+  await assertRegularFile(path, 'route_migration_corrupt')
+}
+
+async function readRouteV9Journal(input, root, runId) {
+  try {
+    await assertSafeDirectoryUnder(routeV9MigrationRoot(input), root, 'route_rollback_corrupt')
+  } catch (error) {
+    if (error.code === 'ENOENT') throw failure('route_migration_missing', `Migration run ${runId} does not exist.`)
+    throw error
+  }
+  const path = join(root, 'journal.json')
+  try { await assertRegularFile(path, 'route_rollback_corrupt') } catch (error) {
+    if (error.code === 'ENOENT') throw failure('route_migration_missing', `Migration run ${runId} does not exist.`)
+    throw error
+  }
+  let journal
+  try { journal = JSON.parse(await readFile(path, 'utf8')) } catch { throw failure('route_rollback_corrupt', `Migration run ${runId} journal is invalid.`) }
+  if (journal.version !== 1 || journal.kind !== 'checkout-v9-route-migration' || journal.runId !== runId || !Array.isArray(journal.routes)) {
+    throw failure('route_rollback_corrupt', `Migration run ${runId} journal does not match its identity.`)
+  }
+  const refs = journal.routes.map((entry) => `${entry?.site}/${entry?.id}`)
+  if (new Set(refs).size !== refs.length) throw failure('route_rollback_corrupt', `Migration run ${runId} repeats a Route.`)
+  return journal
+}
+
+async function classifyRouteV9RollbackEntry(input, root, entry) {
+  if (!entry || typeof entry !== 'object' || !validId(entry.site) || !validId(entry.id)
+    || typeof entry.sourceDeclaration !== 'string' || typeof entry.declaration !== 'string' || typeof entry.original !== 'string'
+    || !['original', 'after'].includes(entry.progress)
+    || !Number.isInteger(entry.mode) || entry.mode < 0 || entry.mode > 0o777
+    || !/^[a-f0-9]{64}$/.test(entry.beforeSha256) || !/^[a-f0-9]{64}$/.test(entry.afterSha256)) {
+    throw failure('route_rollback_corrupt', 'Migration journal contains invalid Route metadata.')
+  }
+  const sourcePath = resolve(input.homeRoot, entry.sourceDeclaration)
+  const destinationPath = resolve(input.homeRoot, entry.declaration)
+  if (sourcePath !== join(input.deskRoot, 'routes', entry.site, `${entry.id}.json`)
+    || destinationPath !== join(input.deskRoot, 'routes', entry.site, entry.id, 'ROUTE.md')) {
+    throw failure('route_rollback_corrupt', `Invalid Route declarations for ${entry.site}/${entry.id}.`)
+  }
+  const originalsRoot = join(root, 'originals')
+  const originalPath = resolve(root, entry.original)
+  if (originalPath !== join(originalsRoot, entry.site, `${entry.id}.json`)) throw failure('route_rollback_corrupt', `Invalid rollback source ${entry.original}.`)
+  await assertSafeFileUnder(originalsRoot, originalPath, 'route_rollback_corrupt')
+  const original = await readFile(originalPath)
+  if (sha256(original) !== entry.beforeSha256) throw failure('route_rollback_corrupt', `${entry.original} does not match its journal digest.`)
+  const sourceInfo = await lstat(sourcePath).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+  if (sourceInfo && (sourceInfo.isSymbolicLink() || !sourceInfo.isFile())) throw failure('route_rollback_drift', `${entry.sourceDeclaration} changed after migration.`)
+  const source = sourceInfo ? await routeFileState(sourcePath) : null
+  if (source && (source.sha256 !== entry.beforeSha256 || source.mode !== entry.mode)) throw failure('route_rollback_drift', `${entry.sourceDeclaration} changed after migration.`)
+  const directoryInfo = await lstat(dirname(destinationPath)).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+  if (directoryInfo && (directoryInfo.isSymbolicLink() || !directoryInfo.isDirectory())) throw failure('route_rollback_drift', `${entry.declaration} changed after migration.`)
+  const destinationInfo = await lstat(destinationPath).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+  if (destinationInfo && (destinationInfo.isSymbolicLink() || !destinationInfo.isFile())) throw failure('route_rollback_drift', `${entry.declaration} changed after migration.`)
+  const destination = destinationInfo ? await routeFileState(destinationPath) : null
+  if (destination && (destination.sha256 !== entry.afterSha256 || destination.mode !== entry.mode)) throw failure('route_rollback_drift', `${entry.declaration} changed after migration.`)
+  if (!source && !destination) throw failure('route_rollback_drift', `${entry.sourceDeclaration} and ${entry.declaration} are both missing.`)
+  return { entry, sourcePath, destinationPath, originalPath, source: Boolean(source), destination: Boolean(destination), directory: Boolean(directoryInfo) }
 }
 
 async function classifyRollbackEntry(input, root, entry) {
