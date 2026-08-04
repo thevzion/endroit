@@ -64,7 +64,7 @@ test('create and init choose explicit Desk Git boundaries around Workplace-owned
     assert.equal(await runCli(['desk', 'init', '--id', 'later', '--workplace', deferred, '--json'], desk.io), 0, desk.stderr())
     assert.equal(JSON.parse(desk.stdout()).repository, 'separate')
     const resumed = captureIo()
-    assert.equal(await runCli(['checkout', 'adopt', 'self', deferred, '--id', 'embedded', '--workplace', deferred, '--json'], resumed.io), 0, resumed.stderr())
+    assert.equal(await runCli(['checkout', 'adopt', 'self', deferred, '--id', 'embedded', '--purpose', 'primary', '--workplace', deferred, '--json'], resumed.io), 0, resumed.stderr())
     assert.equal(JSON.parse(resumed.stdout()).mode, 'embedded')
     const embeddedRoute = parseDocument(await readFile(join(deferred, '.desk/routes/self/embedded/ROUTE.md'))).metadata
     assert.equal(embeddedRoute.$schema, 'https://endroit.org/schema/v9/route.json')
