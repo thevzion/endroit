@@ -256,12 +256,12 @@ export async function planFirstPartyEquipmentUpgrade(root, options = {}) {
   const retired = []
   for (const installed of installedFirstParty) {
     await requireValid(installed)
-    const status = await equipmentStatus(installed)
-    if (status.state !== 'clean') {
-      throw new EndroitError('workplace_upgrade_equipment_customized', `${installed.id} has customized, missing or invalid source-owned files.`, { details: status })
-    }
     const name = installed.id.split('/').at(-1)
     if (!await exists(join(builtinRoot, name, 'equipment.json'))) {
+      const status = await equipmentStatus(installed)
+      if (status.state !== 'clean') {
+        throw new EndroitError('workplace_upgrade_equipment_customized', `${installed.id} has customized, missing or invalid source-owned files.`, { details: status })
+      }
       const owned = new Set(['equipment.json', ...Object.keys(installed.manifest.origin.baseDigests)])
       const retained = (await equipmentFiles(installed.root)).filter((path) => !owned.has(path))
       for (const path of installed.manifest.origin.baseDigests ? Object.keys(installed.manifest.origin.baseDigests) : []) {
@@ -277,6 +277,10 @@ export async function planFirstPartyEquipmentUpgrade(root, options = {}) {
       throw new EndroitError('workplace_upgrade_target_version_mismatch', `${installed.id} is ${upstream.manifest.version}, expected ${options.targetVersion}.`)
     }
     const target = { ...upstream, requestedRef: sourceCommit, resolvedCommit: sourceCommit }
+    const status = await equipmentStatus(installed)
+    if (status.state !== 'clean' && !await equipmentMatchesTarget(installed, status, target)) {
+      throw new EndroitError('workplace_upgrade_equipment_customized', `${installed.id} has customized, missing or invalid source-owned files.`, { details: status })
+    }
     for (const file of target.files) writes.push({ path: join(installed.root, file.path), content: file.content, kind: 'equipment-file' })
     writes.push({ path: installed.path, content: manifestBytes(installedManifest(target, 'source')), kind: 'equipment-manifest' })
     const next = new Set(target.files.map((file) => file.path))
@@ -286,6 +290,22 @@ export async function planFirstPartyEquipmentUpgrade(root, options = {}) {
     equipment.push({ id: installed.id, version: target.manifest.version, requestedRef: sourceCommit, resolvedCommit: sourceCommit })
   }
   return { writes, deletes, equipment, retired }
+}
+
+async function equipmentMatchesTarget(installed, status, target) {
+  if (status.manifest !== 'clean') return false
+  const targetDigests = new Map(target.files.map((file) => [file.path, digest(file.content)]))
+  const known = new Set(status.files.map((file) => file.path))
+  for (const file of status.files) {
+    if (file.state === 'clean' || (file.state === 'missing' && !targetDigests.has(file.path))) continue
+    if (file.state !== 'customized' || digest(await readFile(join(installed.root, file.path))) !== targetDigests.get(file.path)) return false
+  }
+  for (const file of target.files) {
+    if (known.has(file.path) || !await exists(join(installed.root, file.path))) continue
+    const info = await lstat(join(installed.root, file.path))
+    if (!info.isFile() || info.isSymbolicLink() || digest(await readFile(join(installed.root, file.path))) !== targetDigests.get(file.path)) return false
+  }
+  return true
 }
 
 async function equipmentFiles(root, current = root) {

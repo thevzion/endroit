@@ -145,6 +145,15 @@ test('workplace upgrade automatically restores exact bytes after a write fault',
 test('legacy Workplace upgrade is deterministic, owner-correct, CLI-accessible and exactly reversible', async () => {
   const fixture = await legacyFixture()
   try {
+    const publishingRuntime = join(fixture.home, 'equipment', 'endroit', 'publishing', 'runtime.mjs')
+    const targetRuntime = await readFile(publishingRuntime)
+    await writeFile(publishingRuntime, 'export default "customized"\n')
+    await assert.rejects(
+      () => planWorkplaceUpgrade(fixture.home, TARGET),
+      (error) => error.code === 'workplace_upgrade_equipment_customized',
+    )
+    await writeFile(publishingRuntime, targetRuntime)
+
     const first = await planWorkplaceUpgrade(fixture.home, TARGET)
     const second = await planWorkplaceUpgrade(fixture.home, TARGET)
     assert.equal(first.planDigest, second.planDigest)
@@ -284,7 +293,11 @@ async function upgradeFixture(options = {}) {
 async function legacyFixture() {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-legacy-workplace-upgrade-'))
   const home = join(temporary, 'home')
-  await createHome(home)
+  await createHome(home, { equipment: ['@endroit/publishing'] })
+  const adoptedManifestPath = join(home, 'equipment', 'endroit', 'publishing', 'equipment.json')
+  const adoptedManifest = JSON.parse(await readFile(adoptedManifestPath, 'utf8'))
+  adoptedManifest.origin.baseDigests['runtime.mjs'] = `sha256:${'0'.repeat(64)}`
+  await writeFile(adoptedManifestPath, `${JSON.stringify(adoptedManifest, null, 2)}\n`)
   const retiredSource = join(temporary, 'retired-source')
   await writeEquipment(retiredSource, equipment({
     name: 'endroit/retired',
