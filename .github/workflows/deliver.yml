@@ -1,0 +1,174 @@
+name: Deliver npm
+
+run-name: Deliver ${{ inputs.release_id }} to npm from ${{ inputs.expected_sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_id:
+        description: Home-owned Release identifier
+        required: true
+        type: string
+      expected_sha:
+        description: Exact Site commit locked by the Release
+        required: true
+        type: string
+      lock_digest:
+        description: SHA-256 digest of release.lock.json
+        required: true
+        type: string
+      mode:
+        description: Qualify only or publish to npm
+        required: true
+        default: check
+        type: choice
+        options:
+          - check
+          - production
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-deliver-${{ inputs.release_id }}
+  cancel-in-progress: false
+
+env:
+  NPM_VERSION: 11.5.1
+  RELEASE_ARTIFACT: endroit-0.10-release-candidate
+
+jobs:
+  qualify:
+    name: qualify (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22, 24]
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
+      - name: Verify Release inputs and locked commit
+        shell: bash
+        env:
+          RELEASE_ID: ${{ inputs.release_id }}
+          EXPECTED_SHA: ${{ inputs.expected_sha }}
+          LOCK_DIGEST: ${{ inputs.lock_digest }}
+        run: |
+          [[ "$RELEASE_ID" =~ ^ecosystem-[0-9]{4}-[0-9]{2}(-[0-9]{2})?$ ]]
+          [[ "$EXPECTED_SHA" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$LOCK_DIGEST" =~ ^[0-9a-f]{64}$ ]]
+          test "$(git rev-parse HEAD)" = "$EXPECTED_SHA"
+      - uses: actions/setup-node@v6
+        with:
+          node-version: ${{ matrix.node }}
+          package-manager-cache: false
+      - name: Use an OIDC-capable npm CLI
+        run: npm install --global npm@${{ env.NPM_VERSION }}
+      - run: npm ci --ignore-scripts
+      - run: npm run check
+      - run: npm test
+      - run: npm run conformance
+      - run: npm run check:providers
+      - run: npm run check:pack
+
+  package:
+    name: package once
+    needs: qualify
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          package-manager-cache: false
+      - name: Use an OIDC-capable npm CLI
+        run: npm install --global npm@${{ env.NPM_VERSION }}
+      - run: npm ci --ignore-scripts
+      - run: npm run check:lab
+      - name: Build, probe public schemas and dry-run the release artifact
+        shell: bash
+        run: |
+          release_dir="$RUNNER_TEMP/npm-release"
+          node scripts/release-packages.mjs "$release_dir"
+          node scripts/release-publish.mjs "$release_dir/manifest.json" --dry-run
+          echo "- commit: ${{ inputs.expected_sha }}" >> "$GITHUB_STEP_SUMMARY"
+          node -e "for (const p of require('$release_dir/manifest.json').packages) console.log('- ' + p.name + '@' + p.version + ': ' + p.integrity)" >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ env.RELEASE_ARTIFACT }}
+          path: ${{ runner.temp }}/npm-release/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    if: inputs.mode == 'production'
+    name: publish npm
+    needs: package
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: https://www.npmjs.com/package/@endroit/cli
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.expected_sha }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Use an OIDC-capable npm CLI
+        run: npm install --global npm@${{ env.NPM_VERSION }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: ${{ env.RELEASE_ARTIFACT }}
+          path: ${{ runner.temp }}/npm-release
+      - name: Revalidate the qualified artifact and registry
+        run: node scripts/release-publish.mjs "$RUNNER_TEMP/npm-release/manifest.json"
+
+  smoke-next:
+    name: smoke npm next
+    needs: publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.expected_sha }}
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+      - name: Recreate and inspect a Workplace from npm next
+        shell: bash
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          tagged=""
+          for attempt in $(seq 1 36); do
+            tagged="$(npm view @endroit/cli dist-tags.next --json 2>/dev/null | tr -d '\"' || true)"
+            test "$tagged" = "$version" && break
+            sleep 5
+          done
+          test "$tagged" = "$version"
+          smoke_cli="$RUNNER_TEMP/endroit-smoke-cli"
+          smoke_root="$RUNNER_TEMP/endroit-next-smoke"
+          npm install --prefix "$smoke_cli" --ignore-scripts --no-audit --no-fund "@endroit/cli@$version"
+          installed="$smoke_cli/node_modules/@endroit/cli"
+          installed_version="$(node -e 'console.log(require(process.argv[1]).version)' "$installed/package.json")"
+          test "$installed_version" = "$version"
+          bin_entry="$(node -e 'const p=require(process.argv[1]); if(typeof p.bin?.endroit!=="string") process.exit(1); console.log(p.bin.endroit)' "$installed/package.json")"
+          test -f "$installed/$bin_entry"
+          node "$installed/$bin_entry" create "$smoke_root" --desk tracked --no-interactive --yes
+          cd "$smoke_root"
+          node ./endroit.mjs doctor --json | node -e "let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{if(JSON.parse(s).status!=='ready')process.exit(1)})"
+          node ./endroit.mjs hygiene maintain --json | node -e "let s=''; process.stdin.on('data',c=>s+=c).on('end',()=>{if(JSON.parse(s).readOnly!==true)process.exit(1)})"
