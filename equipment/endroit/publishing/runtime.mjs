@@ -4,7 +4,7 @@ import { lstat, mkdir, readFile, readdir, rename, rm, rmdir, writeFile } from 'n
 import { basename, dirname, join, relative, resolve } from 'node:path'
 
 const MIGRATION = 'editorial-work-v1'
-const FORMATS = new Set(['article', 'landing', 'proposal', 'profile', 'thread', 'post', 'comment'])
+const FORMATS = new Set(['article', 'landing', 'proposal', 'profile', 'thread', 'post', 'comment', 'visual-story'])
 const STABILITIES = new Set(['living', 'release-aligned', 'dated', 'historical'])
 const CANDIDATE_STATES = new Set(['draft', 'in_review', 'selected', 'declined', 'superseded'])
 const LINEAGES = new Set(['root', 'iteration', 'alternative', 'synthesis'])

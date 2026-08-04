@@ -144,7 +144,7 @@ function createRoomFixture(homeRoot, room) {
     created_at: '2026-01-01T00:00:00.000Z',
     updated_at: '2026-01-01T00:00:00.000Z',
     derived_from: [],
-    format: room.handle ? 'article' : 'post',
+    format: room.handle ? 'visual-story' : 'post',
     title: `Title ${room.publication}`,
     audience: 'readers',
     language: 'en',
@@ -224,7 +224,7 @@ function createRoomFixture(homeRoot, room) {
       publications: [{
         id: room.publication,
         candidate: room.candidate,
-        format: room.handle ? 'article' : 'post',
+        format: room.handle ? 'visual-story' : 'post',
       }],
     }],
   }, null, 2)}\n`)
