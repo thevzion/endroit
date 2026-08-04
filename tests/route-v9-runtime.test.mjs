@@ -11,7 +11,7 @@ import { loadRoutes } from '../src/routes.mjs'
 const exec = promisify(execFile)
 const runtime = fileURLToPath(new URL('../equipment/endroit/sites/runtime.mjs', import.meta.url))
 
-test('the Sites runtime writes pathless ROUTE.md and treats its Checkout link as the only local binding', async () => {
+test('the Sites runtime writes pathless ROUTE.md and reconstructs its Checkout link from the local index', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-route-v9-runtime-'))
   const homeRoot = join(temporary, 'home')
   const deskRoot = join(homeRoot, '.desk')
@@ -43,6 +43,12 @@ test('the Sites runtime writes pathless ROUTE.md and treats its Checkout link as
     const address = join(homeRoot, 'checkouts/demo/main')
     assert.equal((await lstat(address)).isSymbolicLink(), true)
     assert.equal(await realpath(address), await realpath(repository))
+    const indexPath = join(homeRoot, '.endroit/checkout-index.json')
+    assert.deepEqual(JSON.parse(await readFile(indexPath, 'utf8')).links.map(({ path, target, ref }) => ({ path, target, ref })), [{
+      path: 'checkouts/demo/main',
+      target: await realpath(repository),
+      ref: 'checkout:demo/main',
+    }])
 
     await mkdir(join(repository, 'docs'))
     await writeFile(join(repository, 'docs/guide.md'), '# Guide\n')
@@ -60,7 +66,6 @@ test('the Sites runtime writes pathless ROUTE.md and treats its Checkout link as
     ]), /checkout_ref_path_escape/)
     await rm(join(repository, 'escape'))
 
-    await assert.rejects(lstat(join(homeRoot, '.endroit/checkout-index.json')), (error) => error.code === 'ENOENT')
     const routes = await loadRoutes(homeRoot, deskRoot, [site])
     const resolved = runtimeInput(homeRoot, deskRoot, site, routes)
     await invoke(resolved, ['route', 'park', 'demo', '--id', 'main', '--json'])
@@ -70,14 +75,24 @@ test('the Sites runtime writes pathless ROUTE.md and treats its Checkout link as
 
     await rm(address)
     const parkedRoutes = await loadRoutes(homeRoot, deskRoot, [site])
-    const unbound = runtimeInput(homeRoot, deskRoot, site, parkedRoutes)
-    await assert.rejects(invoke(unbound, ['route', 'inspect', 'demo', '--id', 'main', '--json']), /checkout_unbound/)
-    await invoke(unbound, ['checkout', 'adopt', 'demo/main', repository, '--json'])
+    const missing = runtimeInput(homeRoot, deskRoot, site, parkedRoutes)
+    const checked = await invoke(missing, ['checkout', 'reconcile', '--check', '--json'])
+    assert.equal(checked.status, 'stale')
+    assert.equal(checked.readOnly, true)
+    assert.equal((await invoke(missing, ['route', 'inspect', 'demo', '--id', 'main', '--json'])).observed.index, 'missing')
+    await invoke(missing, ['checkout', 'reconcile', '--apply', '--json'])
     assert.equal(await realpath(address), await realpath(repository))
+
+    const unknown = join(homeRoot, 'checkouts/demo/unknown')
+    await symlink(repository, unknown, 'dir')
+    await invoke(missing, ['checkout', 'reconcile', '--apply', '--json'])
+    assert.equal(await realpath(unknown), await realpath(repository))
 
     await invoke(runtimeInput(homeRoot, deskRoot, site, parkedRoutes), ['route', 'remove', 'demo', '--id', 'main', '--json'])
     await assert.rejects(lstat(address), (error) => error.code === 'ENOENT')
     await assert.rejects(lstat(routePath), (error) => error.code === 'ENOENT')
+    assert.equal(JSON.parse(await readFile(indexPath, 'utf8')).links.length, 0)
+    assert.equal(await realpath(unknown), await realpath(repository))
     assert.equal(await readFile(join(repository, 'README.md'), 'utf8'), '# demo\n')
   } finally {
     await rm(temporary, { recursive: true, force: true })

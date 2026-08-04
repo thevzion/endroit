@@ -19,8 +19,10 @@ Offer three Checkout choices:
    address; Endroit never runs submodule add, init or update.
 
 `checkout adopt <site>/<route> <path>` is the only explicit association of an
-existing repository. A missing symlink leaves the Route `unbound` until it is
-adopted again. Linked worktrees remain an explicit Checkout operation.
+existing repository. It records the validated target in the Desk-local
+Checkout index. A missing generated link is repaired only by explicit
+`checkout reconcile`; an unindexed Route remains `unbound`. Linked worktrees
+remain an explicit Checkout operation.
 
 Confirm the resulting Route is usable, then offer a Site Map as a separate
 outcome rather than creating one implicitly.

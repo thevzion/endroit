@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { execFile } from 'node:child_process'
 import { createHash, randomUUID } from 'node:crypto'
-import { lstat, mkdir, open, readFile, readlink, readdir, realpath, rename, rm, symlink, writeFile } from 'node:fs/promises'
+import { lstat, mkdir, open, readFile, readlink, readdir, realpath, rename, rm, rmdir, symlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
@@ -128,10 +128,10 @@ async function listSites(input, siteId, options = {}) {
 async function listRoutes(input, siteId) {
   if (siteId) {
     declaration(input, siteId)
-    return (await routesFor(input, siteId)).map(routeDeclaration)
+    return (await routesFor(input, siteId)).map((route) => routeDeclaration(input, route))
   }
   const values = []
-  for (const site of declarations(input)) values.push(...(await routesFor(input, site.id)).map(routeDeclaration))
+  for (const site of declarations(input)) values.push(...(await routesFor(input, site.id)).map((route) => routeDeclaration(input, route)))
   return values.sort((left, right) => left.site.localeCompare(right.site) || left.id.localeCompare(right.id))
 }
 
@@ -147,12 +147,12 @@ async function inspectRoute(input, id, routeId) {
   const evidence = await inspectRepository(await routeRepositoryPath(input, route))
   const currentWorktree = evidence.worktrees.find((worktree) => worktree.path === evidence.root)
   assertSiteMatches(site, evidence)
-  const trackedFiles = (await git(['ls-files'], route.path)).split('\n').filter(Boolean).sort()
+  const trackedFiles = (await git(['ls-files'], evidence.root)).split('\n').filter(Boolean).sort()
   const files = trackedFiles.slice(0, 5000)
   const scripts = []
   for (const path of files.filter((entry) => basename(entry) === 'package.json').slice(0, 20)) {
     try {
-      const document = JSON.parse(await readFile(join(route.path, path), 'utf8'))
+      const document = JSON.parse(await readFile(join(evidence.root, path), 'utf8'))
       for (const name of Object.keys(document.scripts ?? {})) scripts.push(`${path}#${name}`)
     } catch {}
   }
@@ -386,7 +386,7 @@ async function bindRouteUnlocked(input, id, repositoryPath, routeId = 'main', de
     const address = managedPath(input, id, routeId)
     const info = await lstat(address).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
     if (info) throw failure('checkout_bound', `${existing.ref} already has a local Checkout address.`)
-    await createCheckoutLink(input, address, evidence.root)
+    await bindCheckoutLink(input, address, evidence.root, existing.ref)
     return { status: 'adopted', site: id, route: routeId, ref: existing.ref, declared: existing.declared, observed: { path: evidence.root }, checkout: evidence.checkout }
   }
   await assertRouteAvailable(input, id, routeId)
@@ -403,7 +403,10 @@ async function bindRouteUnlocked(input, id, repositoryPath, routeId = 'main', de
     revision,
   })
   try {
-    if (mode !== 'embedded') await createCheckoutLink(input, managedPath(input, id, routeId), evidence.root)
+    const address = managedPath(input, id, routeId)
+    if (mode !== 'embedded' && await canonicalPath(address) !== evidence.root) {
+      await bindCheckoutLink(input, address, evidence.root, route.ref)
+    }
     return { ...route, checkout: evidence.checkout }
   } catch (error) {
     pendingRoutes.delete(`checkout:${id}/${routeId}`)
@@ -978,6 +981,9 @@ async function routeRepositoryPath(input, route) {
   if (route.schemaVersion === 9 && ['existing', 'submodule'].includes(route.mode)) {
     const target = await checkoutIndexTarget(input, route)
     if (!target) throw failure('checkout_unbound', `${route.ref} has no bound Checkout address; adopt it explicitly.`)
+    if (route.mode === 'submodule' && !await exists(join(target, '.git'))) {
+      throw failure('checkout_submodule_uninitialized', `Submodule Checkout ${route.site}/${route.id} is not initialized.`)
+    }
     return target
   }
   if (route.mode === 'submodule' && !await exists(join(route.path, '.git'))) {
@@ -1110,14 +1116,14 @@ function validateRoute(route, site, id, input) {
   if (Object.keys(checkout).some((key) => !['mode', 'path'].includes(key))) throw failure('route_invalid', `Invalid Checkout ${site}/${id}.`)
 }
 
-function routeDeclaration(route) {
+function routeDeclaration(input, route) {
   return {
     id: route.id,
     site: route.site,
     ref: route.ref,
     schemaVersion: route.schemaVersion,
     declared: route.declared,
-    declaration: relative(dirname(dirname(dirname(route.documentPath))), route.documentPath),
+    declaration: relative(input.deskRoot, route.documentPath),
   }
 }
 
@@ -1125,7 +1131,7 @@ async function observeRoute(input, site, route) {
   const repository = await routeRepositoryPath(input, route).then(inspectRepository).catch((error) => ({ available: false, error: error.message, worktrees: [], conflicts: 0 }))
   const currentWorktree = repository.worktrees.find((worktree) => worktree.path === repository.root)
   return {
-    ...routeDeclaration(route),
+    ...routeDeclaration(input, route),
     observed: {
       path: repository.root ?? route.path,
       address: checkoutAddress(input, route),
@@ -1206,7 +1212,7 @@ async function inspectCheckoutIndex(input, route) {
   const target = await checkoutIndexTarget(input, route)
   let info
   try { info = await lstat(address) } catch (error) {
-    if (error.code === 'ENOENT') return { status: route.schemaVersion === 9 ? 'unbound' : 'missing', address, target }
+    if (error.code === 'ENOENT') return { status: target ? 'missing' : 'unbound', address, target }
     throw error
   }
   if (!target) return { status: 'unindexed', address, target: null }
@@ -1257,7 +1263,6 @@ async function desiredCheckoutLinks(input) {
   const manifest = await readIndexManifest(input)
   for (const route of await scanRouteGraph(input)) {
     if (route.mode === 'embedded') continue
-    if (route.schemaVersion === 9) continue
     const address = checkoutAddress(input, route)
     const target = await checkoutIndexTarget(input, route, manifest)
     if (!target) continue
@@ -1277,15 +1282,18 @@ async function checkoutIndexTarget(input, route, manifest) {
   const address = checkoutAddress(input, route)
   if (route.schemaVersion !== 9) return canonicalPath(route.declaredPath)
   if (route.mode === 'embedded' || route.mode.startsWith('managed-')) return address
+  manifest ??= await readIndexManifest(input)
+  const local = relative(input.homeRoot, address)
+  const entry = manifest.links.find((link) => link.path === local && link.ref === route.ref)
+  if (entry) return canonicalPath(entry.target)
   const info = await lstat(address).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
   if (!info) return null
-  if (!info.isSymbolicLink()) return null
-  const target = await symlinkTarget(address)
-  const evidence = await inspectRepository(target).catch(() => null)
-  return evidence && matchesSite(declaration(input, route.site), evidence) ? target : null
+  if (info.isSymbolicLink()) return symlinkTarget(address)
+  return info.isDirectory() ? canonicalPath(address) : null
 }
 
 async function createCheckoutLink(input, address, target) {
+  target = await canonicalPath(target)
   await ensureSafeDirectories(input.homeRoot, dirname(address))
   if (await exists(address)) throw failure('checkout_bound', `${relative(input.homeRoot, address)} already exists.`)
   await symlink(target, address, 'dir')
@@ -1293,6 +1301,37 @@ async function createCheckoutLink(input, address, target) {
   if (!info.isSymbolicLink() || linked !== await canonicalPath(target)) {
     await rm(address, { force: true })
     throw failure('checkout_bind_failed', `${relative(input.homeRoot, address)} did not bind to the requested Checkout.`)
+  }
+}
+
+async function bindCheckoutLink(input, address, target, ref) {
+  target = await canonicalPath(target)
+  const snapshot = await readIndexSnapshot(input)
+  const link = indexLink(input, address, target, ref)
+  const previous = snapshot.document.links.find((entry) => entry.path === link.path)
+  const links = [...snapshot.document.links.filter((entry) => entry.path !== link.path), link]
+    .sort((left, right) => left.path.localeCompare(right.path))
+  const info = await lstat(address).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+  if (info) {
+    if (!previous || previous.ref !== ref || !info.isSymbolicLink() || await symlinkTarget(address) !== previous.target) {
+      throw failure('checkout_index_conflict', `${relative(input.homeRoot, address)} already exists.`)
+    }
+    await rm(address)
+  }
+  try {
+    await createCheckoutLink(input, address, target)
+  } catch (error) {
+    if (previous && !await exists(address)) await symlink(previous.target, address, 'dir')
+    throw error
+  }
+  try {
+    await ensureSafeDirectories(input.homeRoot, dirname(indexManifestPath(input)))
+    await writeJsonAtomic(indexManifestPath(input), { version: 1, links }, 0o600)
+  } catch (error) {
+    const info = await lstat(address).catch(() => null)
+    if (info?.isSymbolicLink() && await symlinkTarget(address) === target) await rm(address)
+    if (previous && !await exists(address)) await symlink(previous.target, address, 'dir')
+    throw error
   }
 }
 
@@ -2117,7 +2156,7 @@ async function symlinkTarget(path) {
 }
 async function removeEmpty(path, stop) {
   let current = path
-  while (current !== stop) { try { await rm(current) } catch { break }; current = dirname(current) }
+  while (current !== stop) { try { await rmdir(current) } catch { break }; current = dirname(current) }
 }
 async function safeReadDir(path) {
   try { return (await readdir(path, { withFileTypes: true })).sort((left, right) => left.name.localeCompare(right.name)) }

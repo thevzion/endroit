@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { mkdir, mkdtemp, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, realpath, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import test from 'node:test'
@@ -88,7 +88,7 @@ test('resolveHome and publicPlan expose one normalized v8 Checkout declaration',
     assert.equal(plan.routes.length, 1)
     assert.equal(plan.routes[0].ref, 'checkout:self/embedded')
     assert.equal(plan.routes[0].declared.checkout.mode, 'embedded')
-    assert.equal(publicPlan(plan).routes[0].documentPath, '.desk/routes/self/embedded.json')
+    assert.equal(publicPlan(plan).routes[0].document_path, '.desk/routes/self/embedded.json')
   } finally {
     await removeTree(temporary, { force: true })
   }
@@ -130,7 +130,7 @@ test('the Core loader reads mixed v7/v8 Routes once into the Resolved Home shape
     const routes = await loadRoutes(home, desk, [{ id: 'demo' }])
     assert.deepEqual(routes.map(({ id, schemaVersion, declaredPath }) => [id, schemaVersion, declaredPath]), [
       ['legacy', 7, '/tmp/legacy'],
-      ['main', 8, join(home, 'checkouts', 'demo', 'main')],
+      ['main', 8, join(await realpath(home), 'checkouts', 'demo', 'main')],
     ])
   } finally {
     await removeTree(home, { force: true })

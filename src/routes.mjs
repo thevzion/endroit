@@ -1,4 +1,4 @@
-import { lstat, readFile, readdir } from 'node:fs/promises'
+import { lstat, readFile, readdir, realpath } from 'node:fs/promises'
 import { isAbsolute, join, relative, resolve } from 'node:path'
 import { API, validateRouteDocument } from './contracts.mjs'
 import { parseDocument, renderDocument, validateDocumentV9, V9_API } from './documents.mjs'
@@ -56,6 +56,7 @@ export async function loadRoutes(homeRoot, deskRoot, sites = []) {
 }
 
 export async function resolveCheckout(homeRoot, document, options = {}) {
+  homeRoot = await realpath(homeRoot).catch(() => resolve(homeRoot))
   if (document?.$schema === ROUTE_V9) await validateDocumentV9(document, 'route')
   else await validateRouteDocument(document)
   const site = options.site ?? document.site

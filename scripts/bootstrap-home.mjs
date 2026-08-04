@@ -26,12 +26,12 @@ try {
     maxBuffer: 20 * 1024 * 1024,
   })
   const doctor = JSON.parse(stdout)
-  if (doctor.status !== 'ready') throw new Error(`Created Home is ${doctor.status}: ${doctor.limits.join(', ')}`)
+  if (doctor.status !== 'ready') throw new Error(`Created Workplace is ${doctor.status}: ${doctor.limits.join(', ')}`)
 
   process.stdout.write(`
 Local packed runtime attached
-Home: ${home}
-The Home is ready to open with the command shown above.
+Workplace: ${home}
+The Workplace is ready to open with the command shown above.
 `)
 } finally {
   await removeTree(temporary, { force: true })

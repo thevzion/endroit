@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import { execFile } from 'node:child_process'
-import { chmod, mkdir, mkdtemp, readFile, symlink, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, realpath, symlink, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { promisify } from 'node:util'
@@ -18,14 +18,11 @@ import {
 import { buildHome } from '../src/build.mjs'
 import { runCli } from '../src/cli.mjs'
 import { createHome } from '../src/create.mjs'
-import { doctorHome } from '../src/doctor.mjs'
 import { resolveHome } from '../src/resolved.mjs'
 import { dispatchRuntime, runtimeTrust, runtimeTrustState } from '../src/runtime.mjs'
 import { equipment, captureIo, writeEquipment } from './helpers.mjs'
 
 const exec = promisify(execFile)
-const cliPath = new URL('../bin/endroit.mjs', import.meta.url).pathname
-
 test('Equipment add, sync and remove preserve source ownership and unknown files', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-lifecycle-'))
   try {
@@ -139,17 +136,7 @@ test('external runtimes stay pending until their exact digest is approved', asyn
     })
     await addEquipment(home, [runtime])
     await assert.rejects(readFile(join(home, 'runtime-ran')), (error) => error.code === 'ENOENT')
-    const documentPath = join(home, 'endroit.json')
-    const document = JSON.parse(await readFile(documentPath, 'utf8'))
-    document.frontDoor = { wakeUp: 'endroit/echo:show' }
-    await writeFile(documentPath, `${JSON.stringify(document, null, 2)}\n`)
     await buildHome(home)
-    await assert.rejects(readFile(join(home, 'runtime-ran')), (error) => error.code === 'ENOENT')
-    const launcher = join(home, '.endroit/dev-cli')
-    await writeFile(launcher, `#!/usr/bin/env node\nawait import(${JSON.stringify(new URL(`file://${cliPath}`).href)})\n`)
-    await chmod(launcher, 0o755)
-    const wakeUp = (await exec(process.execPath, [join(home, '.claude/hooks/endroit-session-start.mjs')], { cwd: home })).stdout
-    assert.equal(wakeUp, '<endroit-front-door version="1" status="degraded" reason="wake-up-unavailable" />\n')
     await assert.rejects(readFile(join(home, 'runtime-ran')), (error) => error.code === 'ENOENT')
     const installed = (await statusEquipment(home, 'endroit/echo'))[0]
     assert.equal(installed.state, 'clean')
@@ -166,7 +153,7 @@ test('external runtimes stay pending until their exact digest is approved', asyn
       protocol: 'endroit.org/runtime/v2alpha1',
       argv: ['show', '--value', 'one'],
       home: 'home',
-      equipmentRoot: join(home, 'equipment/endroit/echo'),
+      equipmentRoot: join(await realpath(home), 'equipment/endroit/echo'),
       invoke: 'node ./endroit.mjs',
       invocation: { kind: 'command' },
       rootArtifacts: false,
@@ -262,39 +249,14 @@ test('symlinks and runtime namespace collisions are rejected before installation
   }
 })
 
-test('Front Door routes remain valid across Equipment mutations', async () => {
+test('v9 Equipment mutations do not depend on a mutable Front Door declaration', async () => {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-front-door-'))
   try {
     const home = join(temporary, 'home')
     await createHome(home)
-    await assert.rejects(() => removeEquipment(home, 'endroit/hud'), (error) => error.code === 'front_door_runtime_missing')
-    assert.equal((await statusEquipment(home, 'endroit/hud'))[0].state, 'clean')
-
-    const incompatible = await writeEquipment(join(temporary, 'incompatible'), equipment({
-      name: 'endroit/hud',
-      files: ['runtime.mjs'],
-      capabilities: undefined,
-      skills: undefined,
-      commands: undefined,
-      runtime: {
-        namespace: 'hud',
-        entry: 'runtime.mjs',
-        commands: [{ name: 'show', description: 'Show only.' }],
-      },
-    }), { 'runtime.mjs': 'process.stdout.write("no prompt")\n' })
-    await assert.rejects(
-      () => syncEquipment(home, 'endroit/hud', { to: incompatible, check: true }),
-      (error) => error.code === 'front_door_command_missing',
-    )
-
-    const documentPath = join(home, 'endroit.json')
-    const document = JSON.parse(await readFile(documentPath, 'utf8'))
-    document.frontDoor.wakeUp = 'missing/runtime:prompt'
-    await writeFile(documentPath, `${JSON.stringify(document, null, 2)}\n`)
-    await assert.rejects(() => resolveHome(home), (error) => error.code === 'front_door_runtime_missing')
-    const doctor = await doctorHome(home)
-    assert.equal(doctor.status, 'partial')
-    assert.deepEqual(doctor.limits, ['front_door_runtime_missing'])
+    assert.equal((await resolveHome(home)).frontDoor?.route, 'endroit/hud:prompt')
+    await removeEquipment(home, 'endroit/hud')
+    assert.equal((await resolveHome(home)).frontDoor, null)
   } finally {
     await removeTree(temporary, { force: true })
   }

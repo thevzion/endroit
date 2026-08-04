@@ -10,7 +10,7 @@ import { promisify } from 'node:util'
 import test from 'node:test'
 import { createHome } from '../src/create.mjs'
 import { initDesk } from '../src/desk.mjs'
-import { parseDocument } from '../src/documents.mjs'
+import { parseDocument, renderDocument } from '../src/documents.mjs'
 import { removeTree } from '../src/lib/io.mjs'
 import { dispatchRuntime } from '../src/runtime.mjs'
 import { captureIo } from './helpers.mjs'
@@ -139,7 +139,7 @@ test('Checkout revisions are explicit and detached worktrees persist only their 
     const document = await routeMetadata(home, 'demo', 'detached')
     assert.equal(detached.detached, true)
     assert.equal(detached.branch, null)
-    assert.deepEqual(document.checkout, { mode: 'managed-worktree' })
+    assert.equal(document.checkout_mode, 'managed-worktree')
     assert.deepEqual(document.revision, { kind: 'commit', sha: await git(repository, ['rev-parse', 'starting-point']) })
 
     const external = join(temporary, 'external-revision')
@@ -168,10 +168,10 @@ test('unrouted worktrees have stable technical selectors and optional reconstruc
     assert.equal((await runtimeJson(home, ['checkout', 'inspect', observed.ref])).observed.path, await realpath(external))
     assert.equal((await runtimeJson(home, ['checkout', 'resolve', external])).source, 'checkout:demo/main')
 
-    const deskPath = join(home, '.desk/desk.json')
-    const desk = JSON.parse(await readFile(deskPath, 'utf8'))
-    desk.settings = { ...(desk.settings ?? {}), 'endroit/sites': { observedWorktrees: 'surface' } }
-    await writeFile(deskPath, `${JSON.stringify(desk, null, 2)}\n`)
+    const deskPath = join(home, '.desk/DESK.md')
+    const desk = parseDocument(await readFile(deskPath, 'utf8'), { path: deskPath })
+    desk.metadata.settings = { ...(desk.metadata.settings ?? {}), 'endroit/sites': { observedWorktrees: 'surface' } }
+    await writeFile(deskPath, renderDocument(desk))
     await runtimeJson(home, ['checkout', 'reconcile', '--apply'])
     const surfaced = (await runtimeJson(home, ['checkout', 'inspect', observed.ref])).observed.address
     assert.equal((await lstat(surfaced)).isSymbolicLink(), true)
@@ -179,8 +179,8 @@ test('unrouted worktrees have stable technical selectors and optional reconstruc
 
     const manifestPath = join(home, '.endroit/checkout-index.json')
     const manifestBefore = await readFile(manifestPath)
-    desk.settings['endroit/sites'].observedWorktrees = 'report'
-    await writeFile(deskPath, `${JSON.stringify(desk, null, 2)}\n`)
+    desk.metadata.settings['endroit/sites'].observedWorktrees = 'report'
+    await writeFile(deskPath, renderDocument(desk))
     const previousNodeEnv = process.env.NODE_ENV
     try {
       process.env.NODE_ENV = 'test'
@@ -238,6 +238,7 @@ test('unrouted worktrees have stable technical selectors and optional reconstruc
     assert.deepEqual(await readFile(manifestPath), concurrentManifest)
     assert.equal(await exists(surfaced), false)
 
+    await writeFile(manifestPath, manifestBefore)
     await writeFile(join(external, 'dirty.txt'), 'dirty\n')
     await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', 'blocked', '--from', 'main', '--new-branch', 'blocked'], 'checkout_family_blocked')
     assert.equal(await localBranch(repository, 'blocked'), false)
@@ -459,9 +460,9 @@ test('Sites can stay remote-only while different Desks own independent Routes', 
     await runtimeJson(home, ['checkout', 'adopt', 'product', second, '--id', 'local'])
     const firstRoute = parseDocument(await readFile(join(firstDesk, 'routes/product/local/ROUTE.md'), 'utf8')).metadata
     const secondRoute = await routeMetadata(home, 'product', 'local')
-    assert.deepEqual(firstRoute.checkout, { mode: 'existing' })
-    assert.deepEqual(secondRoute.checkout, { mode: 'existing' })
-    assert.equal('path' in firstRoute.checkout || 'path' in secondRoute.checkout, false)
+    assert.equal(firstRoute.checkout_mode, 'existing')
+    assert.equal(secondRoute.checkout_mode, 'existing')
+    assert.equal('path' in firstRoute || 'path' in secondRoute, false)
     assert.match(await readFile(join(home, 'sites/product/SITE.md'), 'utf8'), /repository: "github.com\/example\/product"/)
   } finally {
     await removeTree(temporary, { force: true })
@@ -599,10 +600,10 @@ test('pinnedSites validates an initialized canonical gitlink without updating it
     await runtimeJson(home, ['route', 'remove', 'child'])
     await exec('git', ['-c', 'protocol.file.allow=always', 'submodule', 'add', '--force', '--quiet', child, 'checkouts/child/main'], { cwd: home })
     await runtimeJson(home, ['checkout', 'adopt', 'child', join(home, 'checkouts/child/main'), '--id', 'main'])
-    const homePath = join(home, 'endroit.json')
-    const declaration = JSON.parse(await readFile(homePath, 'utf8'))
-    declaration.settings = { ...(declaration.settings ?? {}), 'endroit/sites': { pinnedSites: ['child'] } }
-    await writeFile(homePath, `${JSON.stringify(declaration, null, 2)}\n`)
+    const homePath = join(home, 'WORKPLACE.md')
+    const declaration = parseDocument(await readFile(homePath, 'utf8'), { path: homePath })
+    declaration.metadata.settings = { ...(declaration.metadata.settings ?? {}), 'endroit/sites': { pinnedSites: ['child'] } }
+    await writeFile(homePath, renderDocument(declaration))
     assert.equal((await runtimeJson(home, ['doctor'])).limits.some((limit) => limit.startsWith('site-gitlink-')), false)
 
     const checkout = join(home, 'checkouts/child/main')
@@ -618,10 +619,10 @@ test('Doctor reports pinnedSites entries that do not name a declared Site', asyn
   const fixture = await siteFixture()
   try {
     const { home } = fixture
-    const homePath = join(home, 'endroit.json')
-    const declaration = JSON.parse(await readFile(homePath, 'utf8'))
-    declaration.settings = { ...(declaration.settings ?? {}), 'endroit/sites': { pinnedSites: ['missing-site'] } }
-    await writeFile(homePath, `${JSON.stringify(declaration, null, 2)}\n`)
+    const homePath = join(home, 'WORKPLACE.md')
+    const declaration = parseDocument(await readFile(homePath, 'utf8'), { path: homePath })
+    declaration.metadata.settings = { ...(declaration.metadata.settings ?? {}), 'endroit/sites': { pinnedSites: ['missing-site'] } }
+    await writeFile(homePath, renderDocument(declaration))
     assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('site-gitlink-site-missing:missing-site'))
   } finally {
     await fixture.cleanup()

@@ -10,10 +10,11 @@ change. Read Checkouts through `checkout list|inspect|resolve` so declared
 lifecycle stays separate from fresh Git and host observation. When several
 active Routes exist, require an explicit selection.
 
-The symlink or directory at the Checkout address is the complete local
-binding. If it is lost, report `unbound` and require an explicit
-`checkout adopt`; never recover a target from a machine index or a global
-filesystem scan. A durable file reference uses
+The Desk-local `.endroit/checkout-index.json` records reconstructible links;
+the Checkout address materializes that binding as a symlink or directory. If
+a generated link is lost, `checkout reconcile` can rebuild it from the
+validated index. An unindexed link is never adopted or removed implicitly, and
+Endroit never scans the global filesystem for a target. A durable file reference uses
 `checkout:<site>/<route>#<relative-path>` and must stay inside that Checkout.
 
 Parked and superseded Routes remain readable but are not implicit operational

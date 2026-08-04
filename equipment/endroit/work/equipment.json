@@ -1,10 +1,10 @@
 {
-  "$schema": "https://endroit.org/schema/v7/equipment.json",
+  "$schema": "https://endroit.org/schema/v9/equipment.json",
   "name": "endroit/work",
   "version": "0.9.0-alpha.0",
   "description": "Experimental resolution of Room-owned work from explicit intent to inspectable evidence and review.",
   "prefix": "work",
-  "roomNamespace": "working",
+  "room_namespace": "working",
   "files": [
     "capabilities/resolve.md",
     "capabilities/review.md",
@@ -31,7 +31,7 @@
       "id": "resolve",
       "capability": "resolve",
       "description": "Resolve one owned Work Item before execution or closure.",
-      "projectedName": "resolve-work"
+      "projected_name": "resolve-work"
     }
   ],
   "commands": [
@@ -39,16 +39,16 @@
       "id": "click-and-review",
       "capability": "review",
       "description": "Inspect ordered surfaces and record explicit human review outcomes.",
-      "projectedName": "click-and-review"
+      "projected_name": "click-and-review"
     }
   ],
-  "artifactKinds": [
+  "artifact_kinds": [
     {
       "id": "item",
       "schema": "schemas/artifact.schema.json",
       "template": "templates/WORK.md",
       "document": "WORK.md",
-      "owners": ["desk", "home"],
+      "owners": ["desk", "workplace"],
       "states": ["active", "paused", "closed"]
     }
   ],

@@ -4,6 +4,8 @@ import { chmod, lstat, mkdir, mkdtemp, readFile, realpath, rename, rm, writeFile
 import { basename, dirname, join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { promisify } from 'node:util'
+import { loadDesk } from '../src/desk.mjs'
+import { readDocument, renderDocument } from '../src/documents.mjs'
 import { removeTree } from '../src/lib/io.mjs'
 
 const exec = promisify(execFile)
@@ -17,21 +19,22 @@ const developmentRuntime = `${projectPackage.name}@${projectPackage.version}`
 
 export async function ensureDevelopmentHome(options = {}) {
   const home = resolve(options.home ?? defaultHome)
-  const document = join(home, 'endroit.json')
+  const document = join(home, 'WORKPLACE.md')
   if (!await exists(document)) {
+    if (await exists(join(home, 'endroit.json'))) throw new Error(`${home} uses a legacy declaration and must be migrated before 0.10 development.`)
     if (await exists(home)) throw new Error(`${home} exists but is not an Endroit Home.`)
     await endroit(['create', home, '--desk', 'later', '--providers', 'codex,claude', '--name', 'endroit-development-home', '--with', 'planning'])
   }
 
-  const config = JSON.parse(await readFile(document, 'utf8'))
-  if (Object.hasOwn(config, 'mode')) throw new Error(`${home} uses the superseded solo/team model and must be migrated to Member plus Desk.`)
+  const workplace = await readDocument(document)
+  const config = workplace.metadata
   if (!same(config.providers, ['codex', 'claude'])) throw new Error(`${home} must enable codex and claude.`)
   if (config.runtime !== developmentRuntime) {
     config.runtime = developmentRuntime
-    await writeFile(document, `${JSON.stringify(config, null, 2)}\n`)
+    await writeFile(document, renderDocument(workplace))
   }
 
-  if (!await exists(join(home, '.desk', 'desk.json'))) {
+  if (!await loadDesk(home)) {
     if (options.deskRepository) await endroit(['desk', 'clone', options.deskRepository, '--home', home])
     else await endroit(['desk', 'init', '--id', options.deskId ?? process.env.USER ?? 'local', '--member', 'owner', '--home', home])
   }
@@ -66,10 +69,6 @@ export async function ensureDevelopmentHome(options = {}) {
     await endroit(['equipment', 'sync', 'endroit/project', '--to', projectEquipment, '--home', home])
   }
   await endroit(['equipment', 'sync', '--all', '--home', home])
-  if (config.frontDoor?.wakeUp !== 'endroit/hud:prompt') {
-    config.frontDoor = { wakeUp: 'endroit/hud:prompt' }
-    await writeFile(document, `${JSON.stringify(config, null, 2)}\n`)
-  }
   await ensureDevelopmentLauncher(home)
   await endroit(['build', '--home', home])
   const doctor = await endroitJson(['doctor', '--home', home, '--json'])
@@ -80,7 +79,7 @@ export async function ensureDevelopmentHome(options = {}) {
 export async function recreateDevelopmentHome(options = {}) {
   const home = resolve(options.home ?? defaultHome)
   const desk = join(home, '.desk')
-  if (!await exists(join(home, 'endroit.json'))) throw new Error(`Development Home does not exist: ${home}`)
+  if (!await exists(join(home, 'WORKPLACE.md'))) throw new Error(`Development Home does not exist: ${home}`)
   await assertCleanRepository(home, 'Development Home')
   await assertCleanRepository(desk, 'Development Desk')
 
@@ -171,15 +170,11 @@ async function verifyHome(home) {
   await endroit(['build', '--check', '--home', home])
   const doctor = await endroitJson(['doctor', '--home', home, '--json'])
   if (doctor.status !== 'ready') throw new Error(`Development Home is ${doctor.status}: ${doctor.limits.join(', ')}`)
-  const codex = JSON.parse((await run(process.execPath, [join(home, '.codex/hooks/endroit-session-start.mjs')], { cwd: home })).stdout)
-  const codexHud = codex.hookSpecificOutput?.additionalContext
-  if (!codexHud?.startsWith('<endroit-hud ') || /status="degraded"/.test(codexHud)) throw new Error('Codex Front Door Wake-up is unavailable.')
-  const claudeHud = (await run(process.execPath, [join(home, '.claude/hooks/endroit-session-start.mjs')], { cwd: home })).stdout.trim()
-  if (!claudeHud.startsWith('<endroit-hud ') || /status="degraded"/.test(claudeHud)) throw new Error('Claude Front Door Wake-up is unavailable.')
-  if (!/<kernel [^>]*source="development"/.test(codexHud) || !/<kernel [^>]*source="development"/.test(claudeHud)) {
+  const hud = JSON.parse((await run(process.execPath, [join(home, 'endroit.mjs'), 'hud', 'json'], { cwd: home })).stdout)
+  if (hud.status === 'degraded' || hud.kernel?.source !== 'development') {
     throw new Error('Development Home did not use the local Endroit Site runtime.')
   }
-  return { doctor, codex: codexHud, claude: claudeHud }
+  return { doctor, hud }
 }
 
 async function verifyDownstream(home) {

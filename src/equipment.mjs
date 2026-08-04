@@ -4,6 +4,8 @@ import { tmpdir } from 'node:os'
 import { dirname, join, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { validateDocument } from './contracts.mjs'
+import { loadDesk } from './desk.mjs'
+import { V9_API } from './documents.mjs'
 import { git } from './git.mjs'
 import { loadHome } from './home.mjs'
 import { EndroitError } from './lib/errors.mjs'
@@ -343,7 +345,7 @@ async function loadManifest(location, context) {
     document = JSON.parse(await readFile(path, 'utf8'))
     base = path
   }
-  const manifest = sourceManifest(await validateDocument(document, 'equipment'))
+  const manifest = sourceManifest(normalizeManifest(await validateDocument(document, 'equipment')))
   validateManifest(manifest)
   const files = []
   for (const path of manifest.files) {
@@ -368,7 +370,7 @@ async function loadInstalled(root, path, id, scope) {
   try {
     const info = await lstat(path)
     if (info.isSymbolicLink()) throw new EndroitError('symlink_forbidden', `Equipment manifest ${relative(root, path)} must not be a symbolic link.`)
-    const manifest = await validateDocument(JSON.parse(await readFile(path, 'utf8')), 'equipment')
+    const manifest = normalizeManifest(await validateDocument(JSON.parse(await readFile(path, 'utf8')), 'equipment'))
     if (!manifest.origin) throw new EndroitError('equipment_invalid', `${relative(root, path)} has no origin provenance.`)
     if (manifest.name !== id) throw new EndroitError('equipment_invalid', `${relative(root, path)} declares ${manifest.name}, expected ${id}.`)
     validateManifest(sourceManifest(manifest))
@@ -386,7 +388,7 @@ async function findInstalled(root, selector, options = {}) {
 }
 
 function installedManifest(equipment, kind) {
-  return {
+  return serializeManifest({
     ...equipment.manifest,
     origin: {
       kind,
@@ -397,12 +399,89 @@ function installedManifest(equipment, kind) {
       baseManifestDigest: manifestDigest(equipment.manifest),
       baseDigests: Object.fromEntries(equipment.files.map((file) => [file.path, digest(file.content)])),
     },
-  }
+  })
 }
 
 function sourceManifest(manifest) {
   const { origin, ...source } = manifest
   return source
+}
+
+function normalizeManifest(manifest) {
+  if (manifest.$schema !== V9_API.equipment) return manifest
+  const { room_namespace, artifact_kinds, origin, ...base } = manifest
+  return {
+    ...base,
+    roomNamespace: room_namespace,
+    skills: manifest.skills?.map(normalizeAccessor),
+    commands: manifest.commands?.map(normalizeAccessor),
+    artifactKinds: artifact_kinds?.map((kind) => {
+      const { site_path, required_files, ...value } = kind
+      return {
+      ...value,
+      owners: kind.owners.map((owner) => owner === 'workplace' ? 'home' : owner),
+      sitePath: site_path,
+      requiredFiles: required_files,
+    }}),
+    settings: manifest.settings ? { home: manifest.settings.workplace, desk: manifest.settings.desk } : undefined,
+    origin: origin ? {
+      kind: origin.kind,
+      source: origin.source,
+      mobile: origin.mobile,
+      requestedRef: origin.requested_ref,
+      resolvedCommit: origin.resolved_commit,
+      baseManifestDigest: origin.base_manifest_digest,
+      baseDigests: origin.base_digests,
+    } : undefined,
+  }
+}
+
+function normalizeAccessor(accessor) {
+  const { projected_name, for_each, ...value } = accessor
+  return { ...value, projectedName: projected_name, forEach: for_each }
+}
+
+function serializeManifest(manifest) {
+  if (manifest.$schema !== V9_API.equipment) return manifest
+  const serialized = {
+    ...manifest,
+    room_namespace: manifest.roomNamespace,
+    skills: manifest.skills?.map(serializeAccessor),
+    commands: manifest.commands?.map(serializeAccessor),
+    artifact_kinds: manifest.artifactKinds?.map((kind) => {
+      const { sitePath, requiredFiles, ...value } = kind
+      return {
+      ...value,
+      owners: kind.owners.map((owner) => owner === 'home' ? 'workplace' : owner),
+      site_path: kind.sitePath,
+      required_files: kind.requiredFiles,
+    }}),
+    settings: manifest.settings ? { workplace: manifest.settings.home, desk: manifest.settings.desk } : undefined,
+    origin: manifest.origin ? {
+      kind: manifest.origin.kind,
+      source: manifest.origin.source,
+      mobile: manifest.origin.mobile,
+      requested_ref: manifest.origin.requestedRef,
+      resolved_commit: manifest.origin.resolvedCommit,
+      base_manifest_digest: manifest.origin.baseManifestDigest,
+      base_digests: manifest.origin.baseDigests,
+    } : undefined,
+  }
+  for (const key of ['roomNamespace', 'artifactKinds']) delete serialized[key]
+  return withoutUndefined(serialized)
+}
+
+function serializeAccessor(accessor) {
+  const value = { ...accessor, projected_name: accessor.projectedName, for_each: accessor.forEach }
+  delete value.projectedName
+  delete value.forEach
+  return withoutUndefined(value)
+}
+
+function withoutUndefined(value) {
+  if (Array.isArray(value)) return value.map(withoutUndefined)
+  if (!value || typeof value !== 'object') return value
+  return Object.fromEntries(Object.entries(value).filter(([, child]) => child !== undefined).map(([key, child]) => [key, withoutUndefined(child)]))
 }
 
 function manifestDigest(manifest) {
@@ -623,7 +702,7 @@ async function removeEmptyParents(path, stop) {
 
 async function equipmentScopeRoot(root, scope) {
   if (scope === 'home') return join(root, 'equipment')
-  if (!await exists(join(root, '.desk', 'desk.json'))) throw new EndroitError('desk_missing', 'Configure a Desk before installing Desk Equipment.')
+  if (!await loadDesk(root)) throw new EndroitError('desk_missing', 'Configure a Desk before installing Desk Equipment.')
   return join(root, '.desk', 'equipment')
 }
 

@@ -1,5 +1,5 @@
 import Ajv2020 from 'ajv/dist/2020.js'
-import { readFile, readdir } from 'node:fs/promises'
+import { readFile, readdir, realpath } from 'node:fs/promises'
 import { basename, join, relative } from 'node:path'
 import { allInstalledEquipment, catalogEquipment } from './equipment.mjs'
 import { deskGitBoundary, loadDesk } from './desk.mjs'
@@ -13,6 +13,7 @@ import { loadRoutes } from './routes.mjs'
 import { listMembers } from './member.mjs'
 
 export async function resolveHome(root) {
+  root = await realpath(root)
   const [home, loadedDesk, loadedMembers, installed, catalog] = await Promise.all([
     loadHome(root),
     loadDesk(root),
