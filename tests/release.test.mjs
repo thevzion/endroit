@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict'
+import { readFile } from 'node:fs/promises'
 import { test } from 'node:test'
 import { gzipSync } from 'node:zlib'
 
@@ -11,6 +12,13 @@ import {
 } from '../scripts/lib/release-schemas.mjs'
 
 const root = new URL('../', import.meta.url).pathname
+
+test('npm delivery uses the npm environment only for production mode', async () => {
+  const workflow = await readFile(new URL('../.github/workflows/deliver.yml', import.meta.url), 'utf8')
+  assert.match(workflow, /publish:\n\s+if: inputs\.mode == 'production'[\s\S]*environment:\n\s+name: npm/)
+  assert.match(workflow, /id-token: write/)
+  assert.doesNotMatch(workflow, /environment:\n\s+name: production/)
+})
 
 test('release verification accepts registry recompression but rejects changed or unsafe package trees', () => {
   const files = [{ name: 'package/bin/endroit.mjs', mode: 0o755, content: 'ready\n' }]
