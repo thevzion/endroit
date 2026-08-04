@@ -44,7 +44,7 @@ test('the Sites runtime writes pathless ROUTE.md and reconstructs its Checkout l
     assert.equal((await lstat(address)).isSymbolicLink(), true)
     assert.equal(await realpath(address), await realpath(repository))
     const indexPath = join(homeRoot, '.endroit/checkout-index.json')
-    assert.deepEqual(JSON.parse(await readFile(indexPath, 'utf8')).links.map(({ path, target, ref }) => ({ path, target, ref })), [{
+    assert.deepEqual(JSON.parse(await readFile(indexPath, 'utf8')).desks.local.links.map(({ path, target, ref }) => ({ path, target, ref })), [{
       path: 'checkouts/demo/main',
       target: await realpath(repository),
       ref: 'checkout:demo/main',
@@ -91,7 +91,7 @@ test('the Sites runtime writes pathless ROUTE.md and reconstructs its Checkout l
     await invoke(runtimeInput(homeRoot, deskRoot, site, parkedRoutes), ['route', 'remove', 'demo', '--id', 'main', '--json'])
     await assert.rejects(lstat(address), (error) => error.code === 'ENOENT')
     await assert.rejects(lstat(routePath), (error) => error.code === 'ENOENT')
-    assert.equal(JSON.parse(await readFile(indexPath, 'utf8')).links.length, 0)
+    assert.equal(JSON.parse(await readFile(indexPath, 'utf8')).desks.local, undefined)
     assert.equal(await realpath(unknown), await realpath(repository))
     assert.equal(await readFile(join(repository, 'README.md'), 'utf8'), '# demo\n')
   } finally {

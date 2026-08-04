@@ -458,12 +458,24 @@ test('Sites can stay remote-only while different Desks own independent Routes', 
 
     await initDesk(home, { id: 'two', member: 'owner', repository: 'tracked' })
     await runtimeJson(home, ['checkout', 'adopt', 'product', second, '--id', 'local'])
+    const secondDesk = join(temporary, 'desk-two')
     const firstRoute = parseDocument(await readFile(join(firstDesk, 'routes/product/local/ROUTE.md'), 'utf8')).metadata
     const secondRoute = await routeMetadata(home, 'product', 'local')
     assert.equal(firstRoute.checkout_mode, 'existing')
     assert.equal(secondRoute.checkout_mode, 'existing')
     assert.equal('path' in firstRoute || 'path' in secondRoute, false)
     assert.match(await readFile(join(home, 'sites/product/SITE.md'), 'utf8'), /repository: "github.com\/example\/product"/)
+    assert.equal(await realpath(join(home, 'checkouts/product/local')), await realpath(second))
+
+    await rename(join(home, '.desk'), secondDesk)
+    await rename(firstDesk, join(home, '.desk'))
+    assert.equal((await runtimeJson(home, ['checkout', 'reconcile', '--check'])).status, 'stale')
+    await runtimeJson(home, ['checkout', 'reconcile', '--apply'])
+    assert.equal(await realpath(join(home, 'checkouts/product/local')), await realpath(first))
+    const index = JSON.parse(await readFile(join(home, '.endroit/checkout-index.json'), 'utf8'))
+    assert.deepEqual(Object.keys(index.desks), ['one', 'two'])
+    assert.equal(index.desks.one.links[0].target, await realpath(first))
+    assert.equal(index.desks.two.links[0].target, await realpath(second))
   } finally {
     await removeTree(temporary, { force: true })
   }
@@ -490,14 +502,17 @@ test('the Checkout index reconciles reconstructible links without touching repos
     const manifestPath = join(home, '.endroit/checkout-index.json')
     await rm(manifestPath)
     assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('checkout-index-stale'))
-    await runtimeJson(home, ['checkout', 'reconcile', '--apply'])
+    await runtimeFailure(home, ['checkout', 'reconcile', '--apply'], 'checkout_index_conflict')
+    assert.equal(await pathExists(manifestPath), false)
+    await runtimeJson(home, ['checkout', 'adopt', 'demo', repository, '--id', 'main'])
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+    const deskId = parseDocument(await readFile(join(home, '.desk/DESK.md'), 'utf8')).metadata.id
     const stalePath = 'checkouts/demo/stale'
-    manifest.links.push({
+    manifest.desks[deskId].links.push({
       path: stalePath,
       target: await realpath(repository),
       ref: 'checkout:demo/stale',
-      digest: createHash('sha256').update(`${stalePath}\0${await realpath(repository)}`).digest('hex'),
+      digest: createHash('sha256').update(`${deskId}\0${stalePath}\0${await realpath(repository)}\0checkout:demo/stale`).digest('hex'),
     })
     await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
     assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('checkout-index-stale'))
@@ -525,6 +540,34 @@ test('the Checkout index reconciles reconstructible links without touching repos
     assert.equal(await exists(join(repository, 'README.md')), true)
   } finally {
     await removeTree(temporary, { force: true })
+  }
+})
+
+test('Checkout reconcile refuses an unindexed conventional link instead of adopting its target', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, temporary } = fixture
+    const address = join(home, 'checkouts/demo/main')
+    const unknown = join(temporary, 'unknown-repository')
+    await gitInit(unknown)
+    await writeFile(join(unknown, 'README.md'), '# unknown\n')
+    await commit(unknown, 'unknown')
+    await git(unknown, ['remote', 'add', 'origin', 'https://github.com/example/wrong.git'])
+    await rm(join(home, '.endroit/checkout-index.json'))
+    await rm(address)
+    await symlink(unknown, address, 'dir')
+
+    const checked = await runtimeJson(home, ['checkout', 'reconcile', '--check'])
+    assert.equal(checked.status, 'stale')
+    assert.deepEqual(checked.conflicts.map(({ path, reason }) => ({ path, reason })), [{
+      path: 'checkouts/demo/main',
+      reason: 'unindexed',
+    }])
+    await runtimeFailure(home, ['checkout', 'reconcile', '--apply'], 'checkout_index_conflict')
+    assert.equal(await pathExists(join(home, '.endroit/checkout-index.json')), false)
+    assert.equal(await realpath(address), await realpath(unknown))
+  } finally {
+    await fixture.cleanup()
   }
 })
 

@@ -385,7 +385,9 @@ async function bindRouteUnlocked(input, id, repositoryPath, routeId = 'main', de
     }
     const address = managedPath(input, id, routeId)
     const info = await lstat(address).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
-    if (info) throw failure('checkout_bound', `${existing.ref} already has a local Checkout address.`)
+    if (info && (!info.isSymbolicLink() || await symlinkTarget(address) !== evidence.root)) {
+      throw failure('checkout_bound', `${existing.ref} already has a different local Checkout address.`)
+    }
     await bindCheckoutLink(input, address, evidence.root, existing.ref)
     return { status: 'adopted', site: id, route: routeId, ref: existing.ref, declared: existing.declared, observed: { path: evidence.root }, checkout: evidence.checkout }
   }
@@ -1401,7 +1403,13 @@ async function inspectCheckoutIndex(input, route) {
 function indexManifestPath(input) { return join(input.homeRoot, '.endroit', 'checkout-index.json') }
 
 async function readIndexManifest(input) {
-  return (await readIndexSnapshot(input)).document
+  const snapshot = await readIndexSnapshot(input)
+  return {
+    version: 2,
+    document: snapshot.document,
+    links: currentIndexLinks(input, snapshot.document),
+    allLinks: allIndexLinks(snapshot.document),
+  }
 }
 
 async function readIndexSnapshot(input) {
@@ -1414,25 +1422,67 @@ async function readIndexSnapshot(input) {
     bytes = content
     mode = info.mode & 0o777
   } catch (error) {
-    if (error.code === 'ENOENT') return { document: { version: 1, links: [] }, bytes: null, mode: 0o600 }
+    if (error.code === 'ENOENT') return { document: { version: 2, desks: {} }, bytes: null, mode: 0o600 }
     throw error
   }
   let document
   try { document = JSON.parse(bytes) } catch { throw failure('checkout_index_invalid', `${relative(input.homeRoot, path)} is invalid.`) }
-  if (document?.version !== 1 || !Array.isArray(document.links)) throw failure('checkout_index_invalid', `${relative(input.homeRoot, path)} is invalid.`)
-  for (const link of document.links) {
-    const absolute = resolve(input.homeRoot, link.path ?? '')
-    if (!inside(join(input.homeRoot, 'checkouts'), absolute) || typeof link.target !== 'string' || !isAbsolute(link.target)
-      || link.digest !== checkoutLinkDigest(link.path, link.target)) throw failure('checkout_index_invalid', `Invalid generated Checkout link ${link.path}.`)
+  if (document?.version === 1 && Array.isArray(document.links)) {
+    for (const link of document.links) validateIndexLink(input, link, null)
+    const desk = currentDeskId(input)
+    document = indexDocumentWithLinks({ version: 2, desks: {} }, desk, document.links.map((link) => ({
+      ...link,
+      digest: checkoutLinkDigest(desk, link.path, link.target, link.ref),
+    })))
+  } else if (document?.version === 2 && document.desks && typeof document.desks === 'object' && !Array.isArray(document.desks)) {
+    for (const [desk, partition] of Object.entries(document.desks)) {
+      if (!validId(desk) || !partition || typeof partition !== 'object' || Array.isArray(partition)
+        || Object.keys(partition).some((key) => key !== 'links') || !Array.isArray(partition.links)) {
+        throw failure('checkout_index_invalid', `Invalid Checkout index partition ${desk}.`)
+      }
+      const paths = new Set()
+      for (const link of partition.links) {
+        validateIndexLink(input, link, desk)
+        if (paths.has(link.path)) throw failure('checkout_index_invalid', `Checkout index repeats ${link.path} for Desk ${desk}.`)
+        paths.add(link.path)
+      }
+    }
+  } else {
+    throw failure('checkout_index_invalid', `${relative(input.homeRoot, path)} is invalid.`)
   }
   return { document, bytes, mode }
 }
 
-function checkoutLinkDigest(path, target) { return sha256(`${path}\0${target}`) }
+function validateIndexLink(input, link, desk) {
+  const absolute = resolve(input.homeRoot, link?.path ?? '')
+  const expected = desk
+    ? checkoutLinkDigest(desk, link?.path, link?.target, link?.ref)
+    : sha256(`${link?.path}\0${link?.target}`)
+  if (!link || typeof link !== 'object' || Array.isArray(link)
+    || Object.keys(link).some((key) => !['path', 'target', 'ref', 'digest'].includes(key))
+    || !inside(join(input.homeRoot, 'checkouts'), absolute)
+    || typeof link.target !== 'string' || !isAbsolute(link.target)
+    || !/^(?:checkout|worktree):[a-z0-9][a-z0-9._-]{0,127}\/[a-z0-9][a-z0-9._-]{0,127}$/.test(link.ref)
+    || link.digest !== expected) {
+    throw failure('checkout_index_invalid', `Invalid generated Checkout link ${link?.path ?? '(missing)'}.`)
+  }
+}
 
-async function desiredCheckoutLinks(input) {
+function currentDeskId(input) { return input.resolvedHome.desk.id }
+function currentIndexLinks(input, document) { return document.desks[currentDeskId(input)]?.links ?? [] }
+function allIndexLinks(document) {
+  return Object.entries(document.desks).flatMap(([desk, partition]) => partition.links.map((link) => ({ ...link, desk })))
+}
+function indexDocumentWithLinks(document, desk, links) {
+  const desks = { ...document.desks }
+  if (links.length) desks[desk] = { links: [...links].sort((left, right) => left.path.localeCompare(right.path)) }
+  else delete desks[desk]
+  return { version: 2, desks: Object.fromEntries(Object.entries(desks).sort(([left], [right]) => left.localeCompare(right))) }
+}
+function checkoutLinkDigest(desk, path, target, ref) { return sha256(`${desk}\0${path}\0${target}\0${ref}`) }
+
+async function desiredCheckoutLinks(input, manifest) {
   const desired = []
-  const manifest = await readIndexManifest(input)
   for (const route of await scanRouteGraph(input)) {
     if (route.mode === 'embedded') continue
     const address = checkoutAddress(input, route)
@@ -1460,7 +1510,7 @@ async function checkoutIndexTarget(input, route, manifest) {
   if (entry) return canonicalPath(entry.target)
   const info = await lstat(address).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
   if (!info) return null
-  if (info.isSymbolicLink()) return symlinkTarget(address)
+  if (info.isSymbolicLink()) return null
   return info.isDirectory() ? canonicalPath(address) : null
 }
 
@@ -1479,49 +1529,69 @@ async function createCheckoutLink(input, address, target) {
 async function bindCheckoutLink(input, address, target, ref) {
   target = await canonicalPath(target)
   const snapshot = await readIndexSnapshot(input)
+  const current = currentIndexLinks(input, snapshot.document)
+  const known = allIndexLinks(snapshot.document)
   const link = indexLink(input, address, target, ref)
-  const previous = snapshot.document.links.find((entry) => entry.path === link.path)
-  const links = [...snapshot.document.links.filter((entry) => entry.path !== link.path), link]
+  const previous = current.find((entry) => entry.path === link.path)
+  const links = [...current.filter((entry) => entry.path !== link.path), link]
     .sort((left, right) => left.path.localeCompare(right.path))
+  const document = indexDocumentWithLinks(snapshot.document, currentDeskId(input), links)
   const info = await lstat(address).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+  let replacedTarget = null
+  let created = false
   if (info) {
-    if (!previous || previous.ref !== ref || !info.isSymbolicLink() || await symlinkTarget(address) !== previous.target) {
+    const observed = info.isSymbolicLink() ? await symlinkTarget(address) : null
+    const owned = known.some((entry) => entry.path === link.path && entry.target === observed)
+    if (!info.isSymbolicLink() || observed !== target && !owned) {
       throw failure('checkout_index_conflict', `${relative(input.homeRoot, address)} already exists.`)
     }
-    await rm(address)
+    if (observed !== target) {
+      replacedTarget = observed
+      await rm(address)
+    }
   }
-  try {
-    await createCheckoutLink(input, address, target)
-  } catch (error) {
-    if (previous && !await exists(address)) await symlink(previous.target, address, 'dir')
-    throw error
+  if (!info || replacedTarget) {
+    try {
+      await createCheckoutLink(input, address, target)
+      created = true
+    } catch (error) {
+      if (replacedTarget && !await exists(address)) await symlink(replacedTarget, address, 'dir')
+      throw error
+    }
   }
   try {
     await ensureSafeDirectories(input.homeRoot, dirname(indexManifestPath(input)))
-    await writeJsonAtomic(indexManifestPath(input), { version: 1, links }, 0o600)
+    await writeJsonAtomic(indexManifestPath(input), document, 0o600)
   } catch (error) {
-    const info = await lstat(address).catch(() => null)
-    if (info?.isSymbolicLink() && await symlinkTarget(address) === target) await rm(address)
-    if (previous && !await exists(address)) await symlink(previous.target, address, 'dir')
+    const currentInfo = await lstat(address).catch(() => null)
+    if (created && currentInfo?.isSymbolicLink() && await symlinkTarget(address) === target) await rm(address)
+    if (replacedTarget && !await exists(address)) await symlink(replacedTarget, address, 'dir')
     throw error
   }
 }
 
 function indexLink(input, path, target, ref) {
   const local = relative(input.homeRoot, path)
-  return { path: local, target, ref, digest: checkoutLinkDigest(local, target) }
+  const desk = currentDeskId(input)
+  return { path: local, target, ref, digest: checkoutLinkDigest(desk, local, target, ref) }
 }
 
 async function reconcileCheckouts(input, flags = {}) {
   requireDesk(input)
   if (truthy(flags.check) && truthy(flags.apply)) throw failure('usage', 'Choose --check or --apply.', 2)
-  const [manifestSnapshot, desired] = await Promise.all([readIndexSnapshot(input), desiredCheckoutLinks(input)])
-  const manifest = manifestSnapshot.document
-  const desiredDocument = { version: 1, links: desired }
+  const manifestSnapshot = await readIndexSnapshot(input)
+  const manifest = {
+    version: 2,
+    document: manifestSnapshot.document,
+    links: currentIndexLinks(input, manifestSnapshot.document),
+    allLinks: allIndexLinks(manifestSnapshot.document),
+  }
+  const desired = await desiredCheckoutLinks(input, manifest)
+  const desiredDocument = indexDocumentWithLinks(manifest.document, currentDeskId(input), desired)
   const desiredBytes = Buffer.from(`${JSON.stringify(desiredDocument, null, 2)}\n`)
   const current = new Map(manifest.links.map((link) => [link.path, link]))
   const wanted = new Map(desired.map((link) => [link.path, link]))
-  const plan = []
+  const plan = await unknownDeclaredCheckoutLinks(input, manifest)
   for (const link of desired) {
     const path = resolve(input.homeRoot, link.path)
     const owned = current.get(link.path)
@@ -1530,7 +1600,8 @@ async function reconcileCheckouts(input, flags = {}) {
     else if (!info.isSymbolicLink()) plan.push({ action: 'conflict', ...link })
     else {
       const target = await symlinkTarget(path)
-      if (target !== link.target && owned?.target === target) plan.push({ action: 'replace', ...link, previousTarget: target })
+      const known = manifest.allLinks.some((entry) => entry.path === link.path && entry.target === target)
+      if (target !== link.target && known) plan.push({ action: 'replace', ...link, previousTarget: target })
       else if (target !== link.target) plan.push({ action: 'conflict', ...link, observedTarget: target })
       else if (owned?.digest !== link.digest) plan.push({ action: 'record', ...link })
     }
@@ -1539,8 +1610,14 @@ async function reconcileCheckouts(input, flags = {}) {
     const path = resolve(input.homeRoot, link.path)
     const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
     if (!info) plan.push({ action: 'forget', ...link })
-    else if (!info.isSymbolicLink() || await symlinkTarget(path) !== link.target) plan.push({ action: 'conflict', ...link })
-    else plan.push({ action: 'remove', ...link })
+    else if (!info.isSymbolicLink()) plan.push({ action: 'conflict', ...link })
+    else {
+      const target = await symlinkTarget(path)
+      const ownedByAnotherDesk = manifest.allLinks.some((entry) => entry.desk !== currentDeskId(input) && entry.path === link.path && entry.target === target)
+      if (target === link.target && !ownedByAnotherDesk) plan.push({ action: 'remove', ...link })
+      else if (ownedByAnotherDesk) plan.push({ action: 'forget', ...link })
+      else plan.push({ action: 'conflict', ...link })
+    }
   }
   const conflicts = plan.filter((entry) => entry.action === 'conflict')
   if (!truthy(flags.apply)) return { status: plan.length ? 'stale' : 'current', readOnly: true, changes: plan.length - conflicts.length, conflicts }
@@ -1580,6 +1657,25 @@ async function reconcileCheckouts(input, flags = {}) {
     throw error
   }
   return { status: 'reconciled', changes: plan.length, links: desired.length }
+}
+
+async function unknownDeclaredCheckoutLinks(input, manifest) {
+  const conflicts = []
+  for (const route of await scanRouteGraph(input)) {
+    if (route.schemaVersion !== 9 || !['existing', 'submodule'].includes(route.mode)) continue
+    const address = checkoutAddress(input, route)
+    const local = relative(input.homeRoot, address)
+    if (manifest.links.some((link) => link.path === local && link.ref === route.ref)) continue
+    const info = await lstat(address).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+    if (info?.isSymbolicLink()) conflicts.push({
+      action: 'conflict',
+      path: local,
+      ref: route.ref,
+      observedTarget: await symlinkTarget(address),
+      reason: 'unindexed',
+    })
+  }
+  return conflicts
 }
 
 async function rollbackCheckoutIndex(input, manifestSnapshot, desiredBytes, created, removed) {
@@ -1645,16 +1741,16 @@ async function removeGeneratedLink(input, path, route) {
   const local = relative(input.homeRoot, path)
   const entry = manifest.links.find((link) => link.path === local)
   const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
-  if (!entry) {
-    if (!info || !route || route.schemaVersion !== 9 || !info.isSymbolicLink()) return
-    const target = await checkoutIndexTarget(input, route, { version: 1, links: [] })
-    if (!target || await symlinkTarget(path) !== target) throw failure('checkout_index_conflict', `Refusing to remove unowned Checkout path ${local}.`)
-    await rm(path)
-    return
+  if (!entry) return
+  if (info) {
+    if (!info.isSymbolicLink()) throw failure('checkout_index_conflict', `Refusing to remove unowned Checkout path ${local}.`)
+    const target = await symlinkTarget(path)
+    const ownedByAnotherDesk = manifest.allLinks.some((link) => link.desk !== currentDeskId(input) && link.path === local && link.target === target)
+    if (target === entry.target && !ownedByAnotherDesk) await rm(path)
+    else if (!ownedByAnotherDesk) throw failure('checkout_index_conflict', `Refusing to remove unowned Checkout path ${local}.`)
   }
-  if (info && (!info.isSymbolicLink() || await symlinkTarget(path) !== entry.target)) throw failure('checkout_index_conflict', `Refusing to remove unowned Checkout path ${local}.`)
-  if (info) await rm(path)
-  await writeJsonAtomic(indexManifestPath(input), { version: 1, links: manifest.links.filter((link) => link.path !== local) }, 0o600)
+  const document = indexDocumentWithLinks(manifest.document, currentDeskId(input), manifest.links.filter((link) => link.path !== local))
+  await writeJsonAtomic(indexManifestPath(input), document, 0o600)
 }
 
 async function deleteCheckout(input, selector, flags) {
