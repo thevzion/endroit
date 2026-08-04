@@ -79,7 +79,7 @@ async function initRoute(destination, flags) {
   })
 }
 
-const optionalCreateEquipment = ['research', 'planning', 'publishing', 'scratch']
+const optionalCreateEquipment = ['research', 'planning', 'publishing', 'release', 'scratch']
 
 async function createRoute(destination, flags, io, prompts) {
   if (flags.mode !== undefined) throw usage('--mode was removed in Endroit 0.8; use --desk tracked|separate|later.')

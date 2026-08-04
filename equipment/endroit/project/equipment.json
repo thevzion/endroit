@@ -8,7 +8,6 @@
     "instructions/maintaining-endroit.md",
     "capabilities/develop.md",
     "capabilities/review.md",
-    "capabilities/release.md",
     "schemas/plan.schema.json",
     "templates/plan.md"
   ],
@@ -28,11 +27,6 @@
       "id": "review",
       "path": "capabilities/review.md",
       "description": "Review Endroit against its public contracts and qualification gates."
-    },
-    {
-      "id": "release",
-      "path": "capabilities/release.md",
-      "description": "Prepare a resumable Endroit prerelease without crossing approval checkpoints."
     }
   ],
   "skills": [
@@ -45,11 +39,6 @@
       "id": "project-review",
       "capability": "review",
       "description": "Use when an Endroit change must be reviewed against public contracts and qualification gates."
-    },
-    {
-      "id": "project-release",
-      "capability": "release",
-      "description": "Use when preparing a resumable Endroit prerelease without crossing approval checkpoints."
     }
   ],
   "commands": [

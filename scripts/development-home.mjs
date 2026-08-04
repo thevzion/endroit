@@ -41,6 +41,9 @@ export async function ensureDevelopmentHome(options = {}) {
   if (!await exists(join(home, 'equipment', 'endroit', 'planning', 'equipment.json'))) {
     await endroit(['equipment', 'add', '@endroit/planning', '-y', '--home', home])
   }
+  if (!await exists(join(home, 'equipment', 'endroit', 'release', 'equipment.json'))) {
+    await endroit(['equipment', 'add', '@endroit/release', '-y', '--home', home])
+  }
   const rooms = await endroitJson(['room', 'list', '--home', home, '--json'])
   if (!rooms.rooms.some((entry) => entry.id === 'endroit')) {
     await endroit(['room', 'create', 'endroit', '--scope', 'desk', '--home', home])

@@ -23,6 +23,8 @@ item.
 
 - [CLI and file reference](reference.md) — commands, files and diagnostics.
 - [Work Resolution](work-resolution.md) — `WORK.md` and its calculated frontier.
+- [Release plane](release-plane.md) — Site exports, Workplace Releases, locks
+  and observed receipts.
 - [Providers](providers.md) — supported provider surfaces and evidence level.
 - [Security](../SECURITY.md) — report vulnerabilities and preserve boundaries.
 

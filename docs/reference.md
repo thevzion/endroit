@@ -104,6 +104,7 @@ endroit room create|list|inspect|doctor
 endroit site add|list|inspect|doctor|remove
 endroit route list|inspect|park|activate|supersede|migrate|remove
 endroit checkout list|inspect|resolve|adopt|clone|worktree|reconcile|delete
+endroit release inspect|preview|lock|verify|watch|observe
 
 endroit validate
 endroit build [--check]
@@ -132,6 +133,10 @@ JSON output is selected with `--json`. Public JSON fields use
 | `.desk/routes/<site>/<route>/ROUTE.md` | Desk | Route source |
 | `equipment/**/equipment.json` | Equipment owner | Machine manifest |
 | `WORK.md` | Declared Material owner | Work source |
+| `surfaces/<id>/SURFACE.md` | Site | Public Surface source |
+| `releases/<id>/RELEASE.md` | Workplace | Release intent and logical exports |
+| `release.lock.json` | Release | Exact resolved Git and content evidence |
+| `release.receipt.json` | Release | Explicitly observed external effects |
 | `AGENTS.md`, `CLAUDE.md` | build | Provider projection |
 | `.agents/skills/`, `.claude/skills/` | build | Provider projection |
 | `endroit.mjs` | build | Tracked console |

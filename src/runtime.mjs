@@ -68,7 +68,7 @@ export async function dispatchRuntime(root, namespace, argv, io = process) {
   const invocationProvider = ['codex', 'claude'].includes(process.env.ENDROIT_INVOCATION_PROVIDER)
     ? process.env.ENDROIT_INVOCATION_PROVIDER
     : undefined
-  const inventoryConsumer = ['endroit/artifacts', 'endroit/work'].includes(runtime.owner)
+  const inventoryConsumer = ['endroit/artifacts', 'endroit/work', 'endroit/release'].includes(runtime.owner)
   const trustStates = []
   for (const candidate of plan.runtimes) {
     try {

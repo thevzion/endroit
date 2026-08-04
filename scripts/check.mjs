@@ -70,7 +70,7 @@ assert.equal(
 for (const [name, digest] of Object.entries(legacySchemaDigests)) {
   assert.equal(createHash('sha256').update(await readFile(join(root, 'schemas/v6', name))).digest('hex'), digest, `${name} changed`)
 }
-for (const name of ['onboarding', 'hud', 'artifacts', 'sites', 'rooms', 'workplace', 'work', 'hygiene', 'research', 'planning', 'publishing', 'scratch', 'project']) {
+for (const name of ['onboarding', 'hud', 'artifacts', 'sites', 'rooms', 'workplace', 'work', 'hygiene', 'research', 'planning', 'publishing', 'release', 'scratch', 'project']) {
   await validateDocument(JSON.parse(await readFile(join(root, 'equipment', 'endroit', name, 'equipment.json'), 'utf8')), 'equipment')
 }
 await validateDocument({
