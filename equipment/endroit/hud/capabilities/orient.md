@@ -1,4 +1,4 @@
-# Orient in the Home
+# Orient in the Workplace
 
 Start with the generated provider bootstrap. It contains the Workplace
 identity, Constitution and tracked Console, not a live inventory. Add the live

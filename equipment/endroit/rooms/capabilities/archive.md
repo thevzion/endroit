@@ -3,7 +3,7 @@
 Archive only inactive durable material after the human chooses the exact
 scope.
 
-- Home material moves below `archive/rooms/`.
+- Shared Workplace material moves below `archive/rooms/`.
 - Desk material moves below `.desk/archive/rooms/`.
 - Remove the Material's relative link from `Active retained Material` in the
   owning `ROOM.md`.

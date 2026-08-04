@@ -14,4 +14,4 @@ Neither the bootstrap nor the Wake-up is a live inventory. If Wake-up is absent
 or degraded, keep operating from readable owned sources and use `room list`, `site list` and
 `equipment catalog` as local read-only inspections. Report that live
 orientation is unavailable; do not guess another runtime or explore outside
-the Home to compensate.
+the Workplace to compensate.

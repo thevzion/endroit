@@ -14,5 +14,6 @@ Resolve one semantic owner before persisting durable work.
 - Read `ROOM.md`, then the active `MEETING.md`, then only linked
   documents needed by the current task.
 
-Use the tracked Home Console and pass `--scope home` or `--scope desk`
-explicitly. A Home and Desk never mirror or synchronize one another.
+Use the tracked Workplace Console. The compatibility token `--scope home`
+selects shared Workplace Rooms; `--scope desk` selects personal Rooms. The two
+scopes never mirror or synchronize one another.

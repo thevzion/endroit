@@ -1,6 +1,6 @@
-# Maintain the Home
+# Maintain the Workplace
 
-Start read-only. Compose the Kernel/Home, Member, Desk, Room and Site Doctors,
+Start read-only. Compose the Workplace, Member, Desk, Room and Site Doctors,
 Equipment status and trust, Route/projection checks, and Material/Meeting/
 decision/archive inspection. Report four separate categories:
 
