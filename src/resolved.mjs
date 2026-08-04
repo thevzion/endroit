@@ -35,7 +35,7 @@ export async function resolveHome(root) {
   for (const entry of deskEquipment) {
     const base = effective.get(entry.id)
     if (base && entry.manifest.origin.kind !== 'override') {
-      throw new EndroitError('equipment_collision', `${entry.id} exists in both Home and Desk without an override origin.`)
+      throw new EndroitError('equipment_collision', `${entry.id} exists in both Workplace and Desk scopes without an override origin.`)
     }
     effective.set(entry.id, entry)
   }
@@ -154,7 +154,7 @@ export async function resolveHome(root) {
   assertAccessors(plan.skills, plan.commands)
   const frontDoor = home.frontDoor ?? (plan.runtimes.some((entry) => entry.owner === 'endroit/hud') ? { wakeUp: 'endroit/hud:prompt' } : null)
   plan.frontDoor = resolveFrontDoor(frontDoor, plan)
-  plan.sources = await resolvedSources(root, home, loadedMembers, loadedDesk, equipment, plan.rooms, sites, declaredRoutes)
+  plan.sources = await resolvedSources(root, home, loadedMembers, loadedDesk, equipment, plan.rooms, plan.meetings, sites, declaredRoutes)
   plan.documents = resolvedDocuments(home, loadedMembers, loadedDesk)
   plan.revision = digest(JSON.stringify({
     profile: home.profile,
@@ -216,7 +216,7 @@ function publicRoute(root, route) {
   return { ...value, declared, ...(documentPath ? { document_path: relative(root, documentPath) } : {}) }
 }
 
-async function resolvedSources(root, home, members, desk, equipment, rooms, sites, routes) {
+async function resolvedSources(root, home, members, desk, equipment, rooms, meetings, sites, routes) {
   const values = [{
     ref: `workplace:${home.id}`,
     kind: 'endroit/workplace',
@@ -241,10 +241,11 @@ async function resolvedSources(root, home, members, desk, equipment, rooms, site
   for (const entry of equipment) {
     await addFileSource(values, root, join(entry.root, 'equipment.json'), `equipment:${entry.id}`, 'endroit/equipment', entry.id)
     for (const file of [...entry.manifest.files].sort()) {
-      await addFileSource(values, root, join(entry.root, file), `equipment:${entry.id}#${file}`, 'endroit/equipment-material', entry.id)
+      await addFileSource(values, root, join(entry.root, file), `equipment:${entry.id}#${file}`, 'endroit/equipment-material', entry.id, true)
     }
   }
   for (const room of rooms) await addFileSource(values, root, join(root, room.path), room.ref, 'endroit/room', room.ref)
+  for (const meeting of meetings) await addFileSource(values, root, join(root, meeting.path), meeting.ref, 'endroit/meeting', `room:${meeting.scope}/${meeting.room}`)
   for (const site of sites) await addFileSource(values, root, join(root, site.path), site.ref, 'endroit/site', site.ref)
   for (const route of routes) {
     if (route.documentPath) await addFileSource(values, root, route.documentPath, `route:${route.site}/${route.id}`, 'endroit/route', route.owner ?? `desk:${desk?.id ?? 'legacy'}`)
@@ -252,10 +253,14 @@ async function resolvedSources(root, home, members, desk, equipment, rooms, site
   return values.sort((left, right) => left.path.localeCompare(right.path))
 }
 
-async function addFileSource(values, root, path, ref, kind, owner) {
+async function addFileSource(values, root, path, ref, kind, owner, optional = false) {
   const sourcePath = relative(root, path)
   if (sourcePath === '..' || sourcePath.startsWith('../')) throw new EndroitError('source_path_escape', `${ref} source escapes the Workplace.`)
-  values.push({ ref, kind, owner, path: sourcePath, source_digest: digest(await readFile(path)) })
+  try {
+    values.push({ ref, kind, owner, path: sourcePath, source_digest: digest(await readFile(path)) })
+  } catch (error) {
+    if (!optional || error.code !== 'ENOENT') throw error
+  }
 }
 
 function resolvedDocuments(home, members, desk) {
@@ -408,8 +413,8 @@ function slug(value) {
 
 async function validateSettings(entry, homeSettings, deskSettings) {
   const paths = entry.manifest.settings ?? {}
-  if (paths.home) await validateSetting(entry, paths.home, homeSettings ?? {}, 'Home')
-  else if (homeSettings !== undefined) throw new EndroitError('settings_schema_missing', `${entry.id} does not accept Home settings.`)
+  if (paths.home) await validateSetting(entry, paths.home, homeSettings ?? {}, 'Workplace')
+  else if (homeSettings !== undefined) throw new EndroitError('settings_schema_missing', `${entry.id} does not accept Workplace settings.`)
   if (paths.desk) await validateSetting(entry, paths.desk, deskSettings ?? {}, 'Desk')
   else if (deskSettings !== undefined) throw new EndroitError('settings_schema_missing', `${entry.id} does not accept Desk settings.`)
 }

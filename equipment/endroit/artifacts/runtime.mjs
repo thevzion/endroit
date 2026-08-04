@@ -164,7 +164,7 @@ async function validateArtifact(input, selector) {
   const kind = selectKind(input.resolvedHome, artifact.kind)
   const name = artifactDocument(kind, artifact)
   const document = parseArtifact(await readFile(join(artifact.path, name), 'utf8'), name)
-  const metadata = document.metadata
+  const metadata = name === 'artifact.md' ? normalizeMetadata(document.metadata) : document.metadata
   const ownerScope = artifact.scope.startsWith('site:') ? 'site' : artifact.scope
   await validateDirectory(artifact.path, metadata, kind, ownerScope, artifact.legacy)
   return { status: 'valid', id: artifact.id, kind: artifact.kind, scope: artifact.scope, document: name, legacy: artifact.legacy }
@@ -176,7 +176,7 @@ async function promoteArtifact(input, selector, flags) {
   await validateArtifact(input, selector)
   const destination = parseDestination(required(flags.to, 'Promotion destination'))
   if (destination.kind === 'room' && artifact.scope !== 'desk') {
-    throw failure('artifact_direction_invalid', 'Only a Desk Artifact can be promoted to a Home Room.')
+    throw failure('artifact_direction_invalid', 'Only a Desk Artifact can be promoted to a shared Workplace Room.')
   }
   const kind = selectKind(input.resolvedHome, artifact.kind)
   let sitePath
