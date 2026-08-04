@@ -4,6 +4,17 @@ import { createHash, randomUUID } from 'node:crypto'
 import { lstat, mkdir, open, readFile, readlink, readdir, realpath, rename, rm, rmdir, symlink, writeFile } from 'node:fs/promises'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
+import {
+  assertRoutePurpose,
+  checkoutBindingsDocument,
+  checkoutIndexDocument,
+  checkoutLinkState,
+  proposeRoutePurposes,
+  readCheckoutBindings,
+  ROUTE_PURPOSES,
+  validateCheckoutIndex,
+  workplaceGitStorage,
+} from './git-workplace.mjs'
 
 const exec = promisify(execFile)
 const SITE_HELP = {
@@ -14,7 +25,7 @@ const SITE_HELP = {
   remove: 'endroit site remove <site> [--json]',
 }
 const ROUTE_HELP = {
-  list: 'endroit route list [site] [--json]',
+  list: 'endroit route list [site] [--purpose <purpose>] [--json]',
   inspect: 'endroit route inspect <site> [--id <route>] [--json]',
   park: 'endroit route park <site> [--id <route>] [--json]',
   activate: 'endroit route activate <site> [--id <route>] [--json]',
@@ -23,16 +34,17 @@ const ROUTE_HELP = {
   remove: 'endroit route remove <site> [--id <route>] [--json]',
 }
 const CHECKOUT_HELP = {
-  list: 'endroit checkout list [site] [--all] [--json]',
+  list: 'endroit checkout list [site] [--purpose <purpose>] [--all] [--json]',
   inspect: 'endroit checkout inspect <checkout:<site>/<route>|worktree:<site>/<id>> [--json]',
   resolve: 'endroit checkout resolve <path> [--json]',
-  adopt: 'endroit checkout adopt <site> <path> --id <route> [--branch <name> | --commit <sha>] [--json]',
-  clone: 'endroit checkout clone <site> --id <route> [--branch <name>] [--json]',
-  worktree: 'endroit checkout worktree <site> --id <route> --from <route> (--branch <existing> | --new-branch <name> | --detach <ref>) [--json]',
+  adopt: 'endroit checkout adopt <site> <path> --id <route> --purpose <purpose> [--branch <name> | --commit <sha>] [--json]',
+  clone: 'endroit checkout clone <site> --id <route> --purpose <purpose> [--branch <name>] [--json]',
+  worktree: 'endroit checkout worktree <site> --id <route> --purpose <purpose> --from <route> (--branch <existing> | --new-branch <name> | --detach <ref>) [--json]',
   reconcile: 'endroit checkout reconcile [--check | --apply] [--json]',
   delete: 'endroit checkout delete <checkout-ref> --approve <checkout-ref> [--json]',
 }
 let routeWriterLockDepth = 0
+let bindingLockDepth = 0
 const pendingRoutes = new Map()
 
 try {
@@ -65,7 +77,7 @@ async function siteCommand(input, command, args, flags) {
 
 async function routeCommand(input, command, args, flags) {
   const execute = async () => {
-    if (command === 'list') return { status: 'listed', routes: await listRoutes(input, args[0]) }
+    if (command === 'list') return { status: 'listed', routes: await listRoutes(input, args[0], flags) }
     if (command === 'inspect') return inspectRoute(input, required(args[0], 'Site id'), flags.id)
     if (command === 'park') return transitionRoute(input, required(args[0], 'Site id'), flags.id, 'parked')
     if (command === 'activate') return transitionRoute(input, required(args[0], 'Site id'), flags.id, 'active')
@@ -85,7 +97,7 @@ async function routeCommand(input, command, args, flags) {
 
 async function checkoutCommand(input, command, args, flags) {
   const execute = async () => {
-    if (command === 'list') return { status: 'listed', checkouts: await listCheckouts(input, args[0], { all: truthy(flags.all) }) }
+    if (command === 'list') return { status: 'listed', checkouts: await listCheckouts(input, args[0], { all: truthy(flags.all), purpose: optionalPurpose(flags.purpose) }) }
     if (command === 'inspect') return inspectCheckout(input, required(args[0], 'Checkout ref'))
     if (command === 'resolve') return resolveCheckout(input, required(args[0], 'Path or Checkout reference'))
     if (command === 'adopt') {
@@ -125,13 +137,14 @@ async function listSites(input, siteId, options = {}) {
   return listed
 }
 
-async function listRoutes(input, siteId) {
+async function listRoutes(input, siteId, flags = {}) {
+  const purpose = optionalPurpose(flags.purpose)
   if (siteId) {
     declaration(input, siteId)
-    return (await routesFor(input, siteId)).map((route) => routeDeclaration(input, route))
+    return (await routesFor(input, siteId)).filter((route) => !purpose || route.purpose === purpose).map((route) => routeDeclaration(input, route))
   }
   const values = []
-  for (const site of declarations(input)) values.push(...(await routesFor(input, site.id)).map((route) => routeDeclaration(input, route)))
+  for (const site of declarations(input)) values.push(...(await routesFor(input, site.id)).filter((route) => !purpose || route.purpose === purpose).map((route) => routeDeclaration(input, route)))
   return values.sort((left, right) => left.site.localeCompare(right.site) || left.id.localeCompare(right.id))
 }
 
@@ -208,7 +221,7 @@ async function listCheckouts(input, siteId, options = {}) {
   const values = []
   for (const site of sites) {
     const listed = (await listSites(input, site.id))[0]
-    values.push(...listed.routes.filter((route) => options.all || route.declared.status === 'active'))
+    values.push(...listed.routes.filter((route) => (!options.purpose || route.declared.purpose === options.purpose) && (options.all || route.declared.status === 'active')))
     if (options.all) values.push(...listed.worktrees.filter((worktree) => !worktree.registered).map((worktree) => observedCheckout(site.id, worktree)))
   }
   assertDistinctGitDirs(values)
@@ -239,7 +252,7 @@ async function resolveCheckoutPath(input, path) {
   const observed = sites.flatMap((site) => site.worktrees.map((worktree) => ({ site, worktree }))).find(({ worktree }) => worktree.path === target)
   if (!observed) throw failure('checkout_family_unknown', `${target} is not in a declared Git family.`)
   if (observed.worktree.registered) return { status: 'resolved', selector: `checkout:${observed.site.id}/${observed.worktree.route}` }
-  const origins = observed.site.routes.filter((route) => route.declared.status === 'active' && route.observed.repository.commonGitDir === observed.worktree.commonGitDir)
+  const origins = observed.site.routes.filter((route) => route.declared.status === 'active' && route.declared.purpose === 'primary' && route.observed.repository.commonGitDir === observed.worktree.commonGitDir)
   if (!origins.length) throw failure('checkout_origin_missing', `${observed.worktree.ref} has no active Route of origin.`)
   if (origins.length > 1) throw failure('checkout_origin_ambiguous', `${observed.worktree.ref} has multiple active Routes of origin.`)
   return { status: 'resolved', selector: observed.worktree.ref, source: origins[0].ref, checkout: observedCheckout(observed.site.id, observed.worktree) }
@@ -281,7 +294,7 @@ async function doctorSites(input) {
       else if (route.declared.status === 'active' && !route.observed.matches) limits.push(`route-site-mismatch:${site.id}:${route.id}`)
       if (route.observed.repository.available && !route.observed.repository.clean) limits.push(`route-dirty:${site.id}:${route.id}`)
       if (route.observed.repository.conflicts) limits.push(`route-conflicts:${site.id}:${route.id}`)
-      if (route.declared.status === 'active' && !['direct', 'linked'].includes(route.observed.index)) limits.push(`checkout-index-${route.observed.index}:${site.id}:${route.id}`)
+      if (route.declared.status === 'active' && !['direct', 'linked', 'relational'].includes(route.observed.index)) limits.push(`checkout-index-${route.observed.index}:${site.id}:${route.id}`)
       if (!revisionMatches(route.declared.revision, route.observed.repository)) limits.push(`route-revision-divergent:${site.id}:${route.id}`)
       if (route.observed.repository.branch && !route.observed.repository.upstream) limits.push(`route-upstream-missing:${site.id}:${route.id}`)
     }
@@ -349,7 +362,7 @@ async function addSite(input, repository, flags) {
       assertSiteMatches(site, current)
       bound = existing
     } else {
-      bound = await bindRoute(input, id, evidence.root, routeId, site)
+      bound = await bindRoute(input, id, evidence.root, routeId, site, { purpose: 'primary' })
     }
   }
   return { status: 'added', ...site, ref: `site:${id}`, routes: bound ? [bound] : [] }
@@ -375,15 +388,17 @@ async function bindRouteUnlocked(input, id, repositoryPath, routeId = 'main', de
   requireDesk(input)
   assertId(routeId)
   const site = declaredSite ?? declaration(input, id)
+  const purpose = requiredPurpose(flags.purpose)
   const evidence = await inspectRepository(resolve(repositoryPath))
   assertSiteMatches(site, evidence)
-  await assertGitDirAvailable(input, evidence)
-  await assertTopologyFamilySafe(input, evidence.commonGitDir)
   const existing = (input.resolvedHome.routes ?? []).find((route) => route.site === id && route.id === routeId)
+  await assertGitDirAvailable(input, evidence, existing?.ref)
+  await assertTopologyFamilySafe(input, evidence.commonGitDir, existing?.ref)
   if (existing) {
     if (existing.schemaVersion !== 9 || !['existing', 'submodule'].includes(existing.declared.checkout.mode)) {
       throw failure('route_exists', `Route ${id}/${routeId} already exists.`)
     }
+    if (existing.declared.purpose !== purpose) throw failure('route_purpose_conflict', `${existing.ref} is ${existing.declared.purpose}, not ${purpose}.`)
     const address = managedPath(input, id, routeId)
     const info = await lstat(address).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
     if (info && (!info.isSymbolicLink() || await symlinkTarget(address) !== evidence.root)) {
@@ -401,26 +416,12 @@ async function bindRouteUnlocked(input, id, repositoryPath, routeId = 'main', de
   const route = await writeRoute(input, {
     id: routeId,
     site: id,
+    purpose,
     mode,
     path: mode === 'embedded' ? '.' : evidence.root,
     revision,
   })
-  try {
-    const address = managedPath(input, id, routeId)
-    if (mode !== 'embedded' && await canonicalPath(address) !== evidence.root) {
-      await bindCheckoutLink(input, address, evidence.root, route.ref)
-    }
-    return { ...route, checkout: evidence.checkout }
-  } catch (error) {
-    pendingRoutes.delete(`checkout:${id}/${routeId}`)
-    const address = managedPath(input, id, routeId)
-    const linked = await lstat(address).catch((caught) => caught.code === 'ENOENT' ? null : Promise.reject(caught))
-    if (linked?.isSymbolicLink() && await symlinkTarget(address) === evidence.root) await rm(address)
-    const routeRoot = join(input.deskRoot, 'routes', id, routeId)
-    await rm(join(routeRoot, 'ROUTE.md'), { force: true })
-    await removeEmpty(routeRoot, join(input.deskRoot, 'routes'))
-    throw error
-  }
+  return { ...route, checkout: evidence.checkout }
 }
 
 async function transitionRoute(input, siteId, routeId, status) {
@@ -432,13 +433,14 @@ async function transitionRoute(input, siteId, routeId, status) {
   if (route.status === status) return { status: status === 'active' ? 'activated' : 'parked', site: siteId, route: route.id, ref: route.ref, declared: route.declared }
   const expected = status === 'parked' ? 'active' : 'parked'
   if (route.status !== expected) throw failure('route_status_invalid', `Route ${siteId}/${route.id} must be ${expected} before becoming ${status}.`)
+  if (status === 'active' && route.purpose === 'primary') assertPrimaryAvailable(graph, siteId, route.id)
   await writeRouteLifecycle(route, { status })
   return {
     status: status === 'active' ? 'activated' : 'parked',
     site: siteId,
     route: route.id,
     ref: route.ref,
-    declared: { status, checkout: { ...route.declared.checkout }, ...(route.declared.revision ? { revision: { ...route.declared.revision } } : {}) },
+    declared: { status, purpose: route.purpose, checkout: { ...route.declared.checkout }, ...(route.declared.revision ? { revision: { ...route.declared.revision } } : {}) },
   }
 }
 
@@ -457,7 +459,7 @@ async function supersedeRoute(input, siteId, routeId, replacementId) {
     site: siteId,
     route: route.id,
     ref: route.ref,
-    declared: { status: 'superseded', supersededBy: replacement.id, checkout: { ...route.declared.checkout }, ...(route.declared.revision ? { revision: { ...route.declared.revision } } : {}) },
+    declared: { status: 'superseded', purpose: route.purpose, supersededBy: replacement.id, checkout: { ...route.declared.checkout }, ...(route.declared.revision ? { revision: { ...route.declared.revision } } : {}) },
   }
 }
 
@@ -585,8 +587,12 @@ async function planRouteV9Migrations(input, siteId, flags) {
     .filter((route) => route.schemaVersion === 8 && (!siteId || route.site === siteId) && (!flags.id || route.id === flags.id))
   const manifest = candidates.some((route) => ['existing', 'submodule'].includes(route.mode))
     ? await readIndexManifest(input)
-    : { version: 1, links: [] }
+    : checkoutIndexDocument(currentDeskId(input), [])
   const planned = []
+  const explicit = flags.purpose && flags.id && siteId ? { [`${siteId}/${flags.id}`]: requiredPurpose(flags.purpose) } : {}
+  if (flags.purpose && (!flags.id || !siteId)) throw failure('usage', '--purpose requires one Route selected with a Site and --id.', 2)
+  let purposes
+  try { purposes = proposeRoutePurposes(candidates, explicit) } catch (error) { throw failure(error.code ?? 'route_purpose_mapping_required', error.message) }
   for (const route of candidates) {
     await assertSafeRouteFile(input, route.documentPath)
     const destination = join(dirname(route.documentPath), route.id, 'ROUTE.md')
@@ -595,9 +601,10 @@ async function planRouteV9Migrations(input, siteId, flags) {
       const address = checkoutAddress(input, route)
       const target = await canonicalPath(route.declaredPath)
       if (address !== target) {
-        const local = relative(input.homeRoot, address)
-        const entry = manifest.links.find((link) => link.path === local && link.ref === route.ref)
-        if (!entry || await canonicalPath(entry.target) !== target) {
+        const bound = await checkoutBindingTarget(input, route.site, route.id)
+        const entry = manifest.projections.find((projection) => projection.address === relative(input.homeRoot, address)
+          && projection.site === route.site && projection.route === route.id)
+        if (await canonicalPath(bound ?? entry?.target ?? '') !== target) {
           throw failure('route_migration_checkout_unindexed', `${route.ref} requires a current Checkout index before v9 migration.`)
         }
       }
@@ -609,6 +616,7 @@ async function planRouteV9Migrations(input, siteId, flags) {
       owner: `desk:${input.resolvedHome.desk.id}`,
       site: route.site,
       route_state: route.status,
+      route_purpose: purposes.get(`${route.site}/${route.id}`),
       checkout_mode: route.mode,
       ...(route.revision ? { revision: { ...route.revision } } : {}),
       ...(route.supersededBy ? { superseded_by: route.supersededBy } : {}),
@@ -800,10 +808,12 @@ async function cloneRoute(input, id, routeId = 'main', flags = {}) {
   requireCurrentRouteSources(input)
   assertId(routeId)
   const site = declaration(input, id)
+  const purpose = requiredPurpose(flags.purpose)
   if (!site.source) throw failure('site_source_missing', `Site ${id} has no clone source.`)
   await assertRouteAvailable(input, id, routeId)
-  const destination = managedPath(input, id, routeId)
-  if (await exists(destination)) throw failure('route_checkout_exists', `${relative(input.homeRoot, destination)} already exists.`)
+  if (await exists(managedPath(input, id, routeId))) throw failure('route_checkout_exists', `${managedPath(input, id, routeId)} already exists.`)
+  const destination = await managedPhysicalPath(input, id, routeId)
+  if (await exists(destination)) throw failure('route_checkout_exists', `${destination} already exists.`)
   await mkdir(dirname(destination), { recursive: true })
   try {
     const branch = flags.branch ? String(flags.branch) : null
@@ -814,8 +824,9 @@ async function cloneRoute(input, id, routeId = 'main', flags = {}) {
     const route = await writeRoute(input, {
       id: routeId,
       site: id,
+      purpose,
       mode: 'managed-clone',
-      path: relative(input.homeRoot, destination),
+      path: destination,
       revision: branch ? { kind: 'branch', name: branch } : null,
     })
     return { ...route, checkout: evidence.checkout }
@@ -829,7 +840,9 @@ async function createWorktree(input, id, flags) {
   requireCurrentRouteSources(input)
   const routeId = required(flags.id, 'Route id')
   assertId(routeId)
+  const purpose = requiredPurpose(flags.purpose)
   await assertRouteAvailable(input, id, routeId)
+  if (await exists(managedPath(input, id, routeId))) throw failure('route_checkout_exists', `${managedPath(input, id, routeId)} already exists.`)
   const existingBranch = flags.branch
   const newBranch = flags['new-branch']
   const detached = flags.detach
@@ -842,8 +855,8 @@ async function createWorktree(input, id, flags) {
   await assertTopologyFamilySafe(input, sourceEvidence.commonGitDir)
   const branch = existingBranch || newBranch ? String(existingBranch ?? newBranch) : null
   if (branch) await validateBranch(source.path, branch)
-  const destination = managedPath(input, id, routeId)
-  if (await exists(destination)) throw failure('route_checkout_exists', `${relative(input.homeRoot, destination)} already exists.`)
+  const destination = await managedPhysicalPath(input, id, routeId)
+  if (await exists(destination)) throw failure('route_checkout_exists', `${destination} already exists.`)
   const branchExists = branch ? await localBranchExists(source.path, branch) : false
   let expectedHead
   let command
@@ -876,8 +889,9 @@ async function createWorktree(input, id, flags) {
     const route = await writeRoute(input, {
       id: routeId,
       site: id,
+      purpose,
       mode: 'managed-worktree',
-      path: relative(input.homeRoot, destination),
+      path: destination,
       revision: branch ? { kind: 'branch', name: branch } : { kind: 'commit', sha: expectedHead },
     })
     return { ...route, head: created.head, branch: created.branch, detached: created.detached, checkout: created.checkout }
@@ -913,6 +927,7 @@ async function routesFor(input, id) {
       documentPath: route.documentPath ?? join(input.deskRoot, 'routes', route.site, `${route.id}.json`),
       declaredPath,
       status: route.declared.status,
+      purpose: route.declared.purpose,
       supersededBy: route.declared.supersededBy,
       mode,
       revision: route.declared.revision,
@@ -956,6 +971,7 @@ async function scanRouteGraph(input) {
           documentPath,
           declaredPath,
           status: route.declared.status,
+          purpose: route.declared.purpose,
           supersededBy: route.declared.supersededBy,
           mode: checkout.mode,
           revision: route.declared.revision,
@@ -990,6 +1006,7 @@ async function scanRouteGraph(input) {
         schemaVersion,
         declared: {
         status: document.status,
+        purpose: null,
         ...(document.supersededBy ? { supersededBy: document.supersededBy } : {}),
         checkout: { ...checkout },
         ...(document.revision ? { revision: { ...document.revision } } : {}),
@@ -997,6 +1014,7 @@ async function scanRouteGraph(input) {
         declaredPath,
         documentPath,
         status: document.status,
+        purpose: null,
         supersededBy: document.supersededBy,
         mode: checkout.mode,
         revision: document.revision,
@@ -1023,10 +1041,11 @@ function selectCurrentRoute(input, graph, id, routeId, flag = '--id', options = 
     if (selected.status !== 'active' && !options.allowInactive) throw failure('route_inactive', `Route ${id}/${routeId} is ${selected.status}; activate it before an operational effect.`)
     return selected
   }
-  const active = routes.filter((route) => route.status === 'active')
-  if (!active.length) throw failure('site_unrouted', `${id} has no active Route.`)
-  if (active.length > 1) throw failure('route_ambiguous', `${id} has multiple active Routes; pass ${flag}.`)
-  return active[0]
+  if (!routes.some((route) => route.status === 'active')) throw failure('site_unrouted', `${id} has no active Route.`)
+  const primary = routes.filter((route) => route.status === 'active' && route.purpose === 'primary')
+  if (!primary.length) throw failure('route_primary_missing', `${id} has no active primary Route; pass ${flag}.`)
+  if (primary.length > 1) throw failure('route_primary_ambiguous', `${id} has multiple active primary Routes; pass ${flag}.`)
+  return primary[0]
 }
 
 function selectCurrentRouteByStatus(input, graph, id, routeId, status) {
@@ -1052,10 +1071,11 @@ async function selectRoute(input, id, routeId, flag = '--id', options = {}) {
     if (selected.status !== 'active' && !options.allowInactive) throw failure('route_inactive', `Route ${id}/${routeId} is ${selected.status}; activate it before an operational effect.`)
     return selected
   }
-  const active = routes.filter((route) => route.status === 'active')
-  if (!active.length) throw failure('site_unrouted', `${id} has no active Route.`)
-  if (active.length > 1) throw failure('route_ambiguous', `${id} has multiple active Routes; pass ${flag}.`)
-  return active[0]
+  if (!routes.some((route) => route.status === 'active')) throw failure('site_unrouted', `${id} has no active Route.`)
+  const primary = routes.filter((route) => route.status === 'active' && route.purpose === 'primary')
+  if (!primary.length) throw failure('route_primary_missing', `${id} has no active primary Route; pass ${flag}.`)
+  if (primary.length > 1) throw failure('route_primary_ambiguous', `${id} has multiple active primary Routes; pass ${flag}.`)
+  return primary[0]
 }
 
 async function selectRouteByStatus(input, id, routeId, status) {
@@ -1096,6 +1116,8 @@ async function writeRouteUnlocked(input, route) {
   const path = join(root, 'ROUTE.md')
   await mkdir(siteRoot, { recursive: true })
   if (await exists(root) || await exists(join(siteRoot, `${route.id}.json`))) throw failure('route_exists', `Route ${route.site}/${route.id} already exists.`)
+  const purpose = requiredPurpose(route.purpose)
+  if (purpose === 'primary') assertPrimaryAvailable(await scanRouteGraph(input), route.site)
   const document = {
     $schema: 'https://endroit.org/schema/v9/route.json',
     kind: 'endroit/route',
@@ -1103,6 +1125,7 @@ async function writeRouteUnlocked(input, route) {
     site: route.site,
     owner: `desk:${input.resolvedHome.desk.id}`,
     route_state: route.status ?? 'active',
+    route_purpose: purpose,
     ...(route.supersededBy ? { superseded_by: route.supersededBy } : {}),
     checkout_mode: route.mode,
     ...(route.revision ? { revision: { ...route.revision } } : {}),
@@ -1114,7 +1137,7 @@ async function writeRouteUnlocked(input, route) {
     throw error
   }
   const address = route.mode === 'embedded' ? input.homeRoot : managedPath(input, route.site, route.id)
-  const target = ['existing', 'submodule'].includes(route.mode) ? await canonicalPath(resolve(input.homeRoot, route.path)) : address
+  const target = route.mode === 'embedded' ? input.homeRoot : await canonicalPath(resolve(input.homeRoot, route.path))
   const ref = `checkout:${route.site}/${route.id}`
   pendingRoutes.set(ref, {
     id: route.id,
@@ -1124,18 +1147,27 @@ async function writeRouteUnlocked(input, route) {
     schemaVersion: 9,
     declared: {
       status: document.route_state,
+      purpose: document.route_purpose,
       checkout: { mode: document.checkout_mode },
       ...(document.revision ? { revision: { ...document.revision } } : {}),
     },
     declaredPath: address,
     documentPath: path,
   })
+  try {
+    if (route.mode !== 'embedded') await bindCheckoutLink(input, address, target, ref)
+  } catch (error) {
+    pendingRoutes.delete(ref)
+    await rm(path, { force: true })
+    await removeEmpty(root, join(input.deskRoot, 'routes'))
+    throw error
+  }
   return {
     status: route.mode === 'managed-clone' ? 'cloned' : route.mode === 'managed-worktree' ? 'created' : 'bound',
     site: route.site,
     route: route.id,
     ref: `checkout:${route.site}/${route.id}`,
-    declared: { status: document.route_state, checkout: { mode: document.checkout_mode }, ...(document.revision ? { revision: document.revision } : {}) },
+    declared: { status: document.route_state, purpose: document.route_purpose, checkout: { mode: document.checkout_mode }, ...(document.revision ? { revision: document.revision } : {}) },
     observed: { path: await canonicalPath(target) },
     mode: route.mode,
     revision: route.revision ?? null,
@@ -1155,6 +1187,15 @@ function managedPath(input, site, route) {
   return destination
 }
 
+async function managedPhysicalPath(input, site, route) {
+  const layout = await bindingLayout(input)
+  assertId(site)
+  assertId(route)
+  const destination = join(layout.managedRoot, site, route)
+  if (!inside(layout.managedRoot, destination)) throw failure('route_path_invalid', 'Managed checkout must stay below the shared Checkout root.')
+  return destination
+}
+
 async function routeRepositoryPath(input, route) {
   if (route.schemaVersion === 9 && ['existing', 'submodule'].includes(route.mode)) {
     const target = await checkoutIndexTarget(input, route)
@@ -1171,10 +1212,8 @@ async function routeRepositoryPath(input, route) {
 }
 
 async function validateManagedCheckout(input, route, expected) {
-  const declaredPath = route.declaredPath
-  if (declaredPath !== managedPath(input, route.site, route.id)) {
-    throw failure('route_path_invalid', `Managed Route ${route.site}/${route.id} must stay below its Desk checkout path.`)
-  }
+  const declaredPath = await checkoutIndexTarget(input, route)
+  if (!declaredPath) throw failure('checkout_unbound', `${route.ref} has no shared Desk binding.`)
   let info
   try { info = await lstat(declaredPath) } catch (error) {
     if (error.code === 'ENOENT') throw failure('route_broken', `Managed Route ${route.site}/${route.id} has no checkout.`)
@@ -1388,32 +1427,29 @@ async function inspectCheckoutIndex(input, route) {
   if (route.mode === 'embedded') return { status: 'direct', address: input.homeRoot, target: input.homeRoot }
   const address = checkoutAddress(input, route)
   const target = await checkoutIndexTarget(input, route)
-  let info
-  try { info = await lstat(address) } catch (error) {
-    if (error.code === 'ENOENT') return { status: target ? 'missing' : 'unbound', address, target }
-    throw error
+  if (!target) return { status: 'unbound', address, target: null }
+  const linkState = route.mode.startsWith('managed-') ? 'linked' : checkoutLinkState(input.homeRoot, address, target)
+  const projection = (await readIndexManifest(input)).projections.find((entry) => entry.site === route.site && entry.route === route.id)
+  if (!projection || projection.target !== target || projection.linkState !== linkState) return { status: 'stale', address, target, linkState }
+  if (linkState === 'relational') return { status: 'relational', address, target, linkState }
+  const info = await lstat(address).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+  if (!info) return { status: 'missing', address, target, linkState }
+  if (linkState === 'direct') {
+    const observed = info.isDirectory() && !info.isSymbolicLink() ? await canonicalPath(address) : null
+    return { status: observed === target ? 'direct' : 'conflict', address, target, linkState, ...(observed ? { realpath: observed } : {}) }
   }
-  if (!target) return { status: 'unindexed', address, target: null }
-  if (!info.isSymbolicLink()) {
-    const observed = await realpath(address).catch(() => null)
-    return { status: observed === await canonicalPath(target) ? 'direct' : 'conflict', address, target, ...(observed ? { realpath: observed } : {}) }
-  }
+  if (!info.isSymbolicLink()) return { status: 'conflict', address, target, linkState }
   const linked = await readlink(address)
   const observed = await realpath(address).catch(() => null)
-  if (!observed) return { status: 'broken', address, target, linked }
-  return { status: observed === await canonicalPath(target) ? 'linked' : 'divergent', address, target, linked, realpath: observed }
+  if (!observed) return { status: 'broken', address, target, linkState, linked }
+  return { status: observed === target ? 'linked' : 'divergent', address, target, linkState, linked, realpath: observed }
 }
 
 function indexManifestPath(input) { return join(input.homeRoot, '.endroit', 'checkout-index.json') }
 
 async function readIndexManifest(input) {
   const snapshot = await readIndexSnapshot(input)
-  return {
-    version: 2,
-    document: snapshot.document,
-    links: currentIndexLinks(input, snapshot.document),
-    allLinks: allIndexLinks(snapshot.document),
-  }
+  return snapshot.document
 }
 
 async function readIndexSnapshot(input) {
@@ -1426,96 +1462,52 @@ async function readIndexSnapshot(input) {
     bytes = content
     mode = info.mode & 0o777
   } catch (error) {
-    if (error.code === 'ENOENT') return { document: { version: 2, desks: {} }, bytes: null, mode: 0o600 }
+    if (error.code === 'ENOENT') return { document: checkoutIndexDocument(currentDeskId(input), []), bytes: null, mode: 0o600 }
     throw error
   }
   let document
   try { document = JSON.parse(bytes) } catch { throw failure('checkout_index_invalid', `${relative(input.homeRoot, path)} is invalid.`) }
-  if (document?.version === 1 && Array.isArray(document.links)) {
-    for (const link of document.links) validateIndexLink(input, link, null)
-    const desk = currentDeskId(input)
-    document = indexDocumentWithLinks({ version: 2, desks: {} }, desk, document.links.map((link) => ({
-      ...link,
-      digest: checkoutLinkDigest(desk, link.path, link.target, link.ref),
-    })))
-  } else if (document?.version === 2 && document.desks && typeof document.desks === 'object' && !Array.isArray(document.desks)) {
-    for (const [desk, partition] of Object.entries(document.desks)) {
-      if (!validId(desk) || !partition || typeof partition !== 'object' || Array.isArray(partition)
-        || Object.keys(partition).some((key) => key !== 'links') || !Array.isArray(partition.links)) {
-        throw failure('checkout_index_invalid', `Invalid Checkout index partition ${desk}.`)
-      }
-      const paths = new Set()
-      for (const link of partition.links) {
-        validateIndexLink(input, link, desk)
-        if (paths.has(link.path)) throw failure('checkout_index_invalid', `Checkout index repeats ${link.path} for Desk ${desk}.`)
-        paths.add(link.path)
-      }
-    }
-  } else {
-    throw failure('checkout_index_invalid', `${relative(input.homeRoot, path)} is invalid.`)
-  }
+  if (document?.version !== 3) throw failure('checkout_index_upgrade_required', 'Run workplace upgrade before using the v3 Checkout index.')
+  try { validateCheckoutIndex(document) } catch (error) { throw failure(error.code ?? 'checkout_index_invalid', error.message) }
   return { document, bytes, mode }
 }
 
-function validateIndexLink(input, link, desk) {
-  const absolute = resolve(input.homeRoot, link?.path ?? '')
-  const expected = desk
-    ? checkoutLinkDigest(desk, link?.path, link?.target, link?.ref)
-    : sha256(`${link?.path}\0${link?.target}`)
-  if (!link || typeof link !== 'object' || Array.isArray(link)
-    || Object.keys(link).some((key) => !['path', 'target', 'ref', 'digest'].includes(key))
-    || !inside(join(input.homeRoot, 'checkouts'), absolute)
-    || typeof link.target !== 'string' || !isAbsolute(link.target)
-    || !/^(?:checkout|worktree):[a-z0-9][a-z0-9._-]{0,127}\/[a-z0-9][a-z0-9._-]{0,127}$/.test(link.ref)
-    || link.digest !== expected) {
-    throw failure('checkout_index_invalid', `Invalid generated Checkout link ${link?.path ?? '(missing)'}.`)
-  }
-}
-
 function currentDeskId(input) { return input.resolvedHome.desk.id }
-function currentIndexLinks(input, document) { return document.desks[currentDeskId(input)]?.links ?? [] }
-function allIndexLinks(document) {
-  return Object.entries(document.desks).flatMap(([desk, partition]) => partition.links.map((link) => ({ ...link, desk })))
+async function bindingLayout(input) { return workplaceGitStorage(input.homeRoot, currentDeskId(input)) }
+async function bindingManifest(input) {
+  const layout = await bindingLayout(input)
+  try { return { layout, document: await readCheckoutBindings(layout.bindingsPath, currentDeskId(input)) } }
+  catch (error) { throw failure(error.code ?? 'checkout_bindings_invalid', error.message) }
 }
-function indexDocumentWithLinks(document, desk, links) {
-  const desks = { ...document.desks }
-  if (links.length) desks[desk] = { links: [...links].sort((left, right) => left.path.localeCompare(right.path)) }
-  else delete desks[desk]
-  return { version: 2, desks: Object.fromEntries(Object.entries(desks).sort(([left], [right]) => left.localeCompare(right))) }
+async function checkoutBindingTarget(input, site, route) {
+  const { document } = await bindingManifest(input)
+  return document.bindings.find((entry) => entry.site === site && entry.route === route)?.target ?? null
 }
-function checkoutLinkDigest(desk, path, target, ref) { return sha256(`${desk}\0${path}\0${target}\0${ref}`) }
 
-async function desiredCheckoutLinks(input, manifest) {
+async function desiredCheckoutProjections(input) {
   const desired = []
   for (const route of await scanRouteGraph(input)) {
     if (route.mode === 'embedded') continue
     const address = checkoutAddress(input, route)
-    const target = await checkoutIndexTarget(input, route, manifest)
+    const target = await checkoutIndexTarget(input, route)
     if (!target) continue
-    if (address !== target && !route.mode.startsWith('managed-')) desired.push(indexLink(input, address, target, route.ref))
+    desired.push({ site: route.site, route: route.id, address: relative(input.homeRoot, address), target, linkState: route.mode.startsWith('managed-') ? 'linked' : checkoutLinkState(input.homeRoot, address, target) })
   }
   if (siteSettings(input).observedWorktrees === 'surface') {
     for (const site of await listSites(input)) {
       for (const worktree of site.worktrees.filter((entry) => !entry.registered && entry.available)) {
-        desired.push(indexLink(input, worktree.address, worktree.path, worktree.ref))
+        desired.push({ site: site.id, route: worktree.ref.split('/').at(-1), address: relative(input.homeRoot, worktree.address), target: worktree.path, linkState: checkoutLinkState(input.homeRoot, worktree.address, worktree.path) })
       }
     }
   }
-  return desired.sort((left, right) => left.path.localeCompare(right.path))
+  return desired.sort((left, right) => left.address.localeCompare(right.address))
 }
 
 async function checkoutIndexTarget(input, route, manifest) {
   const address = checkoutAddress(input, route)
   if (route.schemaVersion !== 9) return canonicalPath(route.declaredPath)
-  if (route.mode === 'embedded' || route.mode.startsWith('managed-')) return address
-  manifest ??= await readIndexManifest(input)
-  const local = relative(input.homeRoot, address)
-  const entry = manifest.links.find((link) => link.path === local && link.ref === route.ref)
-  if (entry) return canonicalPath(entry.target)
-  const info = await lstat(address).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
-  if (!info) return null
-  if (info.isSymbolicLink()) return null
-  return info.isDirectory() ? canonicalPath(address) : null
+  if (route.mode === 'embedded') return canonicalPath(address)
+  return checkoutBindingTarget(input, route.site, route.id)
 }
 
 async function createCheckoutLink(input, address, target) {
@@ -1532,96 +1524,72 @@ async function createCheckoutLink(input, address, target) {
 
 async function bindCheckoutLink(input, address, target, ref) {
   target = await canonicalPath(target)
-  const snapshot = await readIndexSnapshot(input)
-  const current = currentIndexLinks(input, snapshot.document)
-  const known = allIndexLinks(snapshot.document)
-  const link = indexLink(input, address, target, ref)
-  const previous = current.find((entry) => entry.path === link.path)
-  const links = [...current.filter((entry) => entry.path !== link.path), link]
-    .sort((left, right) => left.path.localeCompare(right.path))
-  const document = indexDocumentWithLinks(snapshot.document, currentDeskId(input), links)
-  const info = await lstat(address).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
-  let replacedTarget = null
-  let created = false
-  if (info) {
-    const observed = info.isSymbolicLink() ? await symlinkTarget(address) : null
-    const owned = known.some((entry) => entry.path === link.path && entry.target === observed)
-    if (!info.isSymbolicLink() || observed !== target && !owned) {
-      throw failure('checkout_index_conflict', `${relative(input.homeRoot, address)} already exists.`)
-    }
-    if (observed !== target) {
-      replacedTarget = observed
-      await rm(address)
-    }
-  }
-  if (!info || replacedTarget) {
+  const parsed = parseCheckoutRef(ref)
+  return withBindingLock(input, async () => {
+    const { layout, document } = await bindingManifest(input)
+    const snapshot = await readFile(layout.bindingsPath).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+    const snapshotMode = snapshot ? await lstat(layout.bindingsPath).then((info) => info.mode & 0o777) : null
+    const prior = document.bindings.find((entry) => entry.site === parsed.site && entry.route === parsed.id)
+    if (prior && prior.target !== target) throw failure('checkout_binding_conflict', `${ref} already binds ${prior.target}.`)
+    const bindings = checkoutBindingsDocument(currentDeskId(input), [
+      ...document.bindings.filter((entry) => entry.site !== parsed.site || entry.route !== parsed.id),
+      { site: parsed.site, route: parsed.id, target },
+    ])
+    await ensureBindingDirectories(layout, dirname(layout.bindingsPath))
+    await writeJsonAtomic(layout.bindingsPath, bindings, 0o600)
     try {
-      await createCheckoutLink(input, address, target)
-      created = true
+      await reconcileCheckouts(input, { apply: true, lockHeld: true, authorizedRef: ref })
     } catch (error) {
-      if (replacedTarget && !await exists(address)) await symlink(replacedTarget, address, 'dir')
+      try {
+        if (snapshot) await writeBytesAtomic(layout.bindingsPath, snapshot, snapshotMode)
+        else await rm(layout.bindingsPath, { force: true })
+      } catch (rollbackError) {
+        error.message = `${error.message} Checkout binding rollback failed: ${rollbackError.message}`
+      }
       throw error
     }
-  }
-  try {
-    await ensureSafeDirectories(input.homeRoot, dirname(indexManifestPath(input)))
-    await writeJsonAtomic(indexManifestPath(input), document, 0o600)
-  } catch (error) {
-    const currentInfo = await lstat(address).catch(() => null)
-    if (created && currentInfo?.isSymbolicLink() && await symlinkTarget(address) === target) await rm(address)
-    if (replacedTarget && !await exists(address)) await symlink(replacedTarget, address, 'dir')
-    throw error
-  }
-}
-
-function indexLink(input, path, target, ref) {
-  const local = relative(input.homeRoot, path)
-  const desk = currentDeskId(input)
-  return { path: local, target, ref, digest: checkoutLinkDigest(desk, local, target, ref) }
+  })
 }
 
 async function reconcileCheckouts(input, flags = {}) {
   requireDesk(input)
   if (truthy(flags.check) && truthy(flags.apply)) throw failure('usage', 'Choose --check or --apply.', 2)
   const manifestSnapshot = await readIndexSnapshot(input)
-  const manifest = {
-    version: 2,
-    document: manifestSnapshot.document,
-    links: currentIndexLinks(input, manifestSnapshot.document),
-    allLinks: allIndexLinks(manifestSnapshot.document),
-  }
-  const desired = await desiredCheckoutLinks(input, manifest)
-  const desiredDocument = indexDocumentWithLinks(manifest.document, currentDeskId(input), desired)
+  const desired = await desiredCheckoutProjections(input)
+  const desiredDocument = checkoutIndexDocument(currentDeskId(input), desired)
   const desiredBytes = Buffer.from(`${JSON.stringify(desiredDocument, null, 2)}\n`)
-  const current = new Map(manifest.links.map((link) => [link.path, link]))
-  const wanted = new Map(desired.map((link) => [link.path, link]))
-  const plan = await unknownDeclaredCheckoutLinks(input, manifest)
-  for (const link of desired) {
-    const path = resolve(input.homeRoot, link.path)
-    const owned = current.get(link.path)
+  const current = new Map(manifestSnapshot.document.projections.map((entry) => [entry.address, entry]))
+  const wanted = new Map(desiredDocument.projections.map((entry) => [entry.address, entry]))
+  const plan = []
+  for (const link of desiredDocument.projections) {
+    const path = resolve(input.homeRoot, link.address)
+    const owned = current.get(link.address)
     const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
-    if (!info) plan.push({ action: 'create', ...link })
-    else if (!info.isSymbolicLink()) plan.push({ action: 'conflict', ...link })
+    if (link.linkState === 'relational') {
+      if (info?.isSymbolicLink() && owned?.target === await symlinkTarget(path)) plan.push({ action: 'remove', ...link })
+      else if (info) plan.push({ action: 'conflict', ...link })
+      else if (owned?.digest !== link.digest) plan.push({ action: 'record', ...link })
+    } else if (link.linkState === 'direct') {
+      const observed = info?.isDirectory() && !info.isSymbolicLink() ? await canonicalPath(path) : null
+      if (observed !== link.target) plan.push({ action: 'conflict', ...link })
+      else if (owned?.digest !== link.digest) plan.push({ action: 'record', ...link })
+    } else if (!info) plan.push({ action: 'create', ...link })
+    else if (!info.isSymbolicLink()) plan.push({ action: 'conflict', ...link, path: link.address, reason: owned ? 'divergent' : 'unindexed' })
     else {
       const target = await symlinkTarget(path)
-      const known = manifest.allLinks.some((entry) => entry.path === link.path && entry.target === target)
+      const known = owned?.target === target
       if (target !== link.target && known) plan.push({ action: 'replace', ...link, previousTarget: target })
-      else if (target !== link.target) plan.push({ action: 'conflict', ...link, observedTarget: target })
+      else if (target !== link.target) plan.push({ action: 'conflict', ...link, path: link.address, reason: owned ? 'divergent' : 'unindexed', observedTarget: target })
+      else if (!owned && flags.authorizedRef !== `checkout:${link.site}/${link.route}`) plan.push({ action: 'conflict', ...link, path: link.address, reason: 'unindexed' })
       else if (owned?.digest !== link.digest) plan.push({ action: 'record', ...link })
     }
   }
-  for (const link of manifest.links.filter((entry) => !wanted.has(entry.path))) {
-    const path = resolve(input.homeRoot, link.path)
+  for (const link of manifestSnapshot.document.projections.filter((entry) => !wanted.has(entry.address))) {
+    const path = resolve(input.homeRoot, link.address)
     const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
     if (!info) plan.push({ action: 'forget', ...link })
-    else if (!info.isSymbolicLink()) plan.push({ action: 'conflict', ...link })
-    else {
-      const target = await symlinkTarget(path)
-      const ownedByAnotherDesk = manifest.allLinks.some((entry) => entry.desk !== currentDeskId(input) && entry.path === link.path && entry.target === target)
-      if (target === link.target && !ownedByAnotherDesk) plan.push({ action: 'remove', ...link })
-      else if (ownedByAnotherDesk) plan.push({ action: 'forget', ...link })
-      else plan.push({ action: 'conflict', ...link })
-    }
+    else if (info.isSymbolicLink() && await symlinkTarget(path) === link.target) plan.push({ action: 'remove', ...link })
+    else plan.push({ action: 'forget', ...link })
   }
   const conflicts = plan.filter((entry) => entry.action === 'conflict')
   if (!truthy(flags.apply)) return { status: plan.length ? 'stale' : 'current', readOnly: true, changes: plan.length - conflicts.length, conflicts }
@@ -1630,7 +1598,7 @@ async function reconcileCheckouts(input, flags = {}) {
   const removed = []
   try {
     for (const entry of plan) {
-      const path = resolve(input.homeRoot, entry.path)
+      const path = resolve(input.homeRoot, entry.address)
       if (entry.action === 'create') {
         await ensureSafeDirectories(input.homeRoot, dirname(path))
         await symlink(entry.target, path, 'dir')
@@ -1663,48 +1631,29 @@ async function reconcileCheckouts(input, flags = {}) {
   return { status: 'reconciled', changes: plan.length, links: desired.length }
 }
 
-async function unknownDeclaredCheckoutLinks(input, manifest) {
-  const conflicts = []
-  for (const route of await scanRouteGraph(input)) {
-    if (route.schemaVersion !== 9 || !['existing', 'submodule'].includes(route.mode)) continue
-    const address = checkoutAddress(input, route)
-    const local = relative(input.homeRoot, address)
-    if (manifest.links.some((link) => link.path === local && link.ref === route.ref)) continue
-    const info = await lstat(address).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
-    if (info?.isSymbolicLink()) conflicts.push({
-      action: 'conflict',
-      path: local,
-      ref: route.ref,
-      observedTarget: await symlinkTarget(address),
-      reason: 'unindexed',
-    })
-  }
-  return conflicts
-}
-
 async function rollbackCheckoutIndex(input, manifestSnapshot, desiredBytes, created, removed) {
   const failures = []
   let ownership
   try { ownership = await checkoutIndexRollbackOwnership(input, manifestSnapshot, desiredBytes) } catch (error) { return [`manifest: ownership preflight failed: ${error.message}`] }
   if (!ownership.allowed) return [`manifest: ${ownership.message}`]
   for (const entry of created.reverse()) {
-    const path = resolve(input.homeRoot, entry.path)
+    const path = resolve(input.homeRoot, entry.address)
     try {
       const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
       if (!info) continue
-      if (!info.isSymbolicLink() || await symlinkTarget(path) !== entry.target) throw new Error(`${entry.path} is no longer the generated link`)
+      if (!info.isSymbolicLink() || await symlinkTarget(path) !== entry.target) throw new Error(`${entry.address} is no longer the generated link`)
       await rm(path)
-    } catch (error) { failures.push(`${entry.path}: ${error.message}`) }
+    } catch (error) { failures.push(`${entry.address}: ${error.message}`) }
   }
   for (const entry of removed.reverse()) {
-    const path = resolve(input.homeRoot, entry.path)
+    const path = resolve(input.homeRoot, entry.address)
     try {
       await ensureSafeDirectories(input.homeRoot, dirname(path))
       const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
       if (info) {
-        if (!info.isSymbolicLink() || await symlinkTarget(path) !== entry.target) throw new Error(`${entry.path} was replaced during rollback`)
+        if (!info.isSymbolicLink() || await symlinkTarget(path) !== entry.target) throw new Error(`${entry.address} was replaced during rollback`)
       } else await symlink(entry.target, path, 'dir')
-    } catch (error) { failures.push(`${entry.path}: ${error.message}`) }
+    } catch (error) { failures.push(`${entry.address}: ${error.message}`) }
   }
   if (process.env.NODE_ENV === 'test' && process.env.ENDROIT_TEST_CHECKOUT_INDEX_ROLLBACK_LINKS_READY_FILE) {
     await writeFile(process.env.ENDROIT_TEST_CHECKOUT_INDEX_ROLLBACK_LINKS_READY_FILE, 'ready\n')
@@ -1741,20 +1690,21 @@ async function checkoutIndexRollbackOwnership(input, manifestSnapshot, desiredBy
 }
 
 async function removeGeneratedLink(input, path, route) {
-  const manifest = await readIndexManifest(input)
-  const local = relative(input.homeRoot, path)
-  const entry = manifest.links.find((link) => link.path === local)
-  const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
-  if (!entry) return
-  if (info) {
-    if (!info.isSymbolicLink()) throw failure('checkout_index_conflict', `Refusing to remove unowned Checkout path ${local}.`)
-    const target = await symlinkTarget(path)
-    const ownedByAnotherDesk = manifest.allLinks.some((link) => link.desk !== currentDeskId(input) && link.path === local && link.target === target)
-    if (target === entry.target && !ownedByAnotherDesk) await rm(path)
-    else if (!ownedByAnotherDesk) throw failure('checkout_index_conflict', `Refusing to remove unowned Checkout path ${local}.`)
-  }
-  const document = indexDocumentWithLinks(manifest.document, currentDeskId(input), manifest.links.filter((link) => link.path !== local))
-  await writeJsonAtomic(indexManifestPath(input), document, 0o600)
+  return withBindingLock(input, async () => {
+    const manifest = await readIndexManifest(input)
+    const local = relative(input.homeRoot, path)
+    const entry = manifest.projections.find((projection) => projection.address === local && projection.site === route.site && projection.route === route.id)
+    const info = await lstat(path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+    if (entry && info?.isSymbolicLink()) {
+      if (await symlinkTarget(path) !== entry.target) throw failure('checkout_index_conflict', `Refusing to remove unowned Checkout path ${local}.`)
+      await rm(path)
+    }
+    const { layout, document } = await bindingManifest(input)
+    const bindings = checkoutBindingsDocument(currentDeskId(input), document.bindings.filter((binding) => binding.site !== route.site || binding.route !== route.id))
+    await writeJsonAtomic(layout.bindingsPath, bindings, 0o600)
+    const projections = manifest.projections.filter((projection) => projection.site !== route.site || projection.route !== route.id)
+    await writeJsonAtomic(indexManifestPath(input), checkoutIndexDocument(currentDeskId(input), projections), 0o600)
+  })
 }
 
 async function deleteCheckout(input, selector, flags) {
@@ -1846,6 +1796,7 @@ async function deleteCheckout(input, selector, flags) {
     if (rollbackFailures.length) error.message = `${error.message} Checkout deletion rollback failed: ${rollbackFailures.join('; ')}`
     throw error
   }
+  await removeGeneratedLink(input, checkoutAddress(input, route), route)
   const retainedRouteBackup = await rm(stagedRoute.path, { force: true }).then(() => null).catch(() => relative(input.homeRoot, stagedRoute.path))
   const retainedRouteDirectory = await removeEmpty(dirname(route.documentPath), join(input.deskRoot, 'routes')).then(() => null).catch(() => relative(input.homeRoot, dirname(route.documentPath)))
   return {
@@ -2015,6 +1966,30 @@ function revisionMatches(revision, evidence) {
 function migrationRoot(input) { return join(input.homeRoot, '.endroit', 'migrations', 'checkout-v8') }
 function routeV9MigrationRoot(input) { return join(input.homeRoot, '.endroit', 'migrations', 'checkout-v9') }
 function routeWriterRoot(input) { return join(input.homeRoot, '.endroit', 'locks') }
+
+async function withBindingLock(input, operation) {
+  if (bindingLockDepth) return operation()
+  const layout = await bindingLayout(input)
+  await ensureBindingDirectories(layout, dirname(layout.bindingsLockPath))
+  let lock
+  try { lock = await createOwnedLock(layout.bindingsLockPath) }
+  catch (error) {
+    if (error.code === 'EEXIST') throw failure('checkout_bindings_locked', `Checkout bindings are locked at ${layout.bindingsLockPath}.`)
+    throw error
+  }
+  bindingLockDepth += 1
+  try { return await operation() } finally {
+    bindingLockDepth -= 1
+    await lock.handle.close().catch(() => {})
+    await releaseOwnedLock(layout.bindingsLockPath, lock, dirname(layout.bindingsLockPath))
+  }
+}
+
+async function ensureBindingDirectories(layout, path) {
+  await mkdir(layout.root, { recursive: true })
+  await assertDirectory(layout.root, 'checkout_bindings_path_invalid')
+  await ensureSafeDirectories(layout.root, path)
+}
 
 async function withRouteWriterLock(input, operation) {
   requireDesk(input)
@@ -2346,7 +2321,7 @@ function updateRouteMarkdown(sourceBytes, overrides) {
 }
 
 function renderRouteMarkdown(document) {
-  const keys = ['$schema', 'kind', 'id', 'owner', 'site', 'route_state', 'checkout_mode', 'revision', 'superseded_by']
+  const keys = ['$schema', 'kind', 'id', 'owner', 'site', 'route_state', 'route_purpose', 'checkout_mode', 'revision', 'superseded_by']
   const metadata = keys.filter((key) => document[key] !== undefined).map((key) => `${key}: ${JSON.stringify(document[key])}`)
   return ['---', ...metadata, '---', '', `# ${document.site} / ${document.id}`, '', `Local address: \`checkout:${document.site}/${document.id}\`.`, ''].join('\n')
 }
@@ -2354,6 +2329,7 @@ function renderRouteMarkdown(document) {
 function validateRouteV9(route, site, id) {
   if (route.$schema !== 'https://endroit.org/schema/v9/route.json' || route.kind !== 'endroit/route' || route.id !== id || route.site !== site
     || !/^desk:[a-z0-9][a-z0-9._-]{0,127}$/.test(route.owner) || !['active', 'parked', 'superseded'].includes(route.route_state)
+    || !ROUTE_PURPOSES.includes(route.route_purpose)
     || !['embedded', 'existing', 'managed-clone', 'managed-worktree', 'submodule'].includes(route.checkout_mode)) {
     throw failure('route_invalid', `Invalid Route ${site}/${id}.`)
   }
@@ -2365,11 +2341,16 @@ function validateRouteV9(route, site, id) {
   if (route.checkout_mode === 'managed-worktree' && !revision) throw failure('route_invalid', `Managed worktree Route ${site}/${id} requires a revision.`)
   if (route.checkout_mode === 'submodule' && revision) throw failure('route_invalid', `Submodule Route ${site}/${id} cannot declare a revision.`)
   if (route.route_state === 'superseded' ? !validId(route.superseded_by) || route.superseded_by === id : route.superseded_by !== undefined) throw failure('route_invalid', `Invalid lifecycle for Route ${site}/${id}.`)
-  if (Object.keys(route).some((key) => !['$schema', 'kind', 'id', 'site', 'owner', 'route_state', 'superseded_by', 'checkout_mode', 'revision'].includes(key))) throw failure('route_invalid', `Invalid Route ${site}/${id}.`)
+  if (Object.keys(route).some((key) => !['$schema', 'kind', 'id', 'site', 'owner', 'route_state', 'route_purpose', 'superseded_by', 'checkout_mode', 'revision'].includes(key))) throw failure('route_invalid', `Invalid Route ${site}/${id}.`)
 }
 
 function requireLifecycleRoute(route) {
   if (![8, 9].includes(route.schemaVersion)) throw failure('route_migration_required', `Route ${route.site}/${route.id} must be migrated before changing lifecycle.`)
+}
+
+function assertPrimaryAvailable(routes, site, exceptId = null) {
+  const primary = routes.filter((route) => route.site === site && route.id !== exceptId && route.status === 'active' && route.purpose === 'primary')
+  if (primary.length) throw failure('route_primary_exists', `${site} already has active primary Route ${primary[0].id}.`)
 }
 
 function parseCheckoutRef(value) {
@@ -2402,8 +2383,9 @@ function findDuplicateGitDirs(checkouts) {
   return duplicates
 }
 
-async function assertGitDirAvailable(input, evidence) {
+async function assertGitDirAvailable(input, evidence, exceptRef = null) {
   for (const route of await scanRouteGraph(input)) {
+    if (route.ref === exceptRef) continue
     const observed = await routeRepositoryPath(input, route).then(inspectRepository).catch(() => null)
     if (observed?.gitDir === evidence.gitDir) throw failure('checkout_duplicate_git_dir', `${route.ref} already declares this Git checkout.`)
   }
@@ -2533,6 +2515,11 @@ function requireCurrentRouteSources(input) {
   }
 }
 function required(value, label) { if (!value) throw failure('usage', `${label} is required.`, 2); return value }
+function requiredPurpose(value) {
+  try { return assertRoutePurpose(required(value, 'Route purpose')) }
+  catch (error) { throw failure(error.code ?? 'route_purpose_invalid', `${error.message} Choose ${ROUTE_PURPOSES.join(', ')}.`, 2) }
+}
+function optionalPurpose(value) { return value === undefined ? null : requiredPurpose(value) }
 function truthy(value) { return value === true || value === 'true' || value === 'yes' || value === '1' }
 function value(input) { return input === undefined ? undefined : String(input).trim() }
 function validId(input) { return /^[a-z0-9][a-z0-9._-]{0,127}$/.test(input) }

@@ -22,6 +22,7 @@
     "templates/site-map/CONVENTIONS.md",
     "templates/site-map/TESTING.md",
     "templates/site-map/CONCERNS.md",
+    "git-workplace.mjs",
     "runtime.mjs"
   ],
   "capabilities": [

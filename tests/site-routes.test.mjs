@@ -13,6 +13,7 @@ import { initDesk } from '../src/desk.mjs'
 import { parseDocument, renderDocument } from '../src/documents.mjs'
 import { removeTree } from '../src/lib/io.mjs'
 import { dispatchRuntime } from '../src/runtime.mjs'
+import { checkoutIndexDocument, workplaceGitStorage } from '../src/git-workplace.mjs'
 import { captureIo } from './helpers.mjs'
 
 const exec = promisify(execFile)
@@ -38,7 +39,8 @@ test('Site worktrees are created, classified, discovered and adopted explicitly'
 
     const created = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'new-route', '--from', 'main', '--new-branch', 'new-work', '--json'])
     assert.equal(created.head, sourceHead)
-    assert.equal(created.path, join(await realpath(home), 'checkouts', 'demo', 'new-route'))
+    assert.equal(created.path, join(await realpath(join(home, '.git')), 'endroit', 'checkouts', 'demo', 'new-route'))
+    assert.equal(await realpath(join(home, 'checkouts', 'demo', 'new-route')), created.path)
     assert.equal(await exists(join(created.path, 'dirty.txt')), false)
 
     const fromRef = await runtimeJson(home, ['checkout', 'worktree', 'demo', '--id', 'ref-route', '--from', 'main', '--new-branch', 'from-ref', '--start-point', 'starting-point'])
@@ -393,9 +395,9 @@ test('managed clone deletion reports a recoverable partial state after its destr
     assert.match(result.stderr, /Checkout recovery:/)
     assert.equal(await exists(cloned.path), false)
     assert.equal(await exists(routeDocumentPath(home, 'demo', 'partial')), false)
-    const stagedCheckout = (await readdir(join(home, 'checkouts/demo'))).find((entry) => entry.startsWith('.partial.') && entry.endsWith('.delete'))
+    const stagedCheckout = (await readdir(dirname(cloned.path))).find((entry) => entry.startsWith('.partial.') && entry.endsWith('.delete'))
     assert.ok(stagedCheckout)
-    assert.equal(await exists(join(home, 'checkouts/demo', stagedCheckout, 'README.md')), true)
+    assert.equal(await exists(join(dirname(cloned.path), stagedCheckout, 'README.md')), true)
     assert.ok((await readdir(dirname(routeDocumentPath(home, 'demo', 'partial')))).some((entry) => entry.startsWith('ROUTE.md.') && entry.endsWith('.delete')))
   } finally {
     await fixture.cleanup()
@@ -497,9 +499,12 @@ test('Sites can stay remote-only while different Desks own independent Routes', 
     await runtimeJson(home, ['checkout', 'reconcile', '--apply'])
     assert.equal(await realpath(join(home, 'checkouts/product/local')), await realpath(first))
     const index = JSON.parse(await readFile(join(home, '.endroit/checkout-index.json'), 'utf8'))
-    assert.deepEqual(Object.keys(index.desks), ['one', 'two'])
-    assert.equal(index.desks.one.links[0].target, await realpath(first))
-    assert.equal(index.desks.two.links[0].target, await realpath(second))
+    const firstBindings = JSON.parse(await readFile((await workplaceGitStorage(home, 'one')).bindingsPath, 'utf8'))
+    const secondBindings = JSON.parse(await readFile((await workplaceGitStorage(home, 'two')).bindingsPath, 'utf8'))
+    assert.equal(index.desk, 'one')
+    assert.equal(index.projections[0].target, await realpath(first))
+    assert.equal(firstBindings.bindings[0].target, await realpath(first))
+    assert.equal(secondBindings.bindings[0].target, await realpath(second))
   } finally {
     await removeTree(temporary, { force: true })
   }
@@ -532,13 +537,14 @@ test('the Checkout index reconciles reconstructible links without touching repos
     const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
     const deskId = parseDocument(await readFile(join(home, '.desk/DESK.md'), 'utf8')).metadata.id
     const stalePath = 'checkouts/demo/stale'
-    manifest.desks[deskId].links.push({
-      path: stalePath,
+    const staleManifest = checkoutIndexDocument(deskId, [...manifest.projections, {
+      site: 'demo',
+      route: 'stale',
+      address: stalePath,
       target: await realpath(repository),
-      ref: 'checkout:demo/stale',
-      digest: createHash('sha256').update(`${deskId}\0${stalePath}\0${await realpath(repository)}\0checkout:demo/stale`).digest('hex'),
-    })
-    await writeFile(manifestPath, `${JSON.stringify(manifest, null, 2)}\n`)
+      linkState: 'linked',
+    }])
+    await writeFile(manifestPath, `${JSON.stringify(staleManifest, null, 2)}\n`)
     assert.ok((await runtimeJson(home, ['doctor'])).limits.includes('checkout-index-stale'))
     await runtimeJson(home, ['checkout', 'reconcile', '--apply'])
     assert.equal((await runtimeJson(home, ['doctor'])).limits.includes('checkout-index-stale'), false)
@@ -710,12 +716,12 @@ test('Route lifecycle changes only metadata and inactive Checkouts leave implici
     }
 
     assert.equal((await runtimeJson(home, ['route', 'park', 'demo', '--id', 'main'])).status, 'parked')
-    const implicit = await runtimeJson(home, ['route', 'inspect', 'demo'])
-    assert.equal(implicit.route, 'feature--checkout-v8')
+    await runtimeFailure(home, ['route', 'inspect', 'demo'], 'route_primary_missing')
     await runtimeFailure(home, ['checkout', 'worktree', 'demo', '--id', 'inactive-source', '--from', 'main', '--new-branch', 'inactive/source'], 'route_inactive')
     assert.equal((await runtimeJson(home, ['route', 'activate', 'demo'])).route, 'main')
-    await runtimeFailure(home, ['route', 'inspect', 'demo'], 'route_ambiguous')
+    assert.equal((await runtimeJson(home, ['route', 'inspect', 'demo'])).route, 'main')
     assert.equal((await runtimeJson(home, ['route', 'supersede', 'demo', '--id', 'main', '--by', 'feature--checkout-v8'])).status, 'superseded')
+    await runtimeFailure(home, ['route', 'inspect', 'demo'], 'route_primary_missing')
     await runtimeFailure(home, ['checkout', 'delete', 'checkout:demo/feature--checkout-v8', '--approve', 'checkout:demo/feature--checkout-v8'], 'route_supersession_target')
 
     const listed = await runtimeJson(home, ['checkout', 'list', 'demo', '--all'])
@@ -1454,6 +1460,7 @@ async function git(cwd, args) {
 
 async function runtimeJson(home, args, namespace = 'site') {
   const output = captureIo()
+  args = namespace === 'site' ? withTestPurpose(args) : args
   const argv = namespace === 'site' && !args.includes('--json') ? [...args, '--json'] : args
   assert.equal(await dispatchRuntime(home, namespace, argv, output.io), 0, output.stderr())
   return JSON.parse(output.stdout())
@@ -1481,6 +1488,7 @@ async function cliResult(home, args, environment = {}) {
 }
 
 async function runtimeFailure(home, args, code) {
+  args = withTestPurpose(args)
   const output = captureIo()
   let thrown
   let exitCode
@@ -1494,6 +1502,13 @@ async function runtimeFailure(home, args, code) {
     assert.notEqual(exitCode, 0)
     assert.match(output.stderr(), new RegExp(code))
   }
+}
+
+function withTestPurpose(args) {
+  if (args[0] !== 'checkout' || !['adopt', 'clone', 'worktree'].includes(args[1]) || args.includes('--purpose')) return args
+  const idIndex = args.indexOf('--id')
+  const id = idIndex >= 0 ? args[idIndex + 1] : String(args[2]).split('/')[1]
+  return [...args, '--purpose', id === 'main' ? 'primary' : 'development']
 }
 
 async function localBranch(repository, branch) {

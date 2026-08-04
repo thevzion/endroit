@@ -28,7 +28,7 @@ test('the Sites runtime writes pathless ROUTE.md and reconstructs its Checkout l
     await git(repository, ['commit', '--quiet', '-m', 'fixture'])
 
     const input = runtimeInput(homeRoot, deskRoot, site, [])
-    const adopted = await invoke(input, ['checkout', 'adopt', 'demo/main', repository, '--json'])
+    const adopted = await invoke(input, ['checkout', 'adopt', 'demo/main', repository, '--purpose', 'primary', '--json'])
     assert.equal(adopted.ref, 'checkout:demo/main')
 
     const routePath = join(deskRoot, 'routes/demo/main/ROUTE.md')
@@ -36,6 +36,7 @@ test('the Sites runtime writes pathless ROUTE.md and reconstructs its Checkout l
     assert.match(source, /\$schema: "https:\/\/endroit\.org\/schema\/v9\/route\.json"/)
     assert.match(source, /kind: "endroit\/route"/)
     assert.match(source, /route_state: "active"/)
+    assert.match(source, /route_purpose: "primary"/)
     assert.match(source, /checkout_mode: "existing"/)
     assert.doesNotMatch(source, /(?:^|\n)path:/)
     assert.equal(source.includes(await realpath(repository)), false)
@@ -44,10 +45,13 @@ test('the Sites runtime writes pathless ROUTE.md and reconstructs its Checkout l
     assert.equal((await lstat(address)).isSymbolicLink(), true)
     assert.equal(await realpath(address), await realpath(repository))
     const indexPath = join(homeRoot, '.endroit/checkout-index.json')
-    assert.deepEqual(JSON.parse(await readFile(indexPath, 'utf8')).desks.local.links.map(({ path, target, ref }) => ({ path, target, ref })), [{
-      path: 'checkouts/demo/main',
+    assert.deepEqual(JSON.parse(await readFile(indexPath, 'utf8')).projections.map(({ address, target, linkState }) => ({ address, target, linkState })), [{
+      address: 'checkouts/demo/main',
       target: await realpath(repository),
-      ref: 'checkout:demo/main',
+      linkState: 'linked',
+    }])
+    assert.deepEqual(JSON.parse(await readFile(join(homeRoot, '.endroit/desks/local/checkout-bindings.json'), 'utf8')).bindings, [{
+      site: 'demo', route: 'main', target: await realpath(repository),
     }])
 
     await mkdir(join(repository, 'docs'))
@@ -91,7 +95,7 @@ test('the Sites runtime writes pathless ROUTE.md and reconstructs its Checkout l
     await invoke(runtimeInput(homeRoot, deskRoot, site, parkedRoutes), ['route', 'remove', 'demo', '--id', 'main', '--json'])
     await assert.rejects(lstat(address), (error) => error.code === 'ENOENT')
     await assert.rejects(lstat(routePath), (error) => error.code === 'ENOENT')
-    assert.equal(JSON.parse(await readFile(indexPath, 'utf8')).desks.local, undefined)
+    assert.deepEqual(JSON.parse(await readFile(indexPath, 'utf8')).projections, [])
     assert.equal(await realpath(unknown), await realpath(repository))
     assert.equal(await readFile(join(repository, 'README.md'), 'utf8'), '# demo\n')
   } finally {

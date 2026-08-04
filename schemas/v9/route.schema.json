@@ -3,7 +3,7 @@
   "$id": "https://endroit.org/schema/v9/route.json",
   "type": "object",
   "additionalProperties": false,
-  "required": ["$schema", "kind", "id", "site", "owner", "route_state", "checkout_mode"],
+  "required": ["$schema", "kind", "id", "site", "owner", "route_state", "route_purpose", "checkout_mode"],
   "properties": {
     "$schema": { "const": "https://endroit.org/schema/v9/route.json" },
     "kind": { "const": "endroit/route" },
@@ -11,6 +11,7 @@
     "site": { "$ref": "#/$defs/id" },
     "owner": { "type": "string", "pattern": "^desk:[a-z0-9][a-z0-9._-]{0,127}$" },
     "route_state": { "enum": ["active", "parked", "superseded"] },
+    "route_purpose": { "enum": ["primary", "development", "integration", "release", "dogfood", "recovery", "experiment"] },
     "superseded_by": { "$ref": "#/$defs/id" },
     "revision": { "$ref": "#/$defs/revision" },
     "checkout_mode": { "enum": ["embedded", "existing", "managed-clone", "managed-worktree", "submodule"] }

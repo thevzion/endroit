@@ -5,12 +5,35 @@ import { join } from 'node:path'
 import test from 'node:test'
 import { API, validateRouteDocument } from '../src/contracts.mjs'
 import { createHome } from '../src/create.mjs'
+import { checkoutLinkState, proposeRoutePurposes } from '../src/git-workplace.mjs'
 import { removeTree } from '../src/lib/io.mjs'
 import { loadRoutes, parseRouteMarkdown, resolveCheckout, routeV8Document, routeV9Document, routeV9Markdown } from '../src/routes.mjs'
 import { publicPlan, resolveHome } from '../src/resolved.mjs'
 import { writeRoute, writeSite } from '../src/sites.mjs'
 
 const root = '/tmp/endroit-checkout-contract'
+
+test('Route purpose proposals are exact and relational self targets need no link', () => {
+  const routes = [
+    ['main', 'existing', 'primary'],
+    ['embedded-anything', 'embedded', 'primary'],
+    ['work--slice', 'existing', 'development'],
+    ['release--candidate', 'existing', 'release'],
+    ['dogfood--home', 'existing', 'dogfood'],
+    ['home-first-reset', 'existing', 'recovery'],
+    ['recovery--safe', 'existing', 'recovery'],
+    ['branch--preserve--old', 'existing', 'recovery'],
+    ['integrated-main', 'existing', 'integration'],
+    ['qualification', 'existing', 'integration'],
+    ['managed-main', 'existing', 'integration'],
+    ['site-hard-reset', 'existing', 'integration'],
+  ].map(([id, mode, expected]) => ({ site: id, id, mode, status: 'active', expected }))
+  const purposes = proposeRoutePurposes(routes)
+  for (const route of routes) assert.equal(purposes.get(`${route.site}/${route.id}`), route.expected)
+  assert.throws(() => proposeRoutePurposes([{ site: 'demo', id: 'custom', mode: 'existing', status: 'active' }]), (error) => error.code === 'route_purpose_mapping_required')
+  assert.equal(checkoutLinkState('/work/home', '/work/home/checkouts/self/main', '/work/home'), 'relational')
+  assert.equal(checkoutLinkState('/work/home', '/work/home/checkouts/self/main', '/work'), 'relational')
+})
 
 test('Route v8 accepts exactly five Checkout modes and derives contextual paths', async () => {
   const modes = ['embedded', 'existing', 'managed-clone', 'managed-worktree', 'submodule']
@@ -142,10 +165,12 @@ test('Route v9 is a pathless human-owned declaration with one derived Checkout a
     id: 'main',
     site: 'demo',
     owner: 'desk:alexis',
+    purpose: 'primary',
     mode: 'existing',
   })
   assert.equal(document.kind, 'endroit/route')
   assert.equal(document.route_state, 'active')
+  assert.equal(document.route_purpose, 'primary')
   assert.equal(document.checkout_mode, 'existing')
   assert.equal('path' in document, false)
   assert.equal(JSON.stringify(document).includes('/tmp/'), false)
@@ -169,7 +194,7 @@ test('the Core loader reads v9 ROUTE.md beside legacy declarations and rejects s
   try {
     await mkdir(join(routeRoot, 'current'), { recursive: true })
     await writeFile(join(routeRoot, 'current', 'ROUTE.md'), await routeV9Markdown({
-      id: 'current', site: 'demo', owner: 'desk:local', mode: 'managed-clone',
+      id: 'current', site: 'demo', owner: 'desk:local', purpose: 'primary', mode: 'managed-clone',
     }))
     await writeFile(join(routeRoot, 'legacy.json'), `${JSON.stringify(await routeV8Document({
       id: 'legacy', site: 'demo', checkout: { mode: 'existing', path: '/tmp/legacy' },

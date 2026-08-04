@@ -4,10 +4,12 @@ import { API, validateRouteDocument } from './contracts.mjs'
 import { parseDocument, renderDocument, validateDocumentV9, V9_API } from './documents.mjs'
 import { EndroitError } from './lib/errors.mjs'
 import { assertId } from './lib/io.mjs'
+import { assertRoutePurpose, ROUTE_PURPOSES } from './git-workplace.mjs'
 
 export const ROUTE_V9 = V9_API.route
 export const ROUTE_STATUSES = Object.freeze(['active', 'parked', 'superseded'])
 export const CHECKOUT_MODES = Object.freeze(['embedded', 'existing', 'managed-clone', 'managed-worktree', 'submodule'])
+export { ROUTE_PURPOSES }
 
 export function managedCheckoutPath(homeRoot, site, route) {
   return join(homeRoot, 'checkouts', assertId(site, 'Site id'), assertId(route, 'Route id'))
@@ -52,6 +54,10 @@ export async function loadRoutes(homeRoot, deskRoot, sites = [], options = {}) {
   for (const route of values.filter((entry) => entry.declared.status === 'superseded')) {
     const replacement = values.find((entry) => entry.site === route.site && entry.id === route.declared.supersededBy)
     if (!replacement) throw new EndroitError('route_supersession_invalid', `Route ${route.site}/${route.id} supersedes to a missing Route ${route.declared.supersededBy}.`)
+  }
+  for (const site of declaredSites) {
+    const primary = values.filter((route) => route.site === site && route.declared.status === 'active' && route.declared.purpose === 'primary')
+    if (primary.length > 1) throw new EndroitError('route_primary_ambiguous', `${site} has multiple active primary Routes.`)
   }
   return values.sort((left, right) => left.site.localeCompare(right.site) || left.id.localeCompare(right.id))
 }
@@ -98,6 +104,7 @@ export async function routeV9Document(route) {
     site: assertId(route.site, 'Site id'),
     owner: route.owner,
     route_state: route.status ?? route.route_state ?? 'active',
+    route_purpose: assertRoutePurpose(route.purpose ?? route.route_purpose),
     ...(route.supersededBy ? { superseded_by: route.supersededBy } : {}),
     checkout_mode: route.checkout?.mode ?? route.checkout_mode ?? route.mode,
     ...(route.revision ? { revision: { ...route.revision } } : {}),
@@ -159,6 +166,7 @@ function declaredV8(document) {
 function declaredV9(document) {
   return {
     status: document.route_state,
+    purpose: document.route_purpose,
     ...(document.superseded_by ? { supersededBy: document.superseded_by } : {}),
     checkout: { mode: document.checkout_mode },
     ...(document.revision ? { revision: { ...document.revision } } : {}),
