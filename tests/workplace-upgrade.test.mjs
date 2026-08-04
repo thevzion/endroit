@@ -9,11 +9,12 @@ import { createHome } from '../src/create.mjs'
 import { buildHome } from '../src/build.mjs'
 import { runCli } from '../src/cli.mjs'
 import { parseDocument } from '../src/documents.mjs'
+import { addEquipment } from '../src/equipment.mjs'
 import { workplaceGitStorage } from '../src/git-workplace.mjs'
 import { removeTree } from '../src/lib/io.mjs'
 import { resolveHome } from '../src/resolved.mjs'
 import { applyWorkplaceUpgrade, planWorkplaceUpgrade, rollbackWorkplaceUpgrade } from '../src/workplace-upgrade.mjs'
-import { captureIo } from './helpers.mjs'
+import { captureIo, equipment, writeEquipment } from './helpers.mjs'
 
 const exec = promisify(execFile)
 const TARGET = {
@@ -153,6 +154,7 @@ test('legacy Workplace upgrade is deterministic, owner-correct, CLI-accessible a
     assert.ok(first.writes.some((entry) => entry.kind === 'member-v9'))
     assert.ok(first.equipment.length > 0)
     assert.equal(first.equipment.some((entry) => entry.id === 'endroit/release'), false)
+    assert.deepEqual(first.retired, [{ id: 'endroit/retired', version: '0.9.0-alpha.0', retained: ['LOCAL.md'] }])
 
     const checkIo = captureIo()
     assert.equal(await runCli([
@@ -211,6 +213,9 @@ test('legacy Workplace upgrade is deterministic, owner-correct, CLI-accessible a
     }
     assert.deepEqual(await readFile(fixture.studioMarker), fixture.studioBytes)
     assert.equal(await pathExists(join(fixture.home, 'equipment', 'endroit', 'release')), false)
+    assert.equal(await pathExists(fixture.retiredManifest), false)
+    assert.equal(await pathExists(fixture.retiredCapability), false)
+    assert.deepEqual(await readFile(fixture.retiredLocal), fixture.retiredLocalBytes)
     await buildHome(fixture.home, { check: true })
 
     const rollbackIo = captureIo()
@@ -280,6 +285,12 @@ async function legacyFixture() {
   const temporary = await mkdtemp(join(tmpdir(), 'endroit-legacy-workplace-upgrade-'))
   const home = join(temporary, 'home')
   await createHome(home)
+  const retiredSource = join(temporary, 'retired-source')
+  await writeEquipment(retiredSource, equipment({
+    name: 'endroit/retired',
+    version: '0.9.0-alpha.0',
+  }), { 'capabilities/review.md': '# Retired capability\n' })
+  await addEquipment(home, [join(retiredSource, 'equipment.json')])
   const workplacePath = join(home, 'WORKPLACE.md')
   const homePath = join(home, 'HOME.md')
   const declarationPath = join(home, 'endroit.json')
@@ -324,6 +335,11 @@ async function legacyFixture() {
   const studioBytes = Buffer.from('Studio-owned and untouched.\n')
   await mkdir(dirname(studioMarker), { recursive: true })
   await writeFile(studioMarker, studioBytes)
+  const retiredManifest = join(home, 'equipment', 'endroit', 'retired', 'equipment.json')
+  const retiredCapability = join(home, 'equipment', 'endroit', 'retired', 'capabilities', 'review.md')
+  const retiredLocal = join(home, 'equipment', 'endroit', 'retired', 'LOCAL.md')
+  const retiredLocalBytes = Buffer.from('Unknown local file retained.\n')
+  await writeFile(retiredLocal, retiredLocalBytes)
   await rm(join(home, '.endroit', 'build.json'), { force: true })
   await exec('git', ['add', '--all'], { cwd: home })
   await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'fixture: legacy Workplace'], { cwd: home })
@@ -335,6 +351,9 @@ async function legacyFixture() {
     memberPath,
     studioMarker,
     join(home, 'equipment', 'endroit', 'workplace', 'equipment.json'),
+    retiredManifest,
+    retiredCapability,
+    retiredLocal,
     join(home, 'AGENTS.md'),
     join(home, 'CLAUDE.md'),
     join(home, 'endroit.mjs'),
@@ -349,6 +368,10 @@ async function legacyFixture() {
     home,
     studioMarker,
     studioBytes,
+    retiredManifest,
+    retiredCapability,
+    retiredLocal,
+    retiredLocalBytes,
     before,
     cleanup: () => removeTree(temporary, { force: true }),
   }

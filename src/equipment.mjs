@@ -245,7 +245,7 @@ export async function planFirstPartyEquipmentUpgrade(root, options = {}) {
     throw new EndroitError('workplace_upgrade_equipment_override', `First-party Desk overrides must be promoted or removed before upgrade: ${deskOverrides.map((entry) => entry.id).join(', ')}.`)
   }
   const installedFirstParty = (await installedEquipment(root, { scope: 'home' })).filter((entry) => entry.id.startsWith('endroit/'))
-  if (!installedFirstParty.length) return { writes: [], deletes: [], equipment: [] }
+  if (!installedFirstParty.length) return { writes: [], deletes: [], equipment: [], retired: [] }
   const sourceCommit = String(options.sourceCommit ?? '')
   if (!/^(?:[a-f0-9]{40}|[a-f0-9]{64})$/i.test(sourceCommit)) {
     throw new EndroitError('workplace_upgrade_target_source_required', 'A target source commit is required to synchronize first-party Equipment.')
@@ -253,13 +253,25 @@ export async function planFirstPartyEquipmentUpgrade(root, options = {}) {
   const writes = []
   const deletes = []
   const equipment = []
+  const retired = []
   for (const installed of installedFirstParty) {
     await requireValid(installed)
     const status = await equipmentStatus(installed)
     if (status.state !== 'clean') {
       throw new EndroitError('workplace_upgrade_equipment_customized', `${installed.id} has customized, missing or invalid source-owned files.`, { details: status })
     }
-    const upstream = await resolveEquipment(root, `@endroit/${installed.id.split('/').at(-1)}`)
+    const name = installed.id.split('/').at(-1)
+    if (!await exists(join(builtinRoot, name, 'equipment.json'))) {
+      const owned = new Set(['equipment.json', ...Object.keys(installed.manifest.origin.baseDigests)])
+      const retained = (await equipmentFiles(installed.root)).filter((path) => !owned.has(path))
+      for (const path of installed.manifest.origin.baseDigests ? Object.keys(installed.manifest.origin.baseDigests) : []) {
+        deletes.push({ path: join(installed.root, path), kind: 'equipment-retired-file' })
+      }
+      deletes.push({ path: installed.path, kind: 'equipment-retired-manifest' })
+      retired.push({ id: installed.id, version: installed.manifest.version, retained })
+      continue
+    }
+    const upstream = await resolveEquipment(root, `@endroit/${name}`)
     assertSameEquipment(installed, upstream)
     if (options.targetVersion && upstream.manifest.version !== options.targetVersion) {
       throw new EndroitError('workplace_upgrade_target_version_mismatch', `${installed.id} is ${upstream.manifest.version}, expected ${options.targetVersion}.`)
@@ -273,7 +285,17 @@ export async function planFirstPartyEquipmentUpgrade(root, options = {}) {
     }
     equipment.push({ id: installed.id, version: target.manifest.version, requestedRef: sourceCommit, resolvedCommit: sourceCommit })
   }
-  return { writes, deletes, equipment }
+  return { writes, deletes, equipment, retired }
+}
+
+async function equipmentFiles(root, current = root) {
+  const files = []
+  for (const entry of await readdir(current, { withFileTypes: true })) {
+    const path = join(current, entry.name)
+    if (entry.isDirectory() && !entry.isSymbolicLink()) files.push(...await equipmentFiles(root, path))
+    else files.push(relative(root, path))
+  }
+  return files.sort()
 }
 
 export async function removeEquipment(root, selector, options = {}) {
