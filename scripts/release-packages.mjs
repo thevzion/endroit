@@ -3,7 +3,7 @@ import { execFile } from 'node:child_process'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { join, resolve } from 'node:path'
 import { promisify } from 'node:util'
-import { collectVersionedSchemas } from './lib/release-schemas.mjs'
+import { collectVersionedSchemas, collectWorkSchemas } from './lib/release-schemas.mjs'
 
 const exec = promisify(execFile)
 const projectRoot = new URL('../', import.meta.url).pathname
@@ -12,6 +12,8 @@ const sources = ['.']
 const packages = []
 const schemaNames = ['home', 'desk', 'member', 'equipment', 'site', 'route', 'runtime', 'artifact']
 const schemaV8Names = ['route']
+const schemaV9Names = ['document', 'profile', 'workplace', 'member', 'desk', 'room', 'site', 'route', 'equipment', 'artifact']
+const workSchemaNames = ['v1alpha1', 'v1alpha2']
 const legacySchemaNames = ['home', 'desk', 'asset', 'runtime', 'artifact']
 
 const { stdout: status } = await exec('git', ['status', '--porcelain', '--untracked-files=all'], { cwd: projectRoot })
@@ -42,6 +44,8 @@ for (const source of sources) {
 const { stdout: commit } = await exec('git', ['rev-parse', 'HEAD'], { cwd: projectRoot })
 const schemas = await collectVersionedSchemas(projectRoot, 'v7', schemaNames)
 const schemasV8 = await collectVersionedSchemas(projectRoot, 'v8', schemaV8Names)
+const schemasV9 = await collectVersionedSchemas(projectRoot, 'v9', schemaV9Names)
+const schemasWork = await collectWorkSchemas(projectRoot, workSchemaNames)
 const legacySchemas = []
 for (const name of legacySchemaNames) {
   const source = `schemas/v6/${name}.schema.json`
@@ -56,6 +60,8 @@ const manifest = {
   packages,
   schemas,
   schemasV8,
+  schemasV9,
+  schemasWork,
   legacySchemas,
 }
 await writeFile(join(outputRoot, 'manifest.json'), `${JSON.stringify(manifest, null, 2)}\n`)

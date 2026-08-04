@@ -15,7 +15,7 @@ Resolve one `endroit/work:item` from its owned `WORK.md` contract.
    `closure-ready`.
 
 Each typed fragment is an addressable `##` section whose first block is fenced
-as `endroit` and declares `fragment` plus `id`. Its prose owns the human
+as `endroit` and declares `kind` plus `id`. Its prose owns the human
 substance; its block owns only the queryable fields. Do not persist an agent
 identity, transcript, hidden reasoning, trust score or implicit lifecycle
 transition in the Work Item.

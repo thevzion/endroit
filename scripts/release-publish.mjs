@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path'
 import { promisify } from 'node:util'
 
 import { comparePackedTrees } from './lib/pack.mjs'
-import { verifyVersionedSchemas } from './lib/release-schemas.mjs'
+import { verifyVersionedSchemas, verifyWorkSchemas } from './lib/release-schemas.mjs'
 
 const exec = promisify(execFile)
 const projectRoot = new URL('../', import.meta.url).pathname
@@ -17,6 +17,8 @@ const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
 const expectedOrder = ['@endroit/cli']
 const expectedSchemas = ['home', 'desk', 'member', 'equipment', 'site', 'route', 'runtime', 'artifact']
 const expectedSchemasV8 = ['route']
+const expectedSchemasV9 = ['document', 'profile', 'workplace', 'member', 'desk', 'room', 'site', 'route', 'equipment', 'artifact']
+const expectedSchemasWork = ['v1alpha1', 'v1alpha2']
 const expectedLegacySchemas = ['home', 'desk', 'asset', 'runtime', 'artifact']
 
 if (JSON.stringify(manifest.packages.map((entry) => entry.name)) !== JSON.stringify(expectedOrder)) {
@@ -26,6 +28,8 @@ const { stdout: commit } = await exec('git', ['rev-parse', 'HEAD'], { cwd: proje
 if (manifest.commit !== commit.trim()) throw new Error(`Release manifest belongs to ${manifest.commit}, not ${commit.trim()}.`)
 await verifyVersionedSchemas(manifest.schemas, 'v7', expectedSchemas, verifyPublicSchema)
 await verifyVersionedSchemas(manifest.schemasV8, 'v8', expectedSchemasV8, verifyPublicSchema)
+await verifyVersionedSchemas(manifest.schemasV9, 'v9', expectedSchemasV9, verifyPublicSchema)
+await verifyWorkSchemas(manifest.schemasWork, expectedSchemasWork, verifyPublicSchema)
 await verifyLegacySchemas(manifest.legacySchemas)
 
 for (const entry of manifest.packages) {

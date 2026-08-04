@@ -119,11 +119,13 @@ delivery.
 ## Compatibility
 
 Endroit 0.10 reads the frozen 0.7 and 0.8 source contracts through one legacy
-adapter and writes only the 0.10 representation. New and legacy declarations
-for the same responsibility are ambiguous; there is no dual-write. Mutating a
-legacy source requires the explicit migration operation. Legacy aliases and
-readers are scheduled for removal in Endroit 0.11 after reported legacy usage
-reaches zero.
+adapter. Native writers produce v9 Workplace, Member, Desk and Route Documents;
+Work Resolution writes `WORK.md` v1alpha2. Bundled Room, Site and most Equipment
+and Artifact operations retain their compatible source shapes in this alpha.
+Only Route has an automated v7→v8→v9 migration. New and legacy declarations for
+the same responsibility are ambiguous; there is no dual-write. Legacy aliases
+and readers may be removed only after their remaining owners have explicit,
+qualified migrations.
 
 ## Limits
 

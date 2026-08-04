@@ -44,7 +44,7 @@ use “home” only for an accueil view.
 
 ## Source model
 
-Human-owned durable truth is Markdown:
+Human-owned durable truth uses Markdown where the 0.10 writer is available:
 
 - frontmatter carries identity, owner, contract and resolution metadata;
 - the Markdown body carries human context and substance;
@@ -55,9 +55,9 @@ Human-owned durable truth is Markdown:
   validation.
 
 JSON is reserved for schemas, machine manifests, projection and migration
-receipts, locks, caches, CLI/API responses and externally imposed formats.
-Endroit does not keep canonical JSON beside a Markdown summary of the same
-responsibility.
+receipts, locks, caches, CLI/API responses, externally imposed formats and
+the explicitly documented 0.10 compatibility surfaces. Endroit never writes a
+new JSON and Markdown source for the same responsibility.
 
 | Document role | Canonical | Form |
 | --- | --- | --- |
@@ -199,14 +199,23 @@ observed Site effect. Neither implies completion, currentness or archival.
 ## Compatibility
 
 0.10 reads frozen v7/v8 sources only when no v9 source claims the same
-responsibility. It writes v9 and never dual-writes. Route migration supports an
-effect-free preview, a local journaled apply and byte/mode-exact rollback
-without Git effects.
+responsibility. Its native writers currently cover Workplace, Member, Desk and
+Route Documents plus `WORK.md` v1alpha2. Bundled Room, Site and most Equipment
+and Artifact operations retain their compatible source shapes in this alpha;
+they do not have a general v9 migration command. Endroit never dual-writes.
 
+Route migration supports an effect-free preview, a local journaled apply and
+byte/mode-exact rollback without Git effects. There is no supported in-place
+whole-Workplace migration in this candidate.
+
+- [Documentation map](docs/README.md)
+- [Core concepts](docs/concepts.md)
 - [0.10 architecture](docs/architecture.md)
 - [CLI and file reference](docs/reference.md)
 - [Lifecycles](docs/lifecycles.md)
+- [0.9 → 0.10 compatibility and migration](docs/migration-0.10.md)
 - [Route v8 → v9 migration](docs/migration-route-v9.md)
+- [Work Resolution](docs/work-resolution.md)
 - [Provider evidence](docs/providers.md)
 - [Endroit Profile](PROFILE.md)
 

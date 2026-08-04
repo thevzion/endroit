@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 import { execFileSync } from 'node:child_process'
 import { readFile, readdir } from 'node:fs/promises'
-import { join, relative } from 'node:path'
+import { dirname, join, relative, resolve } from 'node:path'
 import { compileSchemas, compileSchemasV9, validateDocument, validateDocumentV9 } from '../src/contracts.mjs'
 import { readDocument } from '../src/documents.mjs'
 
@@ -94,6 +94,9 @@ assert.match(releaseWorkflow, /smoke-next:/)
 const installDocument = await readFile(join(root, 'INSTALL.md'), 'utf8')
 assert.match(installDocument, /@endroit\/cli@0\.10\.0-alpha\.0/)
 assert.match(installDocument, /The agent guides\. The CLI applies\. The human approves\./)
+const workResolveCapability = await readFile(join(root, 'equipment/endroit/work/capabilities/resolve.md'), 'utf8')
+assert.match(workResolveCapability, /declares `kind` plus `id`/)
+assert.doesNotMatch(workResolveCapability, /declares `fragment` plus `id`/)
 await validateDocumentV9((await readDocument(join(root, 'PROFILE.md'))).metadata, 'profile')
 assert.equal(
   await readFile(join(root, 'ADOPT.md'), 'utf8'),
@@ -106,6 +109,23 @@ assert.equal(
   'the public Work schema projection must be byte-identical to its Equipment source',
 )
 const all = await files(root)
+const allPaths = new Set(all.map((path) => resolve(path)))
+for (const path of all.filter((candidate) => candidate.endsWith('.md'))) {
+  const body = await readFile(path, 'utf8')
+  for (const match of body.matchAll(/!?\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g)) {
+    const href = match[1]
+    if (/^[a-z][a-z0-9+.-]*:/i.test(href)) continue
+    const separator = href.indexOf('#')
+    const resource = decodeURIComponent(separator < 0 ? href : href.slice(0, separator))
+    const fragment = separator < 0 ? '' : decodeURIComponent(href.slice(separator + 1))
+    const target = resolve(resource ? dirname(path) : path, resource || '.')
+    assert.ok(allPaths.has(target), `${relative(root, path)} links to missing ${href}`)
+    if (fragment && target.endsWith('.md')) {
+      const anchors = markdownAnchors(await readFile(target, 'utf8'))
+      assert.ok(anchors.has(fragment), `${relative(root, path)} links to missing anchor ${href}`)
+    }
+  }
+}
 assert.equal(all.some((path) => path.endsWith('endroit.lock.json')), false)
 for (const path of all.filter((path) => path.endsWith('.mjs'))) execFileSync(process.execPath, ['--check', path], { stdio: 'pipe' })
 for (const path of ['src/build.mjs', 'src/runtime.mjs', 'src/resolved.mjs']) {
@@ -121,3 +141,20 @@ for (const path of all) {
   }
 }
 console.log(`check passed (${all.length} files)`)
+
+function markdownAnchors(body) {
+  const anchors = new Set()
+  const counts = new Map()
+  for (const match of body.matchAll(/^#{1,6}\s+(.+?)(?:\s+#+)?\s*$/gm)) {
+    const base = match[1]
+      .replace(/<[^>]+>/g, '')
+      .replace(/[`*_~]/g, '')
+      .toLowerCase()
+      .replace(/[^\p{L}\p{N} _-]/gu, '')
+      .replace(/ /g, '-')
+    const count = counts.get(base) ?? 0
+    anchors.add(count ? `${base}-${count}` : base)
+    counts.set(base, count + 1)
+  }
+  return anchors
+}

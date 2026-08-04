@@ -59,6 +59,14 @@ One AJV registry validates v9 Documents, Work contracts and legacy adapter
 inputs. Public source/schema fields use `snake_case`. Historical camelCase
 exists only inside the compatibility adapter or internal normalized shape.
 
+Contract availability is broader than writer availability. The 0.10 candidate
+writes v9 Workplace, Member, Desk and Route Documents. It validates the full v9
+schema family as a product contract, but bundled Room and Site writers and most
+Equipment and Artifact owners still use their compatible source shapes. A
+schema existing in the registry is not evidence that an in-place migration or
+writer exists. The exact matrix lives in the
+[reference](reference.md#source-format-support).
+
 A Markdown section may contain one first `endroit` fenced block. The block
 types the Fragment; its substance runs to the next heading of equal or higher
 level. Fragments inherit owner and lifecycle. Independent content is Material;
@@ -133,7 +141,7 @@ enumerated only through the common Git directory of known Site repositories.
 
 ## Compatibility and migration
 
-0.10 uses `read_old, write_new`:
+0.10 uses `read_old, write_new` only where a native v9 writer exists:
 
 - v7/v8 sources are accepted only through the legacy adapter;
 - v9 plus legacy for one identity is `ambiguous_sources`;
@@ -144,8 +152,11 @@ enumerated only through the common Git directory of known Site repositories.
 - rollback restores source bytes and mode exactly;
 - migration runs no Git mutation.
 
-Compatibility aliases and readers are scheduled for removal in 0.11 after
-legacy usage reaches zero.
+There is no general 0.9→0.10 mutation. Room, Site, most Equipment and Artifact,
+and `WORK.json` sources remain read-only or owner-managed compatibility
+surfaces until an explicit migration is implemented and qualified. Compatibility
+aliases and readers are removable only after that condition and zero observed
+legacy usage.
 
 ## Documentation delivery
 

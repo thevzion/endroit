@@ -56,7 +56,7 @@ release or another external delivery effect.
 ## Runtime support
 
 Endroit qualifies runtimes through evidence, not a compatibility claim. Check
-the [provider evidence and qualification work](ROADMAP.md#provider-evidence), then
+the [provider evidence and qualification work](docs/providers.md), then
 open a
 [Runtime support request](https://github.com/thevzion/endroit/issues/new?template=runtime-support.yml)
 before implementation.

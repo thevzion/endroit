@@ -3,7 +3,12 @@ import { test } from 'node:test'
 import { gzipSync } from 'node:zlib'
 
 import { comparePackedTrees } from '../scripts/lib/pack.mjs'
-import { collectVersionedSchemas, verifyVersionedSchemas } from '../scripts/lib/release-schemas.mjs'
+import {
+  collectVersionedSchemas,
+  collectWorkSchemas,
+  verifyVersionedSchemas,
+  verifyWorkSchemas,
+} from '../scripts/lib/release-schemas.mjs'
 
 const root = new URL('../', import.meta.url).pathname
 
@@ -16,20 +21,29 @@ test('release verification accepts registry recompression but rejects changed or
   assert.throws(() => comparePackedTrees(tarball(files), tarball([{ ...files[0], type: '2' }])), /Unsupported package tar entry type/)
 })
 
-test('release qualification preserves v7 gates and adds the public Route v8 contract', async () => {
+test('release qualification preserves frozen contracts and gates every current public schema', async () => {
   const v7Names = ['home', 'desk', 'member', 'equipment', 'site', 'route', 'runtime', 'artifact']
+  const v9Names = ['document', 'profile', 'workplace', 'member', 'desk', 'room', 'site', 'route', 'equipment', 'artifact']
+  const workNames = ['v1alpha1', 'v1alpha2']
   const schemas = await collectVersionedSchemas(root, 'v7', v7Names)
   const schemasV8 = await collectVersionedSchemas(root, 'v8', ['route'])
+  const schemasV9 = await collectVersionedSchemas(root, 'v9', v9Names)
+  const schemasWork = await collectWorkSchemas(root, workNames)
   assert.equal(schemas.find((entry) => entry.name === 'runtime').sha256, '7f95cf78217d0a94219cb0d9dd6f0b952fb854ac95c8e91ec1dd8367830e8799')
   assert.equal(schemasV8[0].url, 'https://endroit.org/schema/v8/route.json')
+  assert.equal(schemasV9.find((entry) => entry.name === 'workplace').url, 'https://endroit.org/schema/v9/workplace.json')
+  assert.equal(schemasWork.at(-1).url, 'https://endroit.org/schema/work/v1alpha2.json')
 
   const verified = []
   const verify = async (entry) => verified.push(entry.url)
   await verifyVersionedSchemas(schemas, 'v7', v7Names, verify)
   await verifyVersionedSchemas(schemasV8, 'v8', ['route'], verify)
-  assert.equal(verified.at(-1), 'https://endroit.org/schema/v8/route.json')
+  await verifyVersionedSchemas(schemasV9, 'v9', v9Names, verify)
+  await verifyWorkSchemas(schemasWork, workNames, verify)
+  assert.equal(verified.at(-1), 'https://endroit.org/schema/work/v1alpha2.json')
   await assert.rejects(() => verifyVersionedSchemas([], 'v8', ['route'], verify), /Release v8 schemas must be route/)
   await assert.rejects(() => verifyVersionedSchemas([{ ...schemasV8[0], url: 'https://endroit.org/schema/v7/route.json' }], 'v8', ['route'], verify), /Route schema URL must be https:\/\/endroit\.org\/schema\/v8\/route\.json/i)
+  await assert.rejects(() => verifyWorkSchemas([], workNames, verify), /Release Work schemas must be v1alpha1, v1alpha2/)
 })
 
 function tarball(entries, level = 6) {

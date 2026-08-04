@@ -35,8 +35,7 @@
   },
   "files": [
     "bin/",
-    "docs/reference.md",
-    "docs/providers.md",
+    "docs/",
     "equipment/endroit/onboarding/",
     "equipment/endroit/planning/",
     "equipment/endroit/publishing/",
@@ -58,8 +57,9 @@
     "PROFILE.md",
     "ADOPT.md",
     "INSTALL.md",
-    "docs/migration-route-v8.md",
-    "docs/migration-route-v9.md",
+    "CHANGELOG.md",
+    "ROADMAP.md",
+    "SECURITY.md",
     "LICENSE",
     "README.md"
   ],

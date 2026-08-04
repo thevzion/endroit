@@ -15,6 +15,26 @@ It does not imply registry publication.
 | Legacy read window | v7/v8 through 0.10 |
 | Legacy removal target | 0.11 |
 
+## Source format support
+
+The schema registry describes valid contracts. The writer column describes
+what this candidate can actually create or migrate; do not infer writer support
+from the presence of a schema file.
+
+| Responsibility | Current source | 0.10 writer or migration |
+| --- | --- | --- |
+| Workplace | v9 `WORKPLACE.md`; legacy `endroit.json` readable | create/init writes v9; no in-place root migration |
+| Member | v9 `MEMBER.md`; compatible legacy readable | create writes v9; no bulk migration |
+| Desk | v9 `DESK.md`; compatible legacy readable | init writes v9; no bulk migration |
+| Route | v7/v8 JSON or v9 `ROUTE.md` | writes v9; journaled v7→v8→v9 migration |
+| Work | v1alpha2 `WORK.md`; v1alpha1 `WORK.json` readable | new Work uses v1alpha2; no automatic Work migration |
+| Room | compatible Room Markdown | bundled Room writer remains compatible; v9 schema is contract-only |
+| Site | compatible Site Markdown | bundled Site writer remains compatible; v9 schema is contract-only |
+| Equipment | mostly v7 JSON; Work Equipment uses v9 | owner-managed; no bulk migration |
+| Artifact | compatible owner-specific Markdown | owner-managed; no general v9 migration |
+
+See [Upgrade from 0.9 to 0.10](migration-0.10.md) for the safe boundary.
+
 ## Root declaration
 
 `WORKPLACE.md` must be a regular, non-symlink UTF-8 file.

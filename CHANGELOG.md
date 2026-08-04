@@ -2,6 +2,9 @@
 
 ## 0.10.0-alpha.0
 
+Detailed scope and compatibility limits are recorded in the
+[0.10.0-alpha.0 release candidate notes](docs/releases/0.10.0-alpha.0.md).
+
 - Replace the root `endroit.json + HOME.md` contract with human-owned
   `WORKPLACE.md` and v9 Documents.
 - Add deterministic `ResolvedWorkplace` revisions, fixed provider budgets and
