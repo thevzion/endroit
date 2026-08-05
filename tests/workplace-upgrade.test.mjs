@@ -161,6 +161,9 @@ test('workplace upgrade preserves a managed Checkout from the primary Home in a 
       { site: 'demo', route: 'recovery--legacy-local', target: await realpath(existingTarget) },
       { site: 'demo', route: 'work--slice', target: await realpath(target) },
     ])
+    const primaryAfterDogfood = await planWorkplaceUpgrade(home, TARGET)
+    assert.equal(primaryAfterDogfood.writes.some((entry) => entry.kind === 'checkout-bindings'), false)
+    assert.equal(primaryAfterDogfood.planDigest, plan.planDigest)
   } finally {
     await removeTree(temporary, { force: true })
   }
