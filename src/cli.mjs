@@ -84,7 +84,8 @@ async function workplaceUpgradeRoute(root, flags) {
       await resolveHome(root)
       await buildHome(root, { adoptTracked: true })
       const doctor = await doctorHome(root)
-      return { status: doctor.status === 'ready' ? 'ready' : 'failed', doctor }
+      const blocking = doctor.limits.filter((limit) => !limit.startsWith('runtime-pending:'))
+      return { status: blocking.length ? 'failed' : 'ready', doctor }
     },
   })
 }

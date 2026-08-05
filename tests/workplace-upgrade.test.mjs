@@ -367,6 +367,19 @@ async function legacyFixture() {
   const retiredLocal = join(home, 'equipment', 'endroit', 'retired', 'LOCAL.md')
   const retiredLocalBytes = Buffer.from('Unknown local file retained.\n')
   await writeFile(retiredLocal, retiredLocalBytes)
+  const studioSource = join(temporary, 'studio-delivery-source')
+  await addEquipment(home, [await writeEquipment(studioSource, equipment({
+    name: 'studio/delivery',
+    files: ['runtime.mjs'],
+    capabilities: undefined,
+    skills: undefined,
+    commands: undefined,
+    runtime: {
+      namespace: 'delivery',
+      entry: 'runtime.mjs',
+      commands: [{ name: 'status', description: 'Inspect delivery state.' }],
+    },
+  }), { 'runtime.mjs': 'process.stdout.write("{}")\n' })])
   await rm(join(home, '.endroit', 'build.json'), { force: true })
   await exec('git', ['add', '--all'], { cwd: home })
   await exec('git', ['-c', 'user.name=Test', '-c', 'user.email=test@example.com', 'commit', '--quiet', '-m', 'fixture: legacy Workplace'], { cwd: home })
