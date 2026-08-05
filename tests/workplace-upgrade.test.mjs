@@ -145,7 +145,9 @@ test('workplace upgrade preserves a managed Checkout from the primary Home in a 
     await exec('git', ['commit', '--quiet', '-m', 'add managed route'], { cwd: home })
     await exec('git', ['worktree', 'add', '--quiet', '-b', 'codex/dogfood', dogfood], { cwd: home })
 
+    const primaryPlan = await planWorkplaceUpgrade(home, TARGET)
     const plan = await planWorkplaceUpgrade(dogfood, TARGET)
+    assert.equal(plan.planDigest, primaryPlan.planDigest)
     assert.equal(plan.homeGit.primaryRoot, await realpath(home))
     const upgraded = await applyWorkplaceUpgrade(dogfood, {
       ...TARGET,

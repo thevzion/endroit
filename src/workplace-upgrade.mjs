@@ -492,6 +492,10 @@ async function readLegacyIndex(path, currentDesk) {
 
 function publicPlan(plan) {
   const writes = plan.writes.map((write) => ({ kind: write.kind, path: displayPath(plan.homeRoot, write.path), before: write.before?.sha256 ?? null, after: write.after ? sha256(write.after) : null }))
+  const semanticWrites = writes
+    .filter((write) => write.kind !== 'checkout-index')
+    .map((write) => write.kind === 'checkout-bindings' ? { ...write, path: 'shared-checkout-bindings' } : write)
+    .sort((left, right) => left.kind.localeCompare(right.kind) || left.path.localeCompare(right.path))
   const compatibility = ['rooms', 'sites', 'artifacts', 'work']
   const contract = {
     workplace: plan.workplace,
@@ -502,7 +506,7 @@ function publicPlan(plan) {
     compatibility,
     equipment: plan.equipment,
     retired: plan.retired,
-    writes,
+    writes: semanticWrites,
     routePurposes: plan.routePurposes,
     invariants: ['no-git-mutation', 'binding-targets-preserved', 'checkout-addresses-preserved', 'exact-snapshot-rollback'],
   }
