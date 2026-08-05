@@ -1428,7 +1428,7 @@ async function inspectCheckoutIndex(input, route) {
   const address = checkoutAddress(input, route)
   const target = await checkoutIndexTarget(input, route)
   if (!target) return { status: 'unbound', address, target: null }
-  const linkState = route.mode.startsWith('managed-') ? 'linked' : checkoutLinkState(input.homeRoot, address, target)
+  const linkState = checkoutProjectionLinkState(input, route, address, target)
   const projection = (await readIndexManifest(input)).projections.find((entry) => entry.site === route.site && entry.route === route.id)
   if (!projection || projection.target !== target || projection.linkState !== linkState) return { status: 'stale', address, target, linkState }
   if (linkState === 'relational') return { status: 'relational', address, target, linkState }
@@ -1491,7 +1491,7 @@ async function desiredCheckoutProjections(input) {
     const address = checkoutAddress(input, route)
     const target = await checkoutIndexTarget(input, route)
     if (!target) continue
-    desired.push({ site: route.site, route: route.id, address: relative(input.homeRoot, address), target, linkState: route.mode.startsWith('managed-') ? 'linked' : checkoutLinkState(input.homeRoot, address, target) })
+    desired.push({ site: route.site, route: route.id, address: relative(input.homeRoot, address), target, linkState: checkoutProjectionLinkState(input, route, address, target) })
   }
   if (siteSettings(input).observedWorktrees === 'surface') {
     for (const site of await listSites(input)) {
@@ -1508,6 +1508,12 @@ async function checkoutIndexTarget(input, route, manifest) {
   if (route.schemaVersion !== 9) return canonicalPath(route.declaredPath)
   if (route.mode === 'embedded') return canonicalPath(address)
   return checkoutBindingTarget(input, route.site, route.id)
+}
+
+function checkoutProjectionLinkState(input, route, address, target) {
+  return route.mode.startsWith('managed-') && target !== input.homeRoot
+    ? 'linked'
+    : checkoutLinkState(input.homeRoot, address, target)
 }
 
 async function createCheckoutLink(input, address, target) {
@@ -2373,14 +2379,22 @@ function assertDistinctGitDirs(checkouts) {
 
 function findDuplicateGitDirs(checkouts) {
   const seen = new Map()
+  const aliases = new Set()
   const duplicates = []
   for (const checkout of checkouts.filter((entry) => entry.declared && entry.observed.repository?.available)) {
     const gitDir = checkout.observed.repository.gitDir
     const existing = seen.get(gitDir)
-    if (existing) duplicates.push({ gitDir, first: existing, second: checkout.ref })
-    else seen.set(gitDir, checkout.ref)
+    if (existing && (!selfCheckoutAlias(existing, checkout) || aliases.has(gitDir))) duplicates.push({ gitDir, first: existing.ref, second: checkout.ref })
+    else if (existing) aliases.add(gitDir)
+    else if (!existing) seen.set(gitDir, checkout)
   }
   return duplicates
+}
+
+function selfCheckoutAlias(left, right) {
+  return left.site === 'self' && right.site === 'self'
+    && left.observed.realpath === right.observed.realpath
+    && [left.declared.checkout.mode, right.declared.checkout.mode].includes('embedded')
 }
 
 async function assertGitDirAvailable(input, evidence, exceptRef = null) {

@@ -775,6 +775,37 @@ test('Checkout observation rejects duplicate gitDir but permits a shared commonG
   }
 })
 
+test('a Home worktree resolves its embedded and purpose Route as one relational Checkout', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-self-worktree-'))
+  const home = join(temporary, 'home')
+  try {
+    await createHome(home)
+    await runtimeJson(home, ['add', home, '--id', 'self'])
+    const dogfood = await runtimeJson(home, [
+      'checkout', 'worktree', 'self', '--id', 'dogfood--fixture', '--from', 'main', '--new-branch', 'dogfood/fixture',
+    ])
+    await commit(home, 'test: declare dogfood route')
+    await git(dogfood.path, ['merge', '--ff-only', 'main'])
+    for (const route of ['main', 'dogfood--fixture']) {
+      const source = routeDocumentPath(home, 'self', route)
+      const destination = routeDocumentPath(dogfood.path, 'self', route)
+      await mkdir(dirname(destination), { recursive: true })
+      await writeFile(destination, await readFile(source))
+    }
+
+    const checkouts = (await runtimeJson(dogfood.path, ['checkout', 'list', 'self', '--all'])).checkouts.filter(({ declared }) => declared)
+    const dogfoodRoot = await realpath(dogfood.path)
+    assert.deepEqual(checkouts.map(({ ref }) => ref), ['checkout:self/dogfood--fixture', 'checkout:self/main'])
+    assert.equal(checkouts.every(({ observed }) => observed.realpath === dogfoodRoot), true)
+    assert.equal((await runtimeJson(dogfood.path, ['checkout', 'reconcile', '--apply'])).status, 'reconciled')
+    const index = JSON.parse(await readFile(join(dogfood.path, '.endroit/checkout-index.json'), 'utf8'))
+    assert.equal(index.projections.find(({ site, route }) => site === 'self' && route === 'dogfood--fixture').linkState, 'relational')
+    assert.equal(await pathExists(join(dogfood.path, 'checkouts/self/dogfood--fixture')), false)
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
 test('a Site with only inactive Routes is unrouted until its unique parked Route is activated', async () => {
   const fixture = await siteFixture()
   try {
