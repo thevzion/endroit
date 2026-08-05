@@ -111,6 +111,29 @@ test('workplace upgrade refuses unmapped Route purposes and accepts an explicit 
   }
 })
 
+test('workplace rollback detects drift before restoring any entry', async () => {
+  const fixture = await upgradeFixture()
+  try {
+    const plan = await planWorkplaceUpgrade(fixture.home, TARGET)
+    const upgraded = await applyWorkplaceUpgrade(fixture.home, {
+      ...TARGET,
+      expectPlan: plan.planDigest,
+      approve: `workplace:${plan.workplace}`,
+      verify: async () => ({ status: 'ready' }),
+    })
+    const journal = JSON.parse(await readFile(join(fixture.home, '.endroit', 'upgrades', 'workplace-v1', upgraded.runId, 'journal.json'), 'utf8'))
+    const drifted = journal.entries[0]
+    const untouched = journal.entries.at(-1)
+    const untouchedBytes = await readFile(untouched.path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error))
+    await writeFile(drifted.path, 'concurrent drift\n')
+
+    await assert.rejects(() => rollbackWorkplaceUpgrade(fixture.home, upgraded.runId), (error) => error.code === 'workplace_upgrade_rollback_drift')
+    assert.deepEqual(await readFile(untouched.path).catch((error) => error.code === 'ENOENT' ? null : Promise.reject(error)), untouchedBytes)
+  } finally {
+    await fixture.cleanup()
+  }
+})
+
 test('workplace upgrade automatically restores exact bytes after a write fault', async () => {
   const fixture = await upgradeFixture()
   const previousNodeEnv = process.env.NODE_ENV

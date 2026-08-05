@@ -632,6 +632,15 @@ async function assertFileState(path, expectedSha, expectedMode, code) {
 }
 
 async function rollbackJournal(journalPath, journal) {
+  for (const entry of journal.entries) {
+    const current = await fileState(entry.path)
+    const isAfter = (current?.sha256 ?? null) === entry.afterSha256 && (current?.mode ?? null) === entry.afterMode
+    const isBefore = (current?.sha256 ?? null) === entry.beforeSha256 && (current?.mode ?? null) === entry.beforeMode
+    if (!isAfter && !isBefore) throw new EndroitError('workplace_upgrade_rollback_drift', `${entry.path} changed after the upgrade.`)
+    if (isAfter && entry.snapshot && sha256(await readFile(entry.snapshot)) !== entry.beforeSha256) {
+      throw new EndroitError('workplace_upgrade_snapshot_corrupt', `${entry.snapshot} changed after the upgrade.`)
+    }
+  }
   journal = { ...journal, status: 'rolling-back', updatedAt: new Date().toISOString() }
   await writeJournal(journalPath, journal)
   for (let index = journal.entries.length - 1; index >= 0; index -= 1) {
