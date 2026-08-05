@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto'
 import { execFile } from 'node:child_process'
 import { lstat, mkdir, open, readFile, readdir, realpath, rm } from 'node:fs/promises'
-import { basename, dirname, join, relative, resolve } from 'node:path'
+import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { promisify } from 'node:util'
 import { parseDocument, renderDocument, V9_API } from './documents.mjs'
 import { planFirstPartyEquipmentUpgrade } from './equipment.mjs'
@@ -199,6 +199,9 @@ async function buildPlan(homeRoot, options) {
         ? join(homeGit.primaryRoot, 'checkouts', route.site, route.id)
         : address
     const target = await existingTarget(declared)
+      ?? (route.checkoutPath && !isAbsolute(route.checkoutPath) && homeGit.primaryRoot !== homeRoot
+        ? await existingTarget(resolve(homeGit.primaryRoot, route.checkoutPath))
+        : null)
     if (target) addBinding(bindingsByDesk, desk, { site: route.site, route: route.id, target })
   }
 

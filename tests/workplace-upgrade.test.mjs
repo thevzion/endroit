@@ -120,6 +120,7 @@ test('workplace upgrade preserves a managed Checkout from the primary Home in a 
     const deskPath = join(home, '.desk', 'DESK.md')
     const desk = parseDocument(await readFile(deskPath, 'utf8'), { path: deskPath }).metadata.id
     const routePath = join(home, '.desk', 'routes', 'demo', 'work--slice.json')
+    const existingRoutePath = join(home, '.desk', 'routes', 'demo', 'recovery--legacy-local.json')
     await mkdir(dirname(routePath), { recursive: true })
     await writeFile(routePath, `${JSON.stringify({
       $schema: 'https://endroit.org/schema/v8/route.json',
@@ -129,9 +130,18 @@ test('workplace upgrade preserves a managed Checkout from the primary Home in a 
       checkout: { mode: 'managed-worktree' },
       revision: { kind: 'branch', name: 'codex/work/slice' },
     }, null, 2)}\n`)
+    await writeFile(existingRoutePath, `${JSON.stringify({
+      $schema: 'https://endroit.org/schema/v8/route.json',
+      id: 'recovery--legacy-local',
+      site: 'demo',
+      status: 'parked',
+      checkout: { mode: 'existing', path: '.desk/sites/demo/legacy-local' },
+    }, null, 2)}\n`)
     const target = join(home, 'checkouts', 'demo', 'work--slice')
+    const existingTarget = join(home, '.desk', 'sites', 'demo', 'legacy-local')
     await mkdir(target, { recursive: true })
-    await exec('git', ['add', '-f', '.desk/routes/demo/work--slice.json'], { cwd: home })
+    await mkdir(existingTarget, { recursive: true })
+    await exec('git', ['add', '-f', '.desk/routes/demo/work--slice.json', '.desk/routes/demo/recovery--legacy-local.json'], { cwd: home })
     await exec('git', ['commit', '--quiet', '-m', 'add managed route'], { cwd: home })
     await exec('git', ['worktree', 'add', '--quiet', '-b', 'codex/dogfood', dogfood], { cwd: home })
 
@@ -145,7 +155,10 @@ test('workplace upgrade preserves a managed Checkout from the primary Home in a 
     })
     assert.equal(upgraded.status, 'upgraded')
     const bindings = JSON.parse(await readFile((await workplaceGitStorage(dogfood, desk)).bindingsPath, 'utf8'))
-    assert.deepEqual(bindings.bindings, [{ site: 'demo', route: 'work--slice', target: await realpath(target) }])
+    assert.deepEqual(bindings.bindings, [
+      { site: 'demo', route: 'recovery--legacy-local', target: await realpath(existingTarget) },
+      { site: 'demo', route: 'work--slice', target: await realpath(target) },
+    ])
   } finally {
     await removeTree(temporary, { force: true })
   }
