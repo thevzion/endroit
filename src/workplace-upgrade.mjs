@@ -361,7 +361,7 @@ async function legacyOwner(homeRoot) {
 function legacyWorkplaceBody(source, fallbackTitle) {
   const titleMatch = source.match(/^#\s+(.+)\r?\n/)
   const title = titleMatch?.[1].trim() || fallbackTitle
-  const constitution = nestHeadings(titleMatch ? source.slice(titleMatch[0].length) : source).trim()
+  const legacyGuidance = nestHeadings(titleMatch ? source.slice(titleMatch[0].length) : source).trim()
   return [
     `# ${title}`,
     '',
@@ -371,9 +371,10 @@ function legacyWorkplaceBody(source, fallbackTitle) {
     '',
     '## Constitution',
     '',
-    '<!-- Migrated from HOME.md; its content remains authoritative here. -->',
-    '',
-    constitution,
+    '- Human direction, judgment, acceptance and delivery consent remain explicit.',
+    '- Owned sources are canonical; provider files and indexes are rebuildable projections.',
+    '- Conversation and generated results remain ephemeral until an explicit transition.',
+    '- A Site keeps its own source, history, permissions and delivery lifecycle.',
     '',
     '## Boundaries',
     '',
@@ -382,6 +383,12 @@ function legacyWorkplaceBody(source, fallbackTitle) {
     '## Limits',
     '',
     'External access and generated projections never grant authority or replace owned sources.',
+    '',
+    '## Migrated guidance',
+    '',
+    '<!-- Preserved verbatim from HOME.md below this heading; it is not part of the provider bootstrap. -->',
+    '',
+    legacyGuidance,
     '',
   ].join('\n')
 }

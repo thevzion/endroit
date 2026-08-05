@@ -207,7 +207,10 @@ test('legacy Workplace upgrade is deterministic, owner-correct, CLI-accessible a
     assert.equal(await pathExists(join(fixture.home, 'HOME.md')), false)
     assert.equal(await pathExists(join(fixture.home, '.desk', 'desk.json')), false)
     const workplace = parseDocument(await readFile(join(fixture.home, 'WORKPLACE.md')), { path: 'WORKPLACE.md' })
-    assert.match(workplace.sections.find((entry) => entry.title === 'Constitution').body, /Legacy constitution sentence\./)
+    assert.match(workplace.sections.find((entry) => entry.title === 'Constitution').body, /Human direction, judgment, acceptance and delivery consent remain explicit\./)
+    assert.doesNotMatch(workplace.sections.find((entry) => entry.title === 'Constitution').body, /Legacy constitution sentence\./)
+    assert.match(workplace.sections.find((entry) => entry.title === 'Migrated guidance').body, /Legacy constitution sentence\./)
+    assert.match(workplace.sections.find((entry) => entry.title === 'Migrated guidance').body, /Historical guidance item 299\./)
     const desk = parseDocument(await readFile(join(fixture.home, '.desk', 'DESK.md')), { path: 'DESK.md' })
     assert.equal(desk.metadata.$schema, 'https://endroit.org/schema/v9/desk.json')
     assert.match(desk.body, /Legacy Desk guidance\./)
@@ -319,7 +322,18 @@ async function legacyFixture() {
     providers: ['codex', 'claude'],
     settings: { 'endroit/sites': { pinnedSites: [] } },
   }, null, 2)}\n`)
-  await writeFile(homePath, '# Legacy Studio\n\nLegacy constitution sentence.\n\n## Operating agreement\n\nKeep the human in charge.\n')
+  await writeFile(homePath, [
+    '# Legacy Studio',
+    '',
+    'Legacy constitution sentence.',
+    '',
+    '## Operating agreement',
+    '',
+    'Keep the human in charge.',
+    '',
+    ...Array.from({ length: 300 }, (_, index) => `- Historical guidance item ${index}.`),
+    '',
+  ].join('\n'))
   await writeFile(deskDeclarationPath, `${JSON.stringify({
     $schema: 'https://endroit.org/schema/v7/desk.json',
     id: 'local',
