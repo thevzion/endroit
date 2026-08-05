@@ -111,6 +111,46 @@ test('workplace upgrade refuses unmapped Route purposes and accepts an explicit 
   }
 })
 
+test('workplace upgrade preserves a managed Checkout from the primary Home in a linked worktree', async () => {
+  const temporary = await mkdtemp(join(tmpdir(), 'endroit-workplace-managed-upgrade-'))
+  const home = join(temporary, 'home')
+  const dogfood = join(temporary, 'dogfood')
+  try {
+    await createHome(home)
+    const deskPath = join(home, '.desk', 'DESK.md')
+    const desk = parseDocument(await readFile(deskPath, 'utf8'), { path: deskPath }).metadata.id
+    const routePath = join(home, '.desk', 'routes', 'demo', 'work--slice.json')
+    await mkdir(dirname(routePath), { recursive: true })
+    await writeFile(routePath, `${JSON.stringify({
+      $schema: 'https://endroit.org/schema/v8/route.json',
+      id: 'work--slice',
+      site: 'demo',
+      status: 'active',
+      checkout: { mode: 'managed-worktree' },
+      revision: { kind: 'branch', name: 'codex/work/slice' },
+    }, null, 2)}\n`)
+    const target = join(home, 'checkouts', 'demo', 'work--slice')
+    await mkdir(target, { recursive: true })
+    await exec('git', ['add', '-f', '.desk/routes/demo/work--slice.json'], { cwd: home })
+    await exec('git', ['commit', '--quiet', '-m', 'add managed route'], { cwd: home })
+    await exec('git', ['worktree', 'add', '--quiet', '-b', 'codex/dogfood', dogfood], { cwd: home })
+
+    const plan = await planWorkplaceUpgrade(dogfood, TARGET)
+    assert.equal(plan.homeGit.primaryRoot, await realpath(home))
+    const upgraded = await applyWorkplaceUpgrade(dogfood, {
+      ...TARGET,
+      expectPlan: plan.planDigest,
+      approve: `workplace:${plan.workplace}`,
+      verify: async () => ({ status: 'ready' }),
+    })
+    assert.equal(upgraded.status, 'upgraded')
+    const bindings = JSON.parse(await readFile((await workplaceGitStorage(dogfood, desk)).bindingsPath, 'utf8'))
+    assert.deepEqual(bindings.bindings, [{ site: 'demo', route: 'work--slice', target: await realpath(target) }])
+  } finally {
+    await removeTree(temporary, { force: true })
+  }
+})
+
 test('workplace rollback detects drift before restoring any entry', async () => {
   const fixture = await upgradeFixture()
   try {

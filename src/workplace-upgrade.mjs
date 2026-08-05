@@ -195,7 +195,9 @@ async function buildPlan(homeRoot, options) {
     const address = join(homeRoot, 'checkouts', route.site, route.id)
     const declared = route.checkoutPath
       ? resolve(homeRoot, route.checkoutPath)
-      : address
+      : route.modeName?.startsWith('managed-')
+        ? join(homeGit.primaryRoot, 'checkouts', route.site, route.id)
+        : address
     const target = await existingTarget(declared)
     if (target) addBinding(bindingsByDesk, desk, { site: route.site, route: route.id, target })
   }
@@ -584,12 +586,15 @@ async function readWorkplaceId(homeRoot) {
 
 async function inspectHomeGit(homeRoot) {
   try {
-    const [head, branch, status] = await Promise.all([
+    const [head, branch, status, worktrees] = await Promise.all([
       git(homeRoot, ['rev-parse', 'HEAD']),
       git(homeRoot, ['symbolic-ref', '--quiet', '--short', 'HEAD']).catch(() => null),
       git(homeRoot, ['status', '--porcelain=v2', '--untracked-files=all']),
+      git(homeRoot, ['worktree', 'list', '--porcelain', '-z']),
     ])
-    return { available: true, head, branch, clean: status === '' }
+    const primary = worktrees.split('\0').find((entry) => entry.startsWith('worktree '))?.slice(9)
+    if (!primary) throw new EndroitError('workplace_upgrade_git_required', 'Workplace upgrade could not resolve the primary Home worktree.')
+    return { available: true, head, branch, clean: status === '', primaryRoot: await canonicalTarget(primary) }
   } catch (error) {
     throw new EndroitError('workplace_upgrade_git_required', 'Workplace upgrade requires a Git-backed Home.', { cause: error })
   }
