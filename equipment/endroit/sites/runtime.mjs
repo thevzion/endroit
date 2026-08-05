@@ -1511,6 +1511,7 @@ async function checkoutIndexTarget(input, route, manifest) {
 }
 
 function checkoutProjectionLinkState(input, route, address, target) {
+  if (resolve(address) === resolve(target)) return 'direct'
   return route.mode.startsWith('managed-') && target !== input.homeRoot
     ? 'linked'
     : checkoutLinkState(input.homeRoot, address, target)

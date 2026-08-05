@@ -13,7 +13,7 @@ import { initDesk } from '../src/desk.mjs'
 import { parseDocument, renderDocument } from '../src/documents.mjs'
 import { removeTree } from '../src/lib/io.mjs'
 import { dispatchRuntime } from '../src/runtime.mjs'
-import { checkoutIndexDocument, workplaceGitStorage } from '../src/git-workplace.mjs'
+import { checkoutBindingsDocument, checkoutIndexDocument, workplaceGitStorage } from '../src/git-workplace.mjs'
 import { captureIo } from './helpers.mjs'
 
 const exec = promisify(execFile)
@@ -570,6 +570,51 @@ test('the Checkout index reconciles reconstructible links without touching repos
     assert.equal(await exists(join(repository, 'README.md')), true)
   } finally {
     await removeTree(temporary, { force: true })
+  }
+})
+
+test('Checkout reconcile records a managed worktree already stored at its conventional address as direct', async () => {
+  const fixture = await siteFixture()
+  try {
+    const { home, repository } = fixture
+    const address = join(home, 'checkouts', 'demo', 'legacy-direct')
+    const desk = parseDocument(await readFile(join(home, '.desk/DESK.md'), 'utf8')).metadata.id
+    await exec('git', ['clone', '--quiet', repository, address])
+    const routePath = routeDocumentPath(home, 'demo', 'legacy-direct')
+    await mkdir(dirname(routePath), { recursive: true })
+    await writeFile(routePath, `---
+$schema: "https://endroit.org/schema/v9/route.json"
+kind: "endroit/route"
+id: "legacy-direct"
+owner: "desk:${desk}"
+site: "demo"
+route_state: "active"
+route_purpose: "development"
+checkout_mode: "managed-worktree"
+revision: {"kind":"branch","name":"main"}
+---
+
+# demo / legacy-direct
+`)
+    const layout = await workplaceGitStorage(home, desk)
+    const bindings = JSON.parse(await readFile(layout.bindingsPath, 'utf8'))
+    const directTarget = await realpath(address)
+    await writeFile(layout.bindingsPath, `${JSON.stringify(checkoutBindingsDocument(desk, [
+      ...bindings.bindings,
+      { site: 'demo', route: 'legacy-direct', target: directTarget },
+    ]), null, 2)}\n`)
+
+    const checked = await runtimeJson(home, ['checkout', 'reconcile', '--check'])
+    assert.equal(checked.status, 'stale')
+    assert.deepEqual(checked.conflicts, [])
+    assert.equal(await exists(address), true, 'check is read-only')
+    await runtimeJson(home, ['checkout', 'reconcile', '--apply'])
+    assert.equal(await exists(address), true, 'apply preserves direct worktree')
+    const inspected = await runtimeJson(home, ['checkout', 'inspect', 'checkout:demo/legacy-direct'])
+    assert.equal(inspected.observed.index, 'direct')
+    assert.equal((await lstat(address)).isSymbolicLink(), false)
+  } finally {
+    await fixture.cleanup()
   }
 })
 
