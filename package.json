@@ -1,0 +1,49 @@
+{
+  "name": "@endroit/cli",
+  "version": "0.1.0-rc.1",
+  "description": "Compile a Workplace into ordinary files that humans and Agents can navigate without a running service.",
+  "private": true,
+  "license": "MIT",
+  "homepage": "https://endroit.org",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/thevzion/endroit.git"
+  },
+  "bugs": {
+    "url": "https://github.com/thevzion/endroit/issues"
+  },
+  "engines": {
+    "bun": "1.3.14"
+  },
+  "type": "module",
+  "packageManager": "bun@1.3.14",
+  "exports": {},
+  "bin": {
+    "endroit": "./src/cli.ts"
+  },
+  "scripts": {
+    "endroit": "bun src/cli.ts",
+    "compile": "bun src/cli.ts compile",
+    "check": "bun src/cli.ts check",
+    "ready": "bun src/cli.ts ready",
+    "new": "bun src/cli.ts new",
+    "preview": "bun src/cli.ts preview",
+    "scenario:check": "bun src/qualification/cli.ts",
+    "case:new": "bun src/qualification/case-new.ts",
+    "case:snapshot": "bun src/qualification/case-snapshot.ts",
+    "case:verdict": "bun src/qualification/case-verdict.ts",
+    "case:run": "bun src/qualification/case-run.ts",
+    "case:freeze": "bun src/qualification/case-freeze.ts",
+    "example:reset": "bun src/qualification/reset.ts",
+    "example:fresh:preview": "bun src/cli.ts new --request examples/fresh/request.json --preview --json",
+    "typecheck": "tsc -p tsconfig.json",
+    "test": "bun test ./tests/*.test.ts"
+  },
+  "dependencies": {
+    "@clack/prompts": "1.7.0",
+    "yaml": "2.9.0"
+  },
+  "devDependencies": {
+    "typescript": "5.9.3"
+  }
+}

@@ -1,0 +1,8 @@
+{
+  "kind": "HumanQualificationScenario",
+  "version": 1,
+  "id": "flappy",
+  "intent": "Crée un Flappy Bird avec un twist fort et une landing.",
+  "expectedPath": ["Hall", "Room", "Meeting", "Workshop Research", "Study", "Work", "Site"],
+  "forbidden": ["premature-study-load", "free-site", "remote", "delivery"]
+}

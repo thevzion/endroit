@@ -1,0 +1,63 @@
+{
+  "kind": "ProviderBinding",
+  "provider": "codex",
+  "targets": [
+    {
+      "provider": "codex",
+      "kind": "front-door",
+      "path": "AGENTS.md",
+      "discovery": "automatic",
+      "loadGuarantee": "qualified"
+    },
+    {
+      "provider": "codex",
+      "kind": "agent",
+      "path": "agents/manager.md",
+      "discovery": "model-selected",
+      "loadGuarantee": "qualified"
+    },
+    {
+      "provider": "codex",
+      "kind": "agent",
+      "path": "agents/worker.md",
+      "discovery": "model-selected",
+      "loadGuarantee": "qualified"
+    },
+    {
+      "provider": "codex",
+      "kind": "skill",
+      "path": ".agents/skills/enter/SKILL.md",
+      "discovery": "model-selected",
+      "loadGuarantee": "qualified"
+    },
+    {
+      "provider": "codex",
+      "kind": "skill",
+      "path": ".agents/skills/onboard/SKILL.md",
+      "discovery": "model-selected",
+      "loadGuarantee": "qualified"
+    },
+    {
+      "provider": "codex",
+      "kind": "skill",
+      "path": ".agents/skills/settle/SKILL.md",
+      "discovery": "model-selected",
+      "loadGuarantee": "qualified"
+    },
+    {
+      "provider": "codex",
+      "kind": "skill",
+      "path": ".agents/skills/maintain/SKILL.md",
+      "discovery": "model-selected",
+      "loadGuarantee": "qualified"
+    }
+  ],
+  "tools": [
+    {
+      "trait": "source.read-local",
+      "tool": "shell",
+      "provider": "codex",
+      "availability": "available"
+    }
+  ]
+}

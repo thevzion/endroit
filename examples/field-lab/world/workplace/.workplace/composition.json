@@ -1,0 +1,7 @@
+{
+  "equipment": [
+    "workplace://demo/field-lab/equipment/observation"
+  ],
+  "kind": "Composition",
+  "ref": "workplace://demo/field-lab/composition"
+}

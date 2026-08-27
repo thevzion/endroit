@@ -1,0 +1,76 @@
+{
+  "kind": "Equipment",
+  "ref": "workplace://endroit/equipment/core",
+  "id": "core",
+  "compatibleProfiles": ["endroit-standard"],
+  "methods": [
+    {
+      "id": "open-room",
+      "title": "Open a Room",
+      "instructions": "methods/open-room.md",
+      "intent": ["start", "create", "explore", "study", "build"],
+      "useWhen": ["No existing Room owns the subject and the intent needs durable continuity."],
+      "avoidWhen": ["An existing Room already owns the subject, the destination is ambiguous, or the Intent concerns the bound Member, Desk preferences or WELCOME."],
+      "acceptsWorkForms": [],
+      "requiredPlaceRoles": ["hall"],
+      "requires": ["one distinct subject", "one explicit owner", "one bounded purpose"],
+      "operations": [
+        { "id": "resolve", "trait": "place.resolve-local", "effect": "read", "authority": "none", "proof": ["Floor Plan inspection"] },
+        { "id": "declare", "trait": "place.create-room", "effect": "write", "authority": "bounded", "proof": ["Room source commit"] },
+        { "id": "compile", "trait": "workplace.compile", "effect": "write", "authority": "bounded", "proof": ["ready check"] }
+      ],
+      "effects": ["owned Room", "refreshed Floor Plan", "local open-work affordance"],
+      "authority": "bounded",
+      "proof": ["Room source commit", "ready check"],
+      "staticFallback": "complete",
+      "coordination": "single-scope",
+      "requiredControls": ["classify-before-write"],
+      "context": {
+        "requiredReads": ["hall resident contract", "Floor Plan", "CHANGE source"],
+        "conditionalReads": ["matching Room Front Door"],
+        "forbiddenScopes": ["outside Mount", "unselected global Skills", "provider memory"],
+        "searchRoot": "Mount/workplace",
+        "stopCondition": "one existing Room or one bounded Room proposal is resolved"
+      },
+      "stages": [
+        { "id": "resolve", "appliesTo": ["intent"], "operations": ["resolve"], "outcome": { "id": "room-destination", "requires": ["intent"], "produces": ["existing Room or bounded Room proposal"], "preserves": ["human direction"], "forbids": ["duplicate Room", "implicit write"], "evidence": ["Floor Plan inspection"] } },
+        { "id": "declare", "appliesTo": ["room-proposal"], "operations": ["declare"], "outcome": { "id": "owned-room", "requires": ["owner", "purpose"], "produces": ["Room source"], "preserves": ["Workplace sovereignty"], "forbids": ["free Site", "Work before Room"], "evidence": ["Room source commit"] } },
+        { "id": "reveal", "appliesTo": ["room"], "operations": ["compile"], "outcome": { "id": "room-entry", "requires": ["Room source"], "produces": ["scoped Front Door", "open-work affordance"], "preserves": ["progressive disclosure"], "forbids": ["hosting", "delivery"], "evidence": ["ready check"] } }
+      ]
+    },
+    {
+      "id": "open-work",
+      "title": "Open bounded Work and Site",
+      "instructions": "methods/open-work.md",
+      "intent": ["build", "create", "implement"],
+      "useWhen": ["The intent needs product bytes and no existing Work owns the Outcome."],
+      "avoidWhen": ["Existing Work already owns the same Outcome or the destination is ambiguous."],
+      "acceptsWorkForms": [],
+      "requiredPlaceRoles": ["room"],
+      "requires": ["one owning Room", "one explicit Outcome", "one local Site destination"],
+      "operations": [
+        { "id": "plan", "trait": "work.plan-local", "effect": "write", "authority": "bounded", "proof": ["Work source commit"] },
+        { "id": "site", "trait": "site.write-local", "effect": "write", "authority": "bounded", "proof": ["declared Site checkout", "Site commit"] },
+        { "id": "verify", "trait": "outcome.verify-local", "effect": "read", "authority": "none", "proof": ["verification result"] }
+      ],
+      "effects": ["owned Work", "declared or reused Site", "verified product bytes"],
+      "authority": "bounded",
+      "proof": ["planning commit", "Site commit", "verification", "Work completion commit"],
+      "staticFallback": "complete",
+      "coordination": "integration",
+      "requiredControls": ["classify-before-write", "integration-dispatch", "causal-outcome"],
+      "context": {
+        "requiredReads": ["Room Front Door", "active Meeting", "Coordination Policy", "Manager contract", "CHANGE source"],
+        "conditionalReads": ["existing Work", "declared Site Front Door"],
+        "forbiddenScopes": ["outside Mount", "unselected global Skills", "provider memory", "Main direct Site writes"],
+        "searchRoot": "Mount",
+        "stopCondition": "Manager integration returns exact Site and verification evidence to Main"
+      },
+      "stages": [
+        { "id": "frame", "appliesTo": ["intent"], "operations": ["plan"], "outcome": { "id": "owned-work", "requires": ["intent"], "produces": ["Work contract"], "preserves": ["human judgment"], "forbids": ["implicit acceptance"], "evidence": ["Work source commit"] } },
+        { "id": "build", "appliesTo": ["work"], "operations": ["site"], "outcome": { "id": "site-change", "requires": ["Work contract", "Site declaration"], "produces": ["Site commit"], "preserves": ["Site sovereignty"], "forbids": ["free /site fallback", "hosting", "delivery"], "evidence": ["Site Git OID"] } },
+        { "id": "qualify", "appliesTo": ["site"], "operations": ["verify"], "outcome": { "id": "verified-outcome", "requires": ["Site commit"], "produces": ["verification", "Work completion candidate"], "preserves": ["causal OIDs"], "forbids": ["latest-wins inference"], "evidence": ["verification result", "Work completion commit"] } }
+      ]
+    }
+  ]
+}

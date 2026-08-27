@@ -1,0 +1,21 @@
+{
+  "kind": "ObservedTrajectory",
+  "scenario": "flappy-manual-v0",
+  "initialRevision": "sha256:85c5feae686d89ddf2e17fc720c623af4950fb2339a8b90f61f63c4eacb9e2bc",
+  "reads": [],
+  "path": [],
+  "behavior": [],
+  "effects": [],
+  "evidence": [],
+  "lineage": [],
+  "verification": {
+    "status": "fail",
+    "evidence": []
+  },
+  "terminal": {
+    "status": "awaiting-human-validation",
+    "clean": false,
+    "commits": [],
+    "preserves": []
+  }
+}

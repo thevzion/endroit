@@ -1,0 +1,28 @@
+{
+  "kind": "DisclosureGrammar",
+  "version": 1,
+  "discovery": "WORKPLACE.md and provider Front Doors enter declared Places progressively.",
+  "identity": "workplace:// Ref plus observed Revision; path is not identity.",
+  "roots": "Shared, private Desk and sovereign Site Roots remain distinct.",
+  "lifecycle": "Profile lifecycles never imply freshness, acceptance or authority.",
+  "sites": "A Site is a Place Role and its product bytes stay in its Root.",
+  "projections": ".workplace and provider Front Doors are rebuildable.",
+  "degraded": "Owned sources and links remain usable without compiler or runtime.",
+  "selectors": [
+    { "id": "hall-resident", "positions": ["hall"], "visibility": "must-show", "roles": ["constitution", "doctrine", "change-policy"], "relations": [], "reason": "The Hall must expose shared authority and mutation boundaries before action." },
+    { "id": "hall-bound", "positions": ["hall"], "visibility": "must-show", "roles": ["owner", "desk", "welcome", "memory-policy"], "relations": ["for-desk"], "reason": "A bound entry needs its declared Member and Desk disclosure without claiming a current human." },
+    { "id": "hall-navigation", "positions": ["hall"], "visibility": "must-show", "roles": ["room", "desk"], "relations": [], "reason": "The Hall reveals only first legitimate destinations and resident capabilities." },
+    { "id": "place-local", "positions": ["place"], "visibility": "must-show", "roles": ["room", "desk"], "relations": ["contains", "routes-to", "supported-by"], "reason": "A Place reveals only its local children and applicable methods." },
+    { "id": "meeting-contract", "positions": ["meeting"], "visibility": "must-show", "roles": ["meeting", "meeting-contribution"], "relations": ["contained-by", "advances", "for-meeting"], "reason": "A Meeting exposes collaboration state, Occupants, Work relations and next boundary." },
+    { "id": "work-contract", "positions": ["work"], "visibility": "must-show", "roles": ["initiative", "study", "exploration"], "relations": ["contained-by", "supported-by", "targets"], "reason": "A Work position exposes its sources, destination, verification and Outcome contract." },
+    { "id": "site-boundary", "positions": ["site"], "visibility": "must-show", "roles": ["site"], "relations": ["implements"], "reason": "A Site position exposes sovereign product sources without granting delivery." },
+    { "id": "provider-cache", "positions": ["hall", "place", "meeting", "work", "site"], "visibility": "must-hide", "roles": [], "relations": [], "reason": "Provider memory and global Skills are not Workplace truth or authority." }
+  ],
+  "controls": [
+    { "id": "classify-before-write", "positions": ["hall"], "trigger": "write", "placement": "Resident", "criticality": "critical", "reasonForDisclosure": "Coordination must be selected before the first write.", "consequenceIfMissed": "The effect path is invalid.", "requiredEvidence": ["coordination-route"], "enforcement": "staged" },
+    { "id": "integration-dispatch", "positions": ["place", "meeting", "work", "site"], "trigger": "integration", "placement": "RequiredRead", "criticality": "critical", "reasonForDisclosure": "Multi-Root effects require Manager and Worker dispatch.", "consequenceIfMissed": "Work completion and ready are RED.", "requiredEvidence": ["presence", "manager-occupant", "worker-occupant", "complete-dispatch"], "enforcement": "history" },
+    { "id": "provider-containment", "positions": ["hall", "place", "meeting", "work", "site"], "trigger": "context-expand", "placement": "Guard", "criticality": "critical", "reasonForDisclosure": "Unselected provider capabilities cannot influence the valid path.", "consequenceIfMissed": "Context qualification is RED.", "requiredEvidence": ["trajectory"], "enforcement": "qualification" },
+    { "id": "causal-outcome", "positions": ["work", "site"], "trigger": "outcome-complete", "placement": "Guard", "criticality": "critical", "reasonForDisclosure": "Outcome claims require exact Site and verification OIDs.", "consequenceIfMissed": "Work cannot become a qualified Outcome.", "requiredEvidence": ["site-oid", "verification-oid", "plan-revision"], "enforcement": "history" }
+  ],
+  "limits": { "maxSourceBytes": 262144, "maxSources": 1000, "maxDepth": 20, "maxResidentBytes": 4096 }
+}

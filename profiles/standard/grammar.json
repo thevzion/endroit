@@ -1,0 +1,338 @@
+{
+  "$schema": "https://endroit.org/schema/workplace-grammar/v1.json",
+  "id": "endroit-standard",
+  "version": "1.0.0-rc.0",
+  "ref": "workplace://profiles/endroit-standard",
+  "roots": {
+    "shared": { "ownership": "workplace", "visibility": "shared", "physical": "embedded" },
+    "private": { "ownership": "member", "visibility": "private", "physical": "bound" },
+    "site": { "ownership": "external", "visibility": "shared", "physical": "bound" }
+  },
+  "entities": {
+    "place": {
+      "title": "Place",
+      "purpose": "Own a situated entry or sovereignty boundary.",
+      "useWhen": ["Identity, ownership or local affordances need a boundary."],
+      "avoidWhen": ["A Relation or Projection is sufficient."],
+      "roles": ["room", "desk", "site", "workspace", "workshop"]
+    },
+    "member": {
+      "title": "Member",
+      "purpose": "Identify a human owner of judgment and consent.",
+      "useWhen": ["Human attribution or ownership must be explicit."],
+      "roles": ["owner"]
+    },
+    "agent": {
+      "title": "Agent",
+      "purpose": "Identify a non-human operator without granting authority.",
+      "useWhen": ["Agent identity or provider requirements vary independently."],
+      "roles": ["operator"]
+    },
+    "work": {
+      "title": "Work",
+      "purpose": "Own one bounded outcome and lifecycle.",
+      "useWhen": ["A question or commitment needs its own outcome."],
+      "roles": ["study", "initiative", "exploration"]
+    },
+    "material": {
+      "title": "Material",
+      "purpose": "Retain attributable reusable input or result.",
+      "useWhen": ["Evidence or a result deserves independent reuse."],
+      "roles": [
+        "constitution",
+        "doctrine",
+        "change-policy",
+        "memory-policy",
+        "welcome",
+        "preference",
+        "goal",
+        "principle",
+        "belief",
+        "pattern",
+        "constraint",
+        "evidence",
+        "decision",
+        "artifact",
+        "publication-source",
+        "meeting-contribution"
+      ]
+    },
+    "meeting": {
+      "title": "Meeting",
+      "purpose": "Own one present collaboration event and its disposition.",
+      "useWhen": ["A Session produces durable effects or coordinated contributions."],
+      "avoidWhen": ["The interaction stays read-only and ephemeral."],
+      "roles": ["meeting"]
+    }
+  },
+  "roles": {
+    "owner": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["member"] },
+      "roots": ["shared"],
+      "source": { "format": "markdown", "leaf": "MEMBER.md" },
+      "locator": "members/{node.id}/MEMBER.md",
+      "entry": "link"
+    },
+    "operator": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["agent"] },
+      "roots": ["shared"],
+      "source": { "format": "markdown", "leaf": "AGENT.md" },
+      "locator": "agents/{node.id}/AGENT.md",
+      "entry": "link"
+    },
+    "constitution": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "roots": ["shared"],
+      "source": { "format": "markdown", "leaf": "CONSTITUTION.md" },
+      "locator": "CONSTITUTION.md",
+      "projectionResponsibilities": ["resident-entry"],
+      "entry": "link"
+    },
+    "doctrine": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "roots": ["shared"],
+      "source": { "format": "markdown", "leaf": "DOCTRINE.md" },
+      "locator": "DOCTRINE.md",
+      "projectionResponsibilities": ["resident-entry"],
+      "entry": "link"
+    },
+    "change-policy": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "roots": ["shared"],
+      "source": { "format": "markdown", "leaf": "CHANGE.md" },
+      "locator": "CHANGE.md",
+      "projectionResponsibilities": ["resident-entry"],
+      "entry": "link"
+    },
+    "room": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["place"] },
+      "roots": ["shared", "private"],
+      "source": { "format": "markdown", "leaf": "ROOM.md" },
+      "locator": "rooms/{node.id}/ROOM.md",
+      "slots": ["room-work", "room-meeting", "room-material"],
+      "entry": "scope"
+    },
+    "desk": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["place"] },
+      "roots": ["private"],
+      "source": { "format": "markdown", "leaf": "DESK.md" },
+      "locator": "members/{relation.owned-by.id}/desks/{node.id}/DESK.md",
+      "requiredRelations": ["owned-by"],
+      "entry": "scope"
+    },
+    "site": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["place"] },
+      "roots": ["shared", "site"],
+      "source": { "format": "markdown", "leaf": "SITE.md" },
+      "locator": "sites/{node.id}/SITE.md",
+      "entry": "scope"
+    },
+    "welcome": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "roots": ["private"],
+      "source": { "format": "markdown", "leaf": "WELCOME.md" },
+      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/WELCOME.md",
+      "requiredRelations": ["owned-by", "for-desk"],
+      "entry": "link"
+    },
+    "memory-policy": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "roots": ["private"],
+      "source": { "format": "markdown", "leaf": "MEMORY.md" },
+      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/MEMORY.md",
+      "requiredRelations": ["owned-by", "for-desk"],
+      "entry": "link"
+    },
+    "preference": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "roots": ["private"],
+      "source": { "format": "markdown" },
+      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/self/preferences/{node.id}.md",
+      "requiredRelations": ["owned-by", "for-desk"],
+      "entry": "link"
+    },
+    "goal": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "roots": ["private"],
+      "source": { "format": "markdown" },
+      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/self/goals/{node.id}.md",
+      "requiredRelations": ["owned-by", "for-desk"],
+      "entry": "link"
+    },
+    "principle": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "roots": ["private"],
+      "source": { "format": "markdown" },
+      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/self/principles/{node.id}.md",
+      "requiredRelations": ["owned-by", "for-desk"],
+      "entry": "link"
+    },
+    "belief": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "roots": ["private"],
+      "source": { "format": "markdown" },
+      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/self/beliefs/{node.id}.md",
+      "requiredRelations": ["owned-by", "for-desk"],
+      "entry": "link"
+    },
+    "pattern": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "roots": ["private"],
+      "source": { "format": "markdown" },
+      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/self/patterns/{node.id}.md",
+      "requiredRelations": ["owned-by", "for-desk"],
+      "entry": "link"
+    },
+    "constraint": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "roots": ["private"],
+      "source": { "format": "markdown" },
+      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/self/constraints/{node.id}.md",
+      "requiredRelations": ["owned-by", "for-desk"],
+      "entry": "link"
+    },
+    "workspace": {
+      "mode": "resolved",
+      "target": { "kind": "entity-family", "ids": ["place"] },
+      "requiresRoles": ["room"],
+      "entry": "none"
+    },
+    "workshop": {
+      "mode": "resolved",
+      "target": { "kind": "entity-family", "ids": ["place"] },
+      "requiresRoles": ["workspace"],
+      "entry": "none"
+    },
+    "study": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["work"] },
+      "roots": ["shared", "private"],
+      "source": { "format": "markdown", "leaf": "WORK.md" },
+      "locator": "rooms/{relation.contained-by.id}/work/{node.id}/WORK.md",
+      "requiredRelations": ["contained-by"],
+      "entry": "scope"
+    },
+    "initiative": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["work"] },
+      "source": { "format": "markdown", "leaf": "WORK.md" },
+      "locator": "rooms/{relation.contained-by.id}/work/{node.id}/WORK.md",
+      "requiredRelations": ["contained-by"],
+      "entry": "scope"
+    },
+    "exploration": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["work"] },
+      "source": { "format": "markdown", "leaf": "WORK.md" },
+      "locator": "rooms/{relation.contained-by.id}/work/{node.id}/WORK.md",
+      "requiredRelations": ["contained-by"],
+      "entry": "scope"
+    },
+    "meeting": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["meeting"] },
+      "roots": ["shared", "private"],
+      "source": { "format": "markdown", "leaf": "MEETING.md" },
+      "locator": "rooms/{relation.contained-by.id}/meetings/{node.id}/MEETING.md",
+      "requiredRelations": ["contained-by"],
+      "lifecycle": "meeting",
+      "entry": "scope"
+    },
+    "evidence": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "source": { "format": "markdown" },
+      "locator": "rooms/{relation.contained-by.id}/material/{node.id}.md",
+      "requiredRelations": ["contained-by"],
+      "entry": "link"
+    },
+    "decision": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "source": { "format": "markdown", "leaf": "DECISION.md" },
+      "locator": "rooms/{relation.contained-by.id}/decisions/{node.id}/DECISION.md",
+      "requiredRelations": ["contained-by"],
+      "entry": "link"
+    },
+    "artifact": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "source": { "format": "markdown", "leaf": "ARTIFACT.md" },
+      "locator": "rooms/{relation.contained-by.id}/material/{node.id}/ARTIFACT.md",
+      "requiredRelations": ["contained-by"],
+      "entry": "link"
+    },
+    "publication-source": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "source": { "format": "markdown" },
+      "locator": "rooms/{relation.contained-by.id}/material/{node.id}.md",
+      "requiredRelations": ["contained-by"],
+      "entry": "link"
+    },
+    "meeting-contribution": {
+      "mode": "authored",
+      "target": { "kind": "entity-family", "ids": ["material"] },
+      "source": { "format": "markdown" },
+      "locator": "rooms/{relation.contained-by.id}/meetings/{relation.for-meeting.id}/contributions/{node.id}.md",
+      "requiredRelations": ["contained-by", "for-meeting"],
+      "entry": "link"
+    },
+    "shelf": { "mode": "authored", "target": { "kind": "slot" }, "entry": "none" },
+    "front-door": { "mode": "resolved", "target": { "kind": "projection" }, "entry": "none" },
+    "workbench": { "mode": "resolved", "target": { "kind": "projection" }, "entry": "none" },
+    "noticeboard": { "mode": "resolved", "target": { "kind": "projection" }, "entry": "none" }
+  },
+  "slots": {
+    "governance": { "owner": "owner", "role": "shelf", "accepts": { "entities": ["material"], "roles": ["constitution", "doctrine", "change-policy"] }, "cardinality": "1..*", "locator": "{node.id}", "visibility": "listed", "order": 1 },
+    "members": { "owner": "owner", "role": "shelf", "accepts": { "entities": ["member"], "roles": ["owner"] }, "cardinality": "1..*", "locator": "members/{node.id}", "visibility": "listed", "order": 10 },
+    "desks": { "owner": "owner", "role": "shelf", "accepts": { "entities": ["place"], "roles": ["desk"] }, "cardinality": "0..*", "locator": "members/{relation.owned-by.id}/desks/{node.id}", "visibility": "linked", "order": 15 },
+    "rooms": { "owner": "owner", "role": "shelf", "accepts": { "entities": ["place"], "roles": ["room"] }, "cardinality": "0..*", "locator": "rooms/{node.id}", "visibility": "listed", "order": 20 },
+    "sites": { "owner": "owner", "role": "shelf", "accepts": { "entities": ["place"], "roles": ["site"] }, "cardinality": "0..*", "locator": "sites/{node.id}", "visibility": "linked", "order": 30 },
+    "room-work": { "owner": "room", "role": "shelf", "accepts": { "entities": ["work"], "roles": ["study", "initiative", "exploration"] }, "cardinality": "0..*", "locator": "work/{node.id}", "visibility": "listed", "order": 10 },
+    "room-meeting": { "owner": "room", "role": "shelf", "accepts": { "entities": ["meeting"], "roles": ["meeting"] }, "cardinality": "0..*", "locator": "meetings/{node.id}", "visibility": "listed", "order": 15 },
+    "room-material": { "owner": "room", "role": "shelf", "accepts": { "entities": ["material"], "roles": ["evidence", "decision", "artifact", "publication-source", "meeting-contribution"] }, "cardinality": "0..*", "locator": "material/{node.id}", "visibility": "listed", "order": 20 },
+    "desk-material": { "owner": "desk", "role": "shelf", "accepts": { "entities": ["material"], "roles": ["welcome", "memory-policy", "preference", "goal", "principle", "belief", "pattern", "constraint"] }, "cardinality": "1..*", "locator": "self/{node.id}", "visibility": "linked", "order": 10 }
+  },
+  "relations": {
+    "owns": { "from": ["member"], "to": ["place"], "cardinality": { "from": "1", "to": "0..*" }, "external": "allowed", "purpose": "Attribute durable cross-Root Place ownership without disclosing the target." },
+    "owned-by": { "from": ["place", "material"], "to": ["member"], "cardinality": { "from": "1", "to": "0..*" }, "external": "forbidden", "purpose": "Resolve an owning Member." },
+    "for-desk": { "from": ["material"], "to": ["desk"], "cardinality": { "from": "1", "to": "0..*" }, "external": "forbidden", "purpose": "Bind Desk disclosure and facets to one Desk." },
+    "admits": { "from": ["desk"], "to": ["member"], "cardinality": { "from": "0..*", "to": "0..*" }, "external": "forbidden", "purpose": "Declare a read-only semantic admission for a Member." },
+    "contains": { "from": ["room"], "to": ["work", "material", "meeting"], "cardinality": { "from": "1", "to": "0..*" }, "external": "forbidden", "purpose": "Expose immediate Room children." },
+    "contained-by": { "from": ["work", "material", "meeting"], "to": ["room"], "cardinality": { "from": "1", "to": "0..*" }, "external": "forbidden", "purpose": "Resolve typed Room placement." },
+    "advances": { "from": ["meeting"], "to": ["work"], "cardinality": { "from": "0..*", "to": "0..*" }, "external": "allowed", "purpose": "Relate collaboration to Work without coupling lifecycles." },
+    "for-meeting": { "from": ["meeting-contribution"], "to": ["meeting"], "cardinality": { "from": "1", "to": "0..*" }, "external": "forbidden", "purpose": "Place a bounded contribution under its Meeting." },
+    "routes-to": { "from": ["room", "work"], "to": ["site"], "cardinality": { "from": "0..*", "to": "0..*" }, "external": "forbidden", "purpose": "Declare a sovereign product destination." },
+    "targets": { "from": ["work"], "to": ["site"], "cardinality": { "from": "0..*", "to": "0..*" }, "external": "forbidden", "purpose": "Bind Work to a Site." },
+    "supported-by": { "from": ["room", "work"], "to": ["material"], "cardinality": { "from": "0..*", "to": "0..*" }, "external": "forbidden", "purpose": "Select relevant evidence." },
+    "supports": { "from": ["material"], "to": ["work"], "cardinality": { "from": "0..*", "to": "0..*" }, "external": "forbidden", "purpose": "Relate evidence to Work." },
+    "implements": { "from": ["site"], "to": ["work"], "cardinality": { "from": "0..*", "to": "0..*" }, "external": "forbidden", "purpose": "Declare Site responsibility." },
+    "uses": { "from": ["work"], "to": ["work"], "cardinality": { "from": "0..*", "to": "0..*" }, "external": "allowed", "purpose": "Reference a selected external definition package." }
+  },
+  "views": {
+    "register": { "fromEntities": ["work", "material"], "fromRoles": ["decision"], "projection": "REGISTER.md" }
+  },
+  "lifecycles": {
+    "place": ["active", "archived"],
+    "work": ["ready", "active", "complete", "cancelled"],
+    "material": ["current", "superseded", "archived"],
+    "meeting": ["ephemeral", "active", "settling", "closed"]
+  }
+}

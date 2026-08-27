@@ -1,0 +1,10 @@
+{
+  "kind": "LexiconIR",
+  "profile": {
+    "digest": "sha256:aa16db0133b6660d713a4ede8dc57a75ffec9c1747352bdf8824b23f1c98106e",
+    "ref": "workplace://profiles/field-lab"
+  },
+  "terms": {},
+  "version": 1,
+  "workplace": "workplace://demo/field-lab"
+}

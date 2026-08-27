@@ -1,0 +1,35 @@
+{
+  "kind": "ProviderBinding",
+  "provider": "claude",
+  "targets": [
+    {
+      "provider": "claude",
+      "kind": "front-door",
+      "path": "CLAUDE.md",
+      "discovery": "automatic",
+      "loadGuarantee": "qualified"
+    },
+    {
+      "provider": "claude",
+      "kind": "agent",
+      "path": "agents/manager.md",
+      "discovery": "model-selected",
+      "loadGuarantee": "unproven"
+    },
+    {
+      "provider": "claude",
+      "kind": "agent",
+      "path": "agents/worker.md",
+      "discovery": "model-selected",
+      "loadGuarantee": "unproven"
+    },
+    {
+      "provider": "claude",
+      "kind": "startup",
+      "path": "MEMORY.md",
+      "discovery": "automatic",
+      "loadGuarantee": "qualified"
+    }
+  ],
+  "tools": []
+}

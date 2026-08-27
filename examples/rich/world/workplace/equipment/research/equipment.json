@@ -1,0 +1,28 @@
+{
+  "kind": "Equipment",
+  "ref": "workplace://demo/rich-studio/equipment/research",
+  "id": "research",
+  "compatibleProfiles": ["endroit-standard"],
+  "methods": [
+    {
+      "id": "study",
+      "title": "Study",
+      "instructions": "methods/study.md",
+      "intent": ["study", "research", "qualify evidence"],
+      "useWhen": ["Current Work is a Study and evidence must be qualified."],
+      "acceptsWorkForms": ["study"],
+      "requiredPlaceRoles": ["room"],
+      "requires": ["question-framed"],
+      "operations": [
+        { "id": "source.inspect", "trait": "source.read-local", "effect": "read", "authority": "none", "proof": ["observed-source-revision"] }
+      ],
+      "effects": ["answer-qualified"],
+      "authority": "none",
+      "proof": ["study-evidence"],
+      "staticFallback": "complete",
+      "stages": [
+        { "id": "inspect", "appliesTo": ["study"], "operations": ["source.inspect"], "outcome": { "id": "study.inspect", "requires": ["question-framed"], "produces": ["answer-qualified"], "preserves": ["source-attribution"], "forbids": ["implicit-acceptance"], "evidence": ["study"] } }
+      ]
+    }
+  ]
+}

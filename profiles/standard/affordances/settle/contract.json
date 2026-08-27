@@ -1,0 +1,10 @@
+{
+  "kind": "AffordanceContract",
+  "version": 1,
+  "id": "settle",
+  "positions": ["meeting"],
+  "applicability": "active-meeting",
+  "authority": "bounded",
+  "providerTargets": ["skill"],
+  "instructions": "instructions.md"
+}

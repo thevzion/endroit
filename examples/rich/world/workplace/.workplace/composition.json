@@ -1,0 +1,8 @@
+{
+  "equipment": [
+    "workplace://endroit/equipment/core",
+    "workplace://demo/rich-studio/equipment/research"
+  ],
+  "kind": "Composition",
+  "ref": "workplace://demo/rich-studio/composition"
+}

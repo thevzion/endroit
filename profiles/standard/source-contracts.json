@@ -1,0 +1,38 @@
+{
+  "kind": "SourceContracts",
+  "version": 1,
+  "contracts": [
+    {
+      "id": "room",
+      "path": "source-contracts/ROOM.md",
+      "projection": ".workplace/source-contracts/ROOM.md",
+      "variables": ["ROOM_REF", "OWNER_REF", "WORKPLACE_REF", "ROOM_LABEL", "ROOM_SUMMARY", "ROOM_WHEN", "MEETING_REF"],
+      "consumers": ["open-room"],
+      "maxBytes": 16384
+    },
+    {
+      "id": "meeting",
+      "path": "source-contracts/MEETING.md",
+      "projection": ".workplace/source-contracts/MEETING.md",
+      "variables": ["MEETING_REF", "OWNER_REF", "ROOM_REF", "MEETING_LABEL", "MEETING_SUMMARY", "MEETING_WHEN", "MEETING_INTENT", "NEXT_BOUNDARY"],
+      "consumers": ["open-room"],
+      "maxBytes": 16384
+    },
+    {
+      "id": "work",
+      "path": "source-contracts/WORK.md",
+      "projection": ".workplace/source-contracts/WORK.md",
+      "variables": ["WORK_REF", "OWNER_REF", "ROOM_REF", "WORK_SUMMARY", "WORK_WHEN", "WORK_OUTCOME", "WORK_VERIFICATION", "SITE_REF"],
+      "consumers": ["open-work"],
+      "maxBytes": 16384
+    },
+    {
+      "id": "site",
+      "path": "source-contracts/SITE.md",
+      "projection": ".workplace/source-contracts/SITE.md",
+      "variables": ["SITE_REF", "OWNER_REF", "WORKPLACE_REF", "SITE_SUMMARY", "SITE_WHEN", "WORK_REF"],
+      "consumers": ["open-work"],
+      "maxBytes": 16384
+    }
+  ]
+}

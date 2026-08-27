@@ -1,0 +1,16 @@
+{
+  "kind": "WorkplaceBuildContract",
+  "version": 2,
+  "workplace": "workplace://demo/smallest",
+  "profile": { "ref": "workplace://profiles/endroit-standard", "path": "../../../../profiles/standard/profile.json" },
+  "composition": { "ref": "workplace://demo/smallest/composition", "path": "composition.json" },
+  "roots": ["shared", "private", "site"],
+  "policy": {
+    "disclosureSelectors": ["hall-resident", "hall-bound", "hall-navigation", "place-local", "meeting-contract", "work-contract", "site-boundary", "provider-cache"],
+    "localBuildIntent": "bounded-work-and-site",
+    "delivery": "explicit-human-only"
+  },
+  "distributionTargets": [
+    { "provider": "neutral", "kind": "front-door", "path": "WORKPLACE.md", "discovery": "manual", "loadGuarantee": "qualified" }
+  ]
+}

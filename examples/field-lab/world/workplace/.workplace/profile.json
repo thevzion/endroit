@@ -1,0 +1,365 @@
+{
+  "$schema": "https://endroit.org/schema/workplace-profile/v1.json",
+  "disclosures": {
+    "degraded": "Owned sources stay readable without tooling.",
+    "discovery": "Enter a Station and reveal only its trials and observations.",
+    "identity": "Semantic Ref plus observed Revision.",
+    "lifecycle": "Experiment and Specimen states remain separate.",
+    "limits": {
+      "maxDepth": 12,
+      "maxResidentBytes": 2048,
+      "maxSourceBytes": 131072,
+      "maxSources": 200
+    },
+    "projections": "Board and Front Doors are rebuildable.",
+    "roots": "One embedded lab Root.",
+    "selectors": [
+      {
+        "id": "hall-resident",
+        "positions": [
+          "hall"
+        ],
+        "reason": "The entry states universal authority and source boundaries.",
+        "relations": [],
+        "roles": [],
+        "visibility": "must-show"
+      },
+      {
+        "id": "hall-bound",
+        "positions": [
+          "hall"
+        ],
+        "reason": "A neutral alternative Profile still exposes onboarding state.",
+        "relations": [],
+        "roles": [],
+        "visibility": "must-show"
+      },
+      {
+        "id": "hall-navigation",
+        "positions": [
+          "hall"
+        ],
+        "reason": "The Hall reveals enterable Stations only.",
+        "relations": [],
+        "roles": [
+          "station"
+        ],
+        "visibility": "must-show"
+      },
+      {
+        "id": "place-local",
+        "positions": [
+          "place"
+        ],
+        "reason": "A Station reveals only local trials, observations and methods.",
+        "relations": [
+          "contained-by"
+        ],
+        "roles": [
+          "station"
+        ],
+        "visibility": "must-show"
+      },
+      {
+        "id": "work-contract",
+        "positions": [
+          "work"
+        ],
+        "reason": "A Trial exposes its local contract when entered.",
+        "relations": [
+          "contained-by"
+        ],
+        "roles": [
+          "trial"
+        ],
+        "visibility": "must-show"
+      },
+      {
+        "id": "site-boundary",
+        "positions": [
+          "site"
+        ],
+        "reason": "This Profile has no Site but keeps the disclosure grammar portable.",
+        "relations": [],
+        "roles": [],
+        "visibility": "must-show"
+      },
+      {
+        "id": "provider-cache",
+        "positions": [
+          "hall",
+          "place",
+          "work",
+          "site"
+        ],
+        "reason": "Ambient provider state is not field evidence.",
+        "relations": [],
+        "roles": [],
+        "visibility": "must-hide"
+      }
+    ],
+    "sites": "This Profile declares no sovereign product Site."
+  },
+  "entities": {
+    "experiment": {
+      "purpose": "Own one field outcome.",
+      "roles": [
+        "trial"
+      ],
+      "title": "Experiment",
+      "useWhen": [
+        "A trial has an independent lifecycle."
+      ]
+    },
+    "instrument": {
+      "purpose": "Describe a bounded measuring surface.",
+      "roles": [
+        "sensor"
+      ],
+      "title": "Instrument",
+      "useWhen": [
+        "A trial requires a tool."
+      ]
+    },
+    "researcher": {
+      "purpose": "Own observation judgment.",
+      "roles": [
+        "observer"
+      ],
+      "title": "Researcher",
+      "useWhen": [
+        "Attribution is required."
+      ]
+    },
+    "specimen": {
+      "purpose": "Retain an observed object or result.",
+      "roles": [
+        "observation"
+      ],
+      "title": "Specimen",
+      "useWhen": [
+        "An observation needs identity."
+      ]
+    },
+    "zone": {
+      "purpose": "Own a field boundary.",
+      "roles": [
+        "station"
+      ],
+      "title": "Zone",
+      "useWhen": [
+        "A station needs a navigable location."
+      ]
+    }
+  },
+  "id": "field-lab",
+  "lifecycles": {
+    "experiment": [
+      "planned",
+      "active",
+      "complete"
+    ],
+    "specimen": [
+      "current",
+      "archived"
+    ]
+  },
+  "ref": "workplace://profiles/field-lab",
+  "relations": {
+    "contained-by": {
+      "cardinality": {
+        "from": "1",
+        "to": "0..*"
+      },
+      "external": "forbidden",
+      "from": [
+        "experiment",
+        "specimen"
+      ],
+      "purpose": "Place trials and observations in one Station.",
+      "to": [
+        "station"
+      ]
+    }
+  },
+  "roles": {
+    "board": {
+      "entry": "none",
+      "mode": "resolved",
+      "target": {
+        "kind": "projection"
+      }
+    },
+    "observation": {
+      "entry": "link",
+      "locator": "stations/{relation.contained-by.id}/observations/{node.id}/OBSERVATION.md",
+      "mode": "authored",
+      "requiredRelations": [
+        "contained-by"
+      ],
+      "roots": [
+        "lab"
+      ],
+      "source": {
+        "format": "markdown",
+        "leaf": "OBSERVATION.md"
+      },
+      "target": {
+        "ids": [
+          "specimen"
+        ],
+        "kind": "entity-family"
+      }
+    },
+    "observer": {
+      "entry": "link",
+      "locator": "researchers/{node.id}/RESEARCHER.md",
+      "mode": "authored",
+      "roots": [
+        "lab"
+      ],
+      "source": {
+        "format": "markdown",
+        "leaf": "RESEARCHER.md"
+      },
+      "target": {
+        "ids": [
+          "researcher"
+        ],
+        "kind": "entity-family"
+      }
+    },
+    "rack": {
+      "entry": "none",
+      "mode": "authored",
+      "target": {
+        "kind": "slot"
+      }
+    },
+    "sensor": {
+      "entry": "link",
+      "locator": "instruments/{node.id}/INSTRUMENT.md",
+      "mode": "authored",
+      "roots": [
+        "lab"
+      ],
+      "source": {
+        "format": "markdown",
+        "leaf": "INSTRUMENT.md"
+      },
+      "target": {
+        "ids": [
+          "instrument"
+        ],
+        "kind": "entity-family"
+      }
+    },
+    "station": {
+      "entry": "scope",
+      "locator": "stations/{node.id}/STATION.md",
+      "mode": "authored",
+      "roots": [
+        "lab"
+      ],
+      "source": {
+        "format": "markdown",
+        "leaf": "STATION.md"
+      },
+      "target": {
+        "ids": [
+          "zone"
+        ],
+        "kind": "entity-family"
+      }
+    },
+    "trial": {
+      "entry": "scope",
+      "locator": "stations/{relation.contained-by.id}/trials/{node.id}/TRIAL.md",
+      "mode": "authored",
+      "requiredRelations": [
+        "contained-by"
+      ],
+      "roots": [
+        "lab"
+      ],
+      "source": {
+        "format": "markdown",
+        "leaf": "TRIAL.md"
+      },
+      "target": {
+        "ids": [
+          "experiment"
+        ],
+        "kind": "entity-family"
+      }
+    }
+  },
+  "roots": {
+    "lab": {
+      "ownership": "workplace",
+      "physical": "embedded",
+      "visibility": "shared"
+    }
+  },
+  "slots": {
+    "observations": {
+      "accepts": {
+        "entities": [
+          "specimen"
+        ],
+        "roles": [
+          "observation"
+        ]
+      },
+      "cardinality": "0..*",
+      "locator": "observations/{node.id}",
+      "owner": "station",
+      "role": "rack",
+      "visibility": "listed"
+    },
+    "stations": {
+      "accepts": {
+        "entities": [
+          "zone"
+        ],
+        "roles": [
+          "station"
+        ]
+      },
+      "cardinality": "1..*",
+      "locator": "stations/{node.id}",
+      "owner": "observer",
+      "role": "rack",
+      "visibility": "listed"
+    },
+    "trials": {
+      "accepts": {
+        "entities": [
+          "experiment"
+        ],
+        "roles": [
+          "trial"
+        ]
+      },
+      "cardinality": "0..*",
+      "locator": "trials/{node.id}",
+      "owner": "station",
+      "role": "rack",
+      "visibility": "listed"
+    }
+  },
+  "version": "1.0.0-rc.0",
+  "views": {
+    "board": {
+      "fromEntities": [
+        "experiment",
+        "specimen"
+      ],
+      "fromRoles": [
+        "trial",
+        "observation"
+      ],
+      "projection": "BOARD.md"
+    }
+  }
+}

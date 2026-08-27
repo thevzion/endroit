@@ -1,0 +1,8 @@
+{
+  "kind": "HumanQualificationScenario",
+  "version": 1,
+  "id": "fresh-personal",
+  "intent": "Modifie mon profil pour utiliser le français et un humour léger.",
+  "expectedPath": ["Hall", "Member Card", "Desk", "WELCOME"],
+  "forbidden": ["provider-memory-write", "implicit-delivery", "free-site"]
+}

@@ -1,0 +1,113 @@
+{
+  "dispatchEnvelope": [
+    "meetingRef",
+    "position",
+    "workRef",
+    "objective",
+    "authoritativeSources",
+    "mutableScope",
+    "exclusions",
+    "authority",
+    "mandate",
+    "expectedOutcome",
+    "terminalCondition",
+    "activeControls"
+  ],
+  "fallbacks": {
+    "ambiguous": "ask-once-zero-write",
+    "inlineWorker": "single-scope-explicit",
+    "missingAuthority": "blocked",
+    "noSubagents": "degraded"
+  },
+  "kind": "CoordinationPolicy",
+  "ref": "workplace://demo/smallest/coordination",
+  "resolution": [
+    {
+      "id": "read-only",
+      "sequence": [
+        "main"
+      ],
+      "when": {
+        "contextClass": "bounded",
+        "effectCount": "zero",
+        "integration": false,
+        "rootCount": "one"
+      }
+    },
+    {
+      "id": "single-scope",
+      "sequence": [
+        "main",
+        "worker",
+        "main"
+      ],
+      "when": {
+        "contextClass": "bounded",
+        "effectCount": "one",
+        "integration": false,
+        "rootCount": "one"
+      }
+    },
+    {
+      "id": "integration",
+      "sequence": [
+        "main",
+        "manager",
+        "worker",
+        "manager",
+        "main"
+      ],
+      "when": {
+        "contextClass": "substantial",
+        "effectCount": "multiple",
+        "integration": true,
+        "rootCount": "multiple"
+      }
+    }
+  ],
+  "roles": {
+    "main": {
+      "never": [
+        "human acceptance",
+        "delivery consent",
+        "hidden memory"
+      ],
+      "owns": [
+        "human conversation",
+        "Intent",
+        "routing",
+        "determining assumptions",
+        "synthesis"
+      ]
+    },
+    "manager": {
+      "never": [
+        "human contact",
+        "acceptance",
+        "delivery"
+      ],
+      "owns": [
+        "one Work goal",
+        "decomposition",
+        "integration",
+        "Git index",
+        "commits",
+        "gates"
+      ]
+    },
+    "worker": {
+      "never": [
+        "commit",
+        "dispatch",
+        "human contact",
+        "scope expansion"
+      ],
+      "owns": [
+        "one exclusive mutable scope",
+        "verification",
+        "observed result"
+      ]
+    }
+  },
+  "version": 1
+}

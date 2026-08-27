@@ -1,0 +1,16 @@
+{
+  "kind": "WorkplaceBuildContract",
+  "version": 2,
+  "workplace": "workplace://demo/field-lab",
+  "profile": { "ref": "workplace://profiles/field-lab", "path": "../../profile.json" },
+  "composition": { "ref": "workplace://demo/field-lab/composition", "path": "composition.json" },
+  "roots": ["lab"],
+  "policy": {
+    "disclosureSelectors": ["hall-resident", "hall-bound", "hall-navigation", "place-local", "work-contract", "site-boundary", "provider-cache"],
+    "localBuildIntent": "bounded-work-and-site",
+    "delivery": "explicit-human-only"
+  },
+  "distributionTargets": [
+    { "provider": "neutral", "kind": "front-door", "path": "WORKPLACE.md", "discovery": "manual", "loadGuarantee": "qualified" }
+  ]
+}

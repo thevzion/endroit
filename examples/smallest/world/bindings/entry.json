@@ -1,0 +1,10 @@
+{
+  "kind": "EntryBinding",
+  "workplace": "workplace://demo/smallest",
+  "member": "workplace://demo/smallest/member/alexis",
+  "desk": "workplace://demo/smallest/desk/alexis",
+  "rootBindings": {
+    "shared": "workplace",
+    "private:alexis": "checkouts/desks/alexis"
+  }
+}

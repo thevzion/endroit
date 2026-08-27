@@ -1,0 +1,57 @@
+{
+  "affordances": [],
+  "controls": [],
+  "equipment": [
+    {
+      "methods": [
+        "inspect"
+      ],
+      "ref": "workplace://demo/field-lab/equipment/observation",
+      "revision": "sha256:b3b91e9b167f048e2b4705758076215667c93231c76506a34040279aad2e7b75"
+    }
+  ],
+  "grammar": {
+    "ref": "workplace://profiles/field-lab",
+    "revision": "sha256:aa16db0133b6660d713a4ede8dc57a75ffec9c1747352bdf8824b23f1c98106e"
+  },
+  "kind": "WorkplaceDefinition",
+  "lexicon": null,
+  "profile": {
+    "digest": "sha256:aa16db0133b6660d713a4ede8dc57a75ffec9c1747352bdf8824b23f1c98106e",
+    "legacy": true,
+    "ref": "workplace://profiles/field-lab"
+  },
+  "providers": [
+    {
+      "discovery": "manual",
+      "kind": "front-door",
+      "loadGuarantee": "qualified",
+      "path": "WORKPLACE.md",
+      "provider": "neutral"
+    }
+  ],
+  "responsibilities": [],
+  "sourceContracts": [],
+  "sources": [
+    {
+      "path": "workplace/sources/stations/north/trials/wind/TRIAL.md",
+      "ref": "workplace://demo/field-lab/experiment/wind",
+      "revision": "sha256:e655a1191d5e84902cc84e2adb917642cc51f150d3e00ecc740eb48a0b04ae87",
+      "root": "lab"
+    },
+    {
+      "path": "workplace/sources/stations/north/observations/baseline/OBSERVATION.md",
+      "ref": "workplace://demo/field-lab/specimen/baseline",
+      "revision": "sha256:45b11ddfcc8627d5e6995b56d8673975ec182c08a94046360abde07230737dfb",
+      "root": "lab"
+    },
+    {
+      "path": "workplace/sources/stations/north/STATION.md",
+      "ref": "workplace://demo/field-lab/station/north",
+      "revision": "sha256:d325379cd71be88cddb717114d3a4251906bb9cf9f91eb4807121ba1cf3ca2ee",
+      "root": "lab"
+    }
+  ],
+  "version": 1,
+  "workplace": "workplace://demo/field-lab"
+}

@@ -1,0 +1,153 @@
+{
+  "$schema": "https://endroit.org/schema/workplace-map/v1.json",
+  "entries": [
+    {
+      "entity": "agent",
+      "path": "workplace/sources/agents/researcher/AGENT.md",
+      "projectionPath": "agents/researcher/AGENT.md",
+      "ref": "workplace://demo/rich-studio/agent/researcher",
+      "revision": "sha256:3ef961969dac77a9127a0d778339b833b74f04e69b34cf6683076be2afdb498b",
+      "roles": [
+        "operator"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "material",
+      "path": "workplace/sources/rooms/lab/decisions/candidate/DECISION.md",
+      "projectionPath": "rooms/lab/decisions/candidate-decision/DECISION.md",
+      "ref": "workplace://demo/rich-studio/material/candidate-decision",
+      "revision": "sha256:520f6fd4e6cead02dcfbb94a49ca65eaf538f7bbe210264a05393810ceced901",
+      "roles": [
+        "decision"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "material",
+      "path": "workplace/sources/CHANGE.md",
+      "projectionPath": "CHANGE.md",
+      "ref": "workplace://demo/rich-studio/material/change-policy",
+      "revision": "sha256:8fe515fa592c3f1528cccbb823464e935772a5933350065e20692b744428145a",
+      "roles": [
+        "change-policy"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "material",
+      "path": "workplace/sources/CONSTITUTION.md",
+      "projectionPath": "CONSTITUTION.md",
+      "ref": "workplace://demo/rich-studio/material/constitution",
+      "revision": "sha256:d711b7638024ef401c5b8b2583ae3d35f9870e3eade2f1e928da899150f08702",
+      "roles": [
+        "constitution"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "material",
+      "path": "workplace/sources/DOCTRINE.md",
+      "projectionPath": "DOCTRINE.md",
+      "ref": "workplace://demo/rich-studio/material/doctrine",
+      "revision": "sha256:a7e2a5f403f4e16f61ca2d4129236bc8091038b475f67f22693046fbe19b7d08",
+      "roles": [
+        "doctrine"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "material",
+      "path": "workplace/sources/rooms/lab/material/old-observation.md",
+      "projectionPath": "rooms/lab/material/old-observation.md",
+      "ref": "workplace://demo/rich-studio/material/old-observation",
+      "revision": "sha256:3a0f2d5352d98a208c29e8f101de7c527df9d53a285327aff9a77216e5a6913b",
+      "roles": [
+        "evidence"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "meeting",
+      "lifecycle": "active",
+      "path": "workplace/sources/rooms/lab/meetings/choice-review/MEETING.md",
+      "projectionPath": "rooms/lab/meetings/choice-review/FRONTDOOR.md",
+      "ref": "workplace://demo/rich-studio/meeting/choice-review",
+      "revision": "sha256:3e24e1cd9583674ff5550e01b43e300e02934945924ff164b12334b36f1bde75",
+      "roles": [
+        "meeting"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "member",
+      "path": "workplace/sources/members/alexis/MEMBER.md",
+      "projectionPath": "members/alexis/MEMBER.md",
+      "ref": "workplace://demo/rich-studio/member/alexis",
+      "revision": "sha256:eb373fb5fd446049cb935de18d4ea592c53e7c88d8d46eeabed28b353279012e",
+      "roles": [
+        "owner"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "member",
+      "path": "workplace/sources/members/mira/MEMBER.md",
+      "projectionPath": "members/mira/MEMBER.md",
+      "ref": "workplace://demo/rich-studio/member/mira",
+      "revision": "sha256:7c82f3aab7dabaee63fd3cbbf75bb432fbde89cb73951104b3752f1c98b0841a",
+      "roles": [
+        "owner"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "member",
+      "path": "workplace/sources/members/sam/MEMBER.md",
+      "projectionPath": "members/sam/MEMBER.md",
+      "ref": "workplace://demo/rich-studio/member/sam",
+      "revision": "sha256:362ad59a55f3d19a76b97132259189db9c7254a3acf7ecd985deea38dc663424",
+      "roles": [
+        "owner"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "place",
+      "path": "workplace/sources/rooms/lab/ROOM.md",
+      "projectionPath": "rooms/lab/FRONTDOOR.md",
+      "ref": "workplace://demo/rich-studio/room/lab",
+      "revision": "sha256:e546468c8a4a36328e796ef35efe509b87785259382cad8991acd214a5e9d724",
+      "roles": [
+        "room"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "place",
+      "path": "workplace/sources/sites/lab-product/SITE.md",
+      "projectionPath": "sites/lab-product/FRONTDOOR.md",
+      "ref": "workplace://demo/rich-studio/site/lab-product",
+      "revision": "sha256:6e7e058cf44b142f0e8a3f94715f0f54a98e8e77ff9a3b1def862fda90421539",
+      "roles": [
+        "site"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "work",
+      "path": "workplace/sources/rooms/lab/work/choice/WORK.md",
+      "projectionPath": "work/choice/FRONTDOOR.md",
+      "ref": "workplace://demo/rich-studio/work/choice",
+      "revision": "sha256:35ddd44d0efbc6bc06251f6486ea52fc55b79dd37304da3e445c47b3b16a7944",
+      "roles": [
+        "study"
+      ],
+      "root": "shared"
+    }
+  ],
+  "profileRevision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53",
+  "sourceRevision": "sha256:a9fa8442c4aa32762b6d00a8fdb837a575bbe55dc20c0525ed55fa8478faa06c",
+  "workplace": "workplace://demo/rich-studio",
+  "workplaceIgnoreRevision": "sha256:df2d9f971b80a51dc565a99aac0ef4ec2a93d2e5d0122eff93b5517f357226a4"
+}

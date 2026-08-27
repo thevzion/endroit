@@ -1,0 +1,11 @@
+{
+  "kind": "EntryBinding",
+  "workplace": "workplace://demo/rich-studio",
+  "member": "workplace://demo/rich-studio/member/alexis",
+  "desk": "workplace://demo/rich-studio/desk/alexis",
+  "rootBindings": {
+    "shared": "workplace",
+    "private:alexis": "checkouts/desks/alexis",
+    "private:sam": "checkouts/desks/sam"
+  }
+}

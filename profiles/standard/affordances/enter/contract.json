@@ -1,0 +1,10 @@
+{
+  "kind": "AffordanceContract",
+  "version": 1,
+  "id": "enter",
+  "positions": ["hall"],
+  "applicability": "bound",
+  "authority": "none",
+  "providerTargets": ["skill"],
+  "instructions": "instructions.md"
+}

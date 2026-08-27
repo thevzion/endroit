@@ -1,0 +1,9 @@
+{
+  "kind": "HumanQualificationExpected",
+  "version": 1,
+  "requiredSources": [{ "root": "desk", "basename": "WELCOME.md" }],
+  "requiredRoots": ["shared", "desk"],
+  "requiredEvidence": ["check-ready", "roots-clean", "history-valid", "provider-metadata"],
+  "preserves": ["no-provider-memory", "no-remote", "no-delivery"],
+  "terminal": { "operationStatus": "ready", "rootsClean": true }
+}

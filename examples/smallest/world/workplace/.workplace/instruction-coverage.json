@@ -1,0 +1,88 @@
+{
+  "coverage": [
+    {
+      "responsibility": "source:material",
+      "source": {
+        "ref": "workplace://demo/smallest/material/change-policy",
+        "revision": "sha256:0f04854c872d636bfdc3e90cffb062405bd9a8e6ba5dc136ccb28efdd563977b"
+      },
+      "surfaces": [
+        "workplace/sources/CHANGE.md",
+        "FRONTDOOR.md"
+      ]
+    },
+    {
+      "responsibility": "source:material",
+      "source": {
+        "ref": "workplace://demo/smallest/material/constitution",
+        "revision": "sha256:d0e86453155156e8cd8e66a865956924923f9d9e07ed49fbf5a49369d400ca91"
+      },
+      "surfaces": [
+        "workplace/sources/CONSTITUTION.md",
+        "FRONTDOOR.md"
+      ]
+    },
+    {
+      "responsibility": "source:material",
+      "source": {
+        "ref": "workplace://demo/smallest/material/doctrine",
+        "revision": "sha256:95bdcdba9b6bbce1108412353e49db5c3d64f71ef7b0c893ad082a96a4ea427b"
+      },
+      "surfaces": [
+        "workplace/sources/DOCTRINE.md",
+        "FRONTDOOR.md"
+      ]
+    },
+    {
+      "responsibility": "source:member",
+      "source": {
+        "ref": "workplace://demo/smallest/member/alexis",
+        "revision": "sha256:e9a88a64b9d89e27f4a86889113e7a2de023855af580a967d7667ba283934e6e"
+      },
+      "surfaces": [
+        "workplace/sources/members/alexis/MEMBER.md"
+      ]
+    },
+    {
+      "responsibility": "source:meeting",
+      "source": {
+        "ref": "workplace://demo/smallest/meeting/demo-build",
+        "revision": "sha256:db05d837dd3ef1465f85646ee18f3659b42f639f4e52d4bb5e25ecccad9e8a45"
+      },
+      "surfaces": [
+        "workplace/sources/rooms/product/meetings/demo-build/MEETING.md"
+      ]
+    },
+    {
+      "responsibility": "source:place",
+      "source": {
+        "ref": "workplace://demo/smallest/room/product",
+        "revision": "sha256:0303a759668ef0a0a95ad298d6fe2f31e4711a544f08c72fb5fe0657874adeb1"
+      },
+      "surfaces": [
+        "workplace/sources/rooms/product/ROOM.md"
+      ]
+    },
+    {
+      "responsibility": "source:work",
+      "source": {
+        "ref": "workplace://demo/smallest/work/demo",
+        "revision": "sha256:54436f8bae2106fede6ea13966cc251171ae17f8a2a38d2fd9e63e2d0739896c"
+      },
+      "surfaces": [
+        "workplace/sources/rooms/product/work/demo/WORK.md"
+      ]
+    },
+    {
+      "responsibility": "source:place",
+      "source": {
+        "ref": "workplace://demo/smallest/site/demo",
+        "revision": "sha256:9a350b4a49e27dfc9453331d2cf7424884bfa2f963380fe2c235f2c1fe9ca18e"
+      },
+      "surfaces": [
+        "workplace/sources/sites/demo/SITE.md"
+      ]
+    }
+  ],
+  "workplace": "workplace://demo/smallest"
+}

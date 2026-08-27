@@ -1,0 +1,28 @@
+{
+  "kind": "ProviderBinding",
+  "provider": "codex",
+  "targets": [
+    {
+      "provider": "codex",
+      "kind": "front-door",
+      "path": "AGENTS.md",
+      "discovery": "automatic",
+      "loadGuarantee": "qualified"
+    },
+    {
+      "provider": "codex",
+      "kind": "agent",
+      "path": "agents/manager.md",
+      "discovery": "model-selected",
+      "loadGuarantee": "qualified"
+    },
+    {
+      "provider": "codex",
+      "kind": "agent",
+      "path": "agents/worker.md",
+      "discovery": "model-selected",
+      "loadGuarantee": "qualified"
+    }
+  ],
+  "tools": []
+}

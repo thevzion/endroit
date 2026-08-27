@@ -1,0 +1,8 @@
+{
+  "kind": "Composition",
+  "ref": "workplace://demo/flappy-studio/composition",
+  "equipment": [
+    "workplace://endroit/equipment/core",
+    "workplace://demo/flappy-studio/equipment/research"
+  ]
+}

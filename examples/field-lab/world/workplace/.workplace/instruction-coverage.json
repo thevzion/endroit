@@ -1,0 +1,35 @@
+{
+  "coverage": [
+    {
+      "responsibility": "source:specimen",
+      "source": {
+        "ref": "workplace://demo/field-lab/specimen/baseline",
+        "revision": "sha256:45b11ddfcc8627d5e6995b56d8673975ec182c08a94046360abde07230737dfb"
+      },
+      "surfaces": [
+        "workplace/sources/stations/north/observations/baseline/OBSERVATION.md"
+      ]
+    },
+    {
+      "responsibility": "source:zone",
+      "source": {
+        "ref": "workplace://demo/field-lab/station/north",
+        "revision": "sha256:d325379cd71be88cddb717114d3a4251906bb9cf9f91eb4807121ba1cf3ca2ee"
+      },
+      "surfaces": [
+        "workplace/sources/stations/north/STATION.md"
+      ]
+    },
+    {
+      "responsibility": "source:experiment",
+      "source": {
+        "ref": "workplace://demo/field-lab/experiment/wind",
+        "revision": "sha256:e655a1191d5e84902cc84e2adb917642cc51f150d3e00ecc740eb48a0b04ae87"
+      },
+      "surfaces": [
+        "workplace/sources/stations/north/trials/wind/TRIAL.md"
+      ]
+    }
+  ],
+  "workplace": "workplace://demo/field-lab"
+}

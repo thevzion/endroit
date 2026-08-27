@@ -1,0 +1,5 @@
+{
+  "kind": "Composition",
+  "ref": "workplace://demo/smallest/composition",
+  "equipment": ["workplace://endroit/equipment/core"]
+}

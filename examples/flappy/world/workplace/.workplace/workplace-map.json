@@ -1,0 +1,109 @@
+{
+  "$schema": "https://endroit.org/schema/workplace-map/v1.json",
+  "entries": [
+    {
+      "entity": "material",
+      "path": "workplace/sources/CHANGE.md",
+      "projectionPath": "CHANGE.md",
+      "ref": "workplace://demo/flappy-studio/material/change-policy",
+      "revision": "sha256:9cf3522689021e8fdf09a1660715bd5e0964ecd676316d04f12fe6d8ae5cd554",
+      "roles": [
+        "change-policy"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "material",
+      "path": "workplace/sources/CONSTITUTION.md",
+      "projectionPath": "CONSTITUTION.md",
+      "ref": "workplace://demo/flappy-studio/material/constitution",
+      "revision": "sha256:cf3152161f2d6e7485da491b818f608b6ac7d70f82358b3086db0cebd20bceb5",
+      "roles": [
+        "constitution"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "material",
+      "path": "workplace/sources/DOCTRINE.md",
+      "projectionPath": "DOCTRINE.md",
+      "ref": "workplace://demo/flappy-studio/material/doctrine",
+      "revision": "sha256:71a80bc94a740958cab12cc1ff126ee2cbee6f5ae78bca00c4ec7a807251a6ee",
+      "roles": [
+        "doctrine"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "material",
+      "path": "workplace/sources/rooms/product/material/one-button-twist.md",
+      "projectionPath": "rooms/product/material/one-button-twist.md",
+      "ref": "workplace://demo/flappy-studio/material/one-button-twist",
+      "revision": "sha256:590d925bc76cdbe11981ef2e4469cb9f7b84ccdf1e88d60d45bf434cdff54aca",
+      "roles": [
+        "evidence"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "meeting",
+      "lifecycle": "active",
+      "path": "workplace/sources/rooms/product/meetings/flappy-qualification/MEETING.md",
+      "projectionPath": "rooms/product/meetings/flappy-qualification/FRONTDOOR.md",
+      "ref": "workplace://demo/flappy-studio/meeting/flappy-qualification",
+      "revision": "sha256:c7ff0e7a8ee0d75eee8575aae6ed869a336992598697b54571a7b1491d52e921",
+      "roles": [
+        "meeting"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "member",
+      "path": "workplace/sources/members/alexis/MEMBER.md",
+      "projectionPath": "members/alexis/MEMBER.md",
+      "ref": "workplace://demo/flappy-studio/member/alexis",
+      "revision": "sha256:821725d4157c5507e1e21a7f6d79846bbe78f9f4713fbc40bcb66b86b099fbd0",
+      "roles": [
+        "owner"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "place",
+      "path": "workplace/sources/rooms/product/ROOM.md",
+      "projectionPath": "rooms/product/FRONTDOOR.md",
+      "ref": "workplace://demo/flappy-studio/room/product",
+      "revision": "sha256:1f1dfb894de3979c50c4141125ef45b5299f6c4c3bda0e66eb7111721eb3c907",
+      "roles": [
+        "room"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "place",
+      "path": "workplace/sources/sites/flappy-bird/SITE.md",
+      "projectionPath": "sites/flappy-bird/FRONTDOOR.md",
+      "ref": "workplace://demo/flappy-studio/site/flappy-bird",
+      "revision": "sha256:95028dfd5c44ea6af73640c0163ad4f9cf600aa4b9b80f00b66307a1ed8c0ddd",
+      "roles": [
+        "site"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "work",
+      "path": "workplace/sources/rooms/product/work/flappy-bird/WORK.md",
+      "projectionPath": "work/flappy-bird/FRONTDOOR.md",
+      "ref": "workplace://demo/flappy-studio/work/flappy-bird",
+      "revision": "sha256:d3e0365970791fb78907a10fb20eeda4c4d31a1130144ecb221e8a0c55e29357",
+      "roles": [
+        "study"
+      ],
+      "root": "shared"
+    }
+  ],
+  "profileRevision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53",
+  "sourceRevision": "sha256:a67686a48fb9a64b9c761adef1e8e9c6ca65a8c8a4c0ded92821ea4eb717bd35",
+  "workplace": "workplace://demo/flappy-studio",
+  "workplaceIgnoreRevision": "sha256:df2d9f971b80a51dc565a99aac0ef4ec2a93d2e5d0122eff93b5517f357226a4"
+}

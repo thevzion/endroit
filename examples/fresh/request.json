@@ -1,0 +1,32 @@
+{
+  "kind": "NewWorkplaceRequest",
+  "version": 1,
+  "target": "/tmp/endroit-fresh",
+  "workplace": {
+    "id": "fresh-studio",
+    "name": "Fresh Studio"
+  },
+  "member": {
+    "id": "alexis",
+    "name": "Alexis",
+    "language": "fr"
+  },
+  "desk": {
+    "id": "alexis-desk",
+    "name": "Alexis Desk",
+    "welcome": {
+      "tone": "Direct, warm and concise.",
+      "humor": "Light when it helps; never forced.",
+      "durableChanges": "Update this Desk WELCOME.md, never provider memory."
+    }
+  },
+  "providers": ["codex"],
+  "git": {
+    "initialize": true,
+    "commits": true,
+    "author": {
+      "name": "Endroit Example",
+      "email": "example@endroit.local"
+    }
+  }
+}

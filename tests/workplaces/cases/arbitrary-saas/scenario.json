@@ -1,0 +1,8 @@
+{
+  "kind": "HumanQualificationScenario",
+  "version": 1,
+  "id": "arbitrary-saas",
+  "intent": "Construis un SaaS one-billion avec une landing et une waitlist.",
+  "expectedPath": ["Hall", "open-room", "Room", "Meeting", "open-work", "Work", "Site"],
+  "forbidden": ["free-site", "remote", "hosting", "delivery"]
+}

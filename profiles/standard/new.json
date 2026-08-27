@@ -1,0 +1,7 @@
+{
+  "kind": "NewWorkplaceResolver",
+  "version": 1,
+  "questions": ["workplace", "member", "desk", "welcome", "providers", "git"],
+  "variables": ["WORKPLACE_ID", "WORKPLACE_NAME", "MEMBER_ID", "MEMBER_NAME", "LANGUAGE", "DESK_ID", "DESK_NAME", "TONE", "HUMOR", "DURABLE_CHANGES"],
+  "exclusions": ["Room", "Work", "Site", "remote", "hosting", "delivery"]
+}

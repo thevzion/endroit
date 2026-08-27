@@ -1,0 +1,20 @@
+{
+  "kind": "Lexicon",
+  "version": 1,
+  "terms": {
+    "agent": { "label": "Agent", "definition": "A durable non-human identity only when independently owned.", "aliases": [] },
+    "desk": { "label": "Desk", "definition": "A private Member-indexed Place with a bound Root.", "aliases": [] },
+    "material": { "label": "Material", "definition": "Retained evidence, knowledge or contract.", "aliases": [] },
+    "meeting": { "label": "Meeting", "definition": "A present collaboration event with Occupants and disposition.", "aliases": [] },
+    "member": { "label": "Member", "definition": "A human owner of judgment and consent.", "aliases": [] },
+    "place": { "label": "Place", "definition": "A governed addressable location or sovereignty boundary.", "aliases": [] },
+    "room": { "label": "Room", "definition": "A Place owning one durable semantic domain.", "aliases": [] },
+    "shelf": { "label": "Shelf", "definition": "A typed Placement contract inside a Place.", "aliases": [] },
+    "site": { "label": "Site", "definition": "A Workplace declaration of a sovereign external Root.", "aliases": [] },
+    "work": { "label": "Work", "definition": "A commitment to a bounded durable Outcome.", "aliases": [] },
+    "workbench": { "label": "Workbench", "definition": "A reconstructible projection of the Items needed now.", "aliases": [] },
+    "workshop": { "label": "Workshop", "definition": "A situated resolution of Work, Place, Equipment and Authority.", "aliases": [] },
+    "workspace": { "label": "Workspace", "definition": "A Place used for a bounded responsibility.", "aliases": [] }
+  },
+  "requiredTerms": ["agent", "desk", "material", "meeting", "member", "place", "room", "shelf", "site", "work", "workbench", "workshop", "workspace"]
+}

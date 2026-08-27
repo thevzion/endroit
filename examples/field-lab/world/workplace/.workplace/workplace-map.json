@@ -1,0 +1,42 @@
+{
+  "$schema": "https://endroit.org/schema/workplace-map/v1.json",
+  "entries": [
+    {
+      "entity": "experiment",
+      "path": "workplace/sources/stations/north/trials/wind/TRIAL.md",
+      "projectionPath": "scopes/experiment/wind/FRONTDOOR.md",
+      "ref": "workplace://demo/field-lab/experiment/wind",
+      "revision": "sha256:e655a1191d5e84902cc84e2adb917642cc51f150d3e00ecc740eb48a0b04ae87",
+      "roles": [
+        "trial"
+      ],
+      "root": "lab"
+    },
+    {
+      "entity": "specimen",
+      "path": "workplace/sources/stations/north/observations/baseline/OBSERVATION.md",
+      "projectionPath": "stations/north/observations/baseline/OBSERVATION.md",
+      "ref": "workplace://demo/field-lab/specimen/baseline",
+      "revision": "sha256:45b11ddfcc8627d5e6995b56d8673975ec182c08a94046360abde07230737dfb",
+      "roles": [
+        "observation"
+      ],
+      "root": "lab"
+    },
+    {
+      "entity": "zone",
+      "path": "workplace/sources/stations/north/STATION.md",
+      "projectionPath": "scopes/zone/north/FRONTDOOR.md",
+      "ref": "workplace://demo/field-lab/station/north",
+      "revision": "sha256:d325379cd71be88cddb717114d3a4251906bb9cf9f91eb4807121ba1cf3ca2ee",
+      "roles": [
+        "station"
+      ],
+      "root": "lab"
+    }
+  ],
+  "profileRevision": "sha256:aa16db0133b6660d713a4ede8dc57a75ffec9c1747352bdf8824b23f1c98106e",
+  "sourceRevision": "sha256:1ea275a71b8e26a30d67c0863bc25972d1cbf90f314a6c37cd05880187e766a1",
+  "workplace": "workplace://demo/field-lab",
+  "workplaceIgnoreRevision": "sha256:df2d9f971b80a51dc565a99aac0ef4ec2a93d2e5d0122eff93b5517f357226a4"
+}

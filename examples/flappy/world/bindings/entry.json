@@ -1,0 +1,11 @@
+{
+  "kind": "EntryBinding",
+  "workplace": "workplace://demo/flappy-studio",
+  "member": "workplace://demo/flappy-studio/member/alexis",
+  "desk": "workplace://demo/flappy-studio/desk/alexis",
+  "rootBindings": {
+    "shared": "workplace",
+    "private:alexis": "checkouts/desks/alexis",
+    "site:flappy-bird": "checkouts/sites/flappy-bird"
+  }
+}

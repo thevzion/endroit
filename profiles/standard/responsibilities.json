@@ -1,0 +1,13 @@
+{
+  "kind": "ResponsibilityGrammar",
+  "version": 1,
+  "sources": [
+    { "id": "constitution", "role": "constitution", "owner": "shared", "required": true, "default": "defaults/shared/CONSTITUTION.md" },
+    { "id": "doctrine", "role": "doctrine", "owner": "shared", "required": true, "default": "defaults/shared/DOCTRINE.md" },
+    { "id": "change", "role": "change-policy", "owner": "shared", "required": true, "default": "defaults/shared/CHANGE.md" },
+    { "id": "member", "role": "owner", "owner": "shared", "required": true, "default": "defaults/member/MEMBER.md" },
+    { "id": "desk", "role": "desk", "owner": "private", "required": "bound", "default": "defaults/desk/DESK.md" },
+    { "id": "welcome", "role": "welcome", "owner": "private", "required": "bound", "default": "defaults/desk/WELCOME.md" },
+    { "id": "memory", "role": "memory-policy", "owner": "private", "required": "bound", "default": "defaults/desk/MEMORY.md" }
+  ]
+}

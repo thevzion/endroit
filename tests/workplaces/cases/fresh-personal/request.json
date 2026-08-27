@@ -1,0 +1,18 @@
+{
+  "kind": "NewWorkplaceRequest",
+  "version": 1,
+  "target": "__RUN_MOUNT__",
+  "workplace": { "id": "fresh-personal", "name": "Fresh Personal" },
+  "member": { "id": "alexis", "name": "Alexis", "language": "fr" },
+  "desk": {
+    "id": "alexis-desk",
+    "name": "Alexis Desk",
+    "welcome": {
+      "tone": "Direct, warm and concise.",
+      "humor": "Light when it helps; never forced.",
+      "durableChanges": "Update this Desk WELCOME.md, never provider memory."
+    }
+  },
+  "providers": ["codex"],
+  "git": { "initialize": true, "commits": true, "author": { "name": "Endroit Qualification", "email": "qualification@endroit.local" } }
+}

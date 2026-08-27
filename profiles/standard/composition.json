@@ -1,0 +1,5 @@
+{
+  "kind": "CompositionTemplate",
+  "version": 1,
+  "equipment": ["workplace://endroit/equipment/core"]
+}

@@ -1,0 +1,43 @@
+{
+  "kind": "CoordinationPolicy",
+  "version": 1,
+  "ref": "workplace://demo/smallest/coordination",
+  "roles": {
+    "main": {
+      "owns": ["human conversation", "Intent", "routing", "determining assumptions", "synthesis"],
+      "never": ["human acceptance", "delivery consent", "hidden memory"]
+    },
+    "manager": {
+      "owns": ["one Work goal", "decomposition", "integration", "Git index", "commits", "gates"],
+      "never": ["human contact", "acceptance", "delivery"]
+    },
+    "worker": {
+      "owns": ["one exclusive mutable scope", "verification", "observed result"],
+      "never": ["commit", "dispatch", "human contact", "scope expansion"]
+    }
+  },
+  "resolution": [
+    {
+      "id": "read-only",
+      "when": { "rootCount": "one", "effectCount": "zero", "integration": false, "contextClass": "bounded" },
+      "sequence": ["main"]
+    },
+    {
+      "id": "single-scope",
+      "when": { "rootCount": "one", "effectCount": "one", "integration": false, "contextClass": "bounded" },
+      "sequence": ["main", "worker", "main"]
+    },
+    {
+      "id": "integration",
+      "when": { "rootCount": "multiple", "effectCount": "multiple", "integration": true, "contextClass": "substantial" },
+      "sequence": ["main", "manager", "worker", "manager", "main"]
+    }
+  ],
+  "dispatchEnvelope": ["meetingRef", "position", "workRef", "objective", "authoritativeSources", "mutableScope", "exclusions", "authority", "mandate", "expectedOutcome", "terminalCondition", "activeControls"],
+  "fallbacks": {
+    "ambiguous": "ask-once-zero-write",
+    "missingAuthority": "blocked",
+    "noSubagents": "degraded",
+    "inlineWorker": "single-scope-explicit"
+  }
+}

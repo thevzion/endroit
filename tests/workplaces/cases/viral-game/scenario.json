@@ -1,0 +1,8 @@
+{
+  "kind": "HumanQualificationScenario",
+  "version": 1,
+  "id": "viral-game",
+  "intent": "j’aimerais faire un jeu viral pour TikTok, tu as carte blanche",
+  "expectedPath": ["Hall", "classification:integration", "Room", "Meeting", "Manager", "Worker:Site", "Manager:integration", "Verification", "Work:candidate"],
+  "forbidden": ["outside-mount", "global-skill", "provider-memory", "main-site-write", "remote", "delivery"]
+}

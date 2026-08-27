@@ -1,0 +1,92 @@
+{
+  "compiler": "@endroit/cli/0.1.0-rc.1",
+  "dependencies": [
+    {
+      "ref": "workplace://demo/field-lab/coordination",
+      "revision": "sha256:d434d1bf7c2ab0bb2f481dac70c63fd9cf9174d5aaaf26397aacef636759a206"
+    },
+    {
+      "ref": "workplace://demo/field-lab/equipment/observation",
+      "revision": "sha256:b3b91e9b167f048e2b4705758076215667c93231c76506a34040279aad2e7b75"
+    },
+    {
+      "ref": "workplace://demo/field-lab/experiment/wind",
+      "revision": "sha256:e655a1191d5e84902cc84e2adb917642cc51f150d3e00ecc740eb48a0b04ae87"
+    },
+    {
+      "ref": "workplace://demo/field-lab/specimen/baseline",
+      "revision": "sha256:45b11ddfcc8627d5e6995b56d8673975ec182c08a94046360abde07230737dfb"
+    },
+    {
+      "ref": "workplace://demo/field-lab/station/north",
+      "revision": "sha256:d325379cd71be88cddb717114d3a4251906bb9cf9f91eb4807121ba1cf3ca2ee"
+    },
+    {
+      "ref": "workplace://profiles/field-lab",
+      "revision": "sha256:aa16db0133b6660d713a4ede8dc57a75ffec9c1747352bdf8824b23f1c98106e"
+    }
+  ],
+  "entryProjection": "neutral",
+  "files": [
+    {
+      "digest": "sha256:183754524257d9d4f6675192d00a8955aee787a70e7dbe7683fbaab2e9250c46",
+      "path": "workplace/.workplace/composition.json"
+    },
+    {
+      "digest": "sha256:d434d1bf7c2ab0bb2f481dac70c63fd9cf9174d5aaaf26397aacef636759a206",
+      "path": "workplace/.workplace/coordination.json"
+    },
+    {
+      "digest": "sha256:73ef0785f2f4077f4ae300327796f0c62fc5f3e6b915ed1fcffaf3b1d8e681a7",
+      "path": "workplace/.workplace/definition.json"
+    },
+    {
+      "digest": "sha256:24b11fdc89c6cdf2524f9bffb138634d9bb78e9bc08db29a29c93cf2138524df",
+      "path": "workplace/.workplace/instruction-coverage.json"
+    },
+    {
+      "digest": "sha256:7ab0aeeb9a4b636465b5675d36c3e8ca27a5b960df707d4ec326c03a23bcd533",
+      "path": "workplace/.workplace/lexicon.json"
+    },
+    {
+      "digest": "sha256:aa16db0133b6660d713a4ede8dc57a75ffec9c1747352bdf8824b23f1c98106e",
+      "path": "workplace/.workplace/profile.json"
+    },
+    {
+      "digest": "sha256:40ddba61ff44c3760f775935ab5850745c59d72a97d049fe2db3e4123069477f",
+      "path": "workplace/.workplace/views/COMPOSITION.md"
+    },
+    {
+      "digest": "sha256:f13c9b1eb3fa4e907c8d1b1bcf55db65b864f004c2424ac2a76a3ac323bfd323",
+      "path": "workplace/.workplace/views/PROFILE.md"
+    },
+    {
+      "digest": "sha256:2081a5e57a4fa4e1d6d1befe8c8a33736120d098241fd694a4102f285f3d3307",
+      "path": "workplace/.workplace/workplace-map.json"
+    },
+    {
+      "digest": "sha256:746b4794b6a499738f8972218f4df8b691345b5759bd1247a4a45bb473d5f633",
+      "path": "workplace/LEXICON.md"
+    },
+    {
+      "digest": "sha256:45b11ddfcc8627d5e6995b56d8673975ec182c08a94046360abde07230737dfb",
+      "path": "workplace/sources/stations/north/observations/baseline/OBSERVATION.md"
+    },
+    {
+      "digest": "sha256:d325379cd71be88cddb717114d3a4251906bb9cf9f91eb4807121ba1cf3ca2ee",
+      "path": "workplace/sources/stations/north/STATION.md"
+    },
+    {
+      "digest": "sha256:e655a1191d5e84902cc84e2adb917642cc51f150d3e00ecc740eb48a0b04ae87",
+      "path": "workplace/sources/stations/north/trials/wind/TRIAL.md"
+    },
+    {
+      "digest": "sha256:76c2993ad6c93232a513e1a5a51893f76567082711a7737e7b12573bcae11a57",
+      "path": "workplace/WORKPLACE.md"
+    }
+  ],
+  "profileRevision": "sha256:aa16db0133b6660d713a4ede8dc57a75ffec9c1747352bdf8824b23f1c98106e",
+  "sourceContracts": [],
+  "workplace": "workplace://demo/field-lab",
+  "workplaceIgnoreRevision": "sha256:df2d9f971b80a51dc565a99aac0ef4ec2a93d2e5d0122eff93b5517f357226a4"
+}

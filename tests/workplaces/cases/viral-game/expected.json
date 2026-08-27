@@ -1,0 +1,14 @@
+{
+  "kind": "HumanQualificationExpected",
+  "version": 1,
+  "requiredSources": [
+    { "root": "shared", "basename": "ROOM.md" },
+    { "root": "shared", "basename": "MEETING.md" },
+    { "root": "shared", "basename": "WORK.md" },
+    { "root": "shared", "basename": "SITE.md" }
+  ],
+  "requiredRoots": ["shared", "desk", "site"],
+  "requiredEvidence": ["check-ready", "roots-clean", "history-valid", "meeting-presence", "manager-dispatch", "worker-dispatch", "site-commit", "verification", "provider-metadata"],
+  "preserves": ["site-sovereignty", "no-provider-memory", "no-remote", "no-delivery"],
+  "terminal": { "operationStatus": "ready", "rootsClean": true }
+}

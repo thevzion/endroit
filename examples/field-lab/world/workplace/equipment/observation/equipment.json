@@ -1,0 +1,28 @@
+{
+  "kind": "Equipment",
+  "ref": "workplace://demo/field-lab/equipment/observation",
+  "id": "observation",
+  "compatibleProfiles": ["field-lab"],
+  "methods": [
+    {
+      "id": "inspect",
+      "title": "Inspect trial",
+      "instructions": "methods/inspect.md",
+      "intent": ["inspect", "observe a trial"],
+      "useWhen": ["A Trial needs a bounded Observation."],
+      "acceptsWorkForms": ["trial"],
+      "requiredPlaceRoles": ["station"],
+      "requires": ["trial-framed"],
+      "operations": [
+        { "id": "observe", "trait": "instrument.read", "effect": "read", "authority": "none", "proof": ["observation-revision"] }
+      ],
+      "effects": ["observation-qualified"],
+      "authority": "none",
+      "proof": ["observation"],
+      "staticFallback": "complete",
+      "stages": [
+        { "id": "observe", "appliesTo": ["trial"], "operations": ["observe"], "outcome": { "id": "trial.observe", "requires": ["trial-framed"], "produces": ["observation-qualified"], "preserves": ["specimen-integrity"], "forbids": ["invented-reading"], "evidence": ["observation"] } }
+      ]
+    }
+  ]
+}

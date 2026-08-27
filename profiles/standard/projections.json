@@ -1,0 +1,6 @@
+{
+  "kind": "ProjectionGrammar",
+  "version": 1,
+  "portable": [".workplace/definition.json", ".workplace/lexicon.json", "LEXICON.md", "WORKPLACE.md", ".workplace/workplace-map.json"],
+  "local": ["FRONTDOOR.md", "AGENTS.md", "CLAUDE.md", ".endroit/context-contracts.json", ".endroit/control-clauses.json"]
+}

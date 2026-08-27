@@ -1,0 +1,56 @@
+{
+  "kind": "Equipment",
+  "ref": "workplace://endroit/equipment/research",
+  "id": "research",
+  "compatibleProfiles": ["endroit-standard"],
+  "methods": [
+    {
+      "id": "study",
+      "title": "Study",
+      "instructions": "methods/study.md",
+      "intent": ["study", "research", "qualify an uncertain choice"],
+      "useWhen": ["Current Work needs evidence before an effect."],
+      "avoidWhen": ["The question is already resolved by current owned evidence."],
+      "acceptsWorkForms": ["study"],
+      "requiredPlaceRoles": ["room"],
+      "requires": ["question-framed"],
+      "operations": [
+        {
+          "id": "source.inspect",
+          "trait": "source.read-local",
+          "effect": "read",
+          "authority": "none",
+          "proof": ["observed-source-revision"]
+        }
+      ],
+      "effects": ["answer-qualified"],
+      "authority": "none",
+      "proof": ["study-evidence"],
+      "staticFallback": "complete",
+      "coordination": "read-only",
+      "requiredControls": ["provider-containment"],
+      "context": {
+        "requiredReads": ["Work Front Door", "linked evidence"],
+        "conditionalReads": ["primary external evidence"],
+        "forbiddenScopes": ["outside declared search roots", "unselected global Skills", "provider memory"],
+        "searchRoot": "owning Room and declared evidence links",
+        "stopCondition": "the bounded question is qualified or the evidence gap is explicit"
+      },
+      "stages": [
+        {
+          "id": "inspect",
+          "appliesTo": ["study"],
+          "operations": ["source.inspect"],
+          "outcome": {
+            "id": "study.inspect",
+            "requires": ["question-framed"],
+            "produces": ["answer-qualified"],
+            "preserves": ["source-attribution"],
+            "forbids": ["implicit-acceptance"],
+            "evidence": ["study"]
+          }
+        }
+      ]
+    }
+  ]
+}

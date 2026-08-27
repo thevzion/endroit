@@ -1,0 +1,7 @@
+{
+  "name": "brownfield-app",
+  "private": true,
+  "scripts": {
+    "test": "bun test"
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "kind": "Equipment",
+  "ref": "workplace://demo/flappy-studio/equipment/research",
+  "id": "research",
+  "compatibleProfiles": ["endroit-standard"],
+  "methods": [
+    {
+      "id": "study",
+      "title": "Study",
+      "instructions": "methods/study.md",
+      "intent": ["study", "research", "qualify an uncertain choice", "compare a twist"],
+      "useWhen": ["The current Work needs evidence before an effect."],
+      "avoidWhen": ["The question is already resolved by current owned evidence."],
+      "acceptsWorkForms": ["study"],
+      "requiredPlaceRoles": ["room"],
+      "requires": ["question-framed"],
+      "operations": [
+        {
+          "id": "source.inspect",
+          "trait": "source.read-local",
+          "effect": "read",
+          "authority": "none",
+          "proof": ["observed-source-revision"]
+        }
+      ],
+      "effects": ["twist-qualified"],
+      "authority": "none",
+      "proof": ["study-evidence"],
+      "staticFallback": "complete",
+      "stages": [
+        {
+          "id": "frame",
+          "appliesTo": ["study"],
+          "operations": ["source.inspect"],
+          "outcome": {
+            "id": "study.frame",
+            "requires": ["question-framed"],
+            "produces": ["question-bounded"],
+            "preserves": ["site-sovereignty"],
+            "forbids": ["workplace-product-bytes"],
+            "evidence": ["study"]
+          }
+        },
+        {
+          "id": "qualify",
+          "appliesTo": ["study"],
+          "operations": ["source.inspect"],
+          "outcome": {
+            "id": "study.qualify",
+            "requires": ["question-bounded"],
+            "produces": ["twist-qualified"],
+            "preserves": ["site-sovereignty"],
+            "forbids": ["workplace-product-bytes"],
+            "evidence": ["study"]
+          }
+        }
+      ]
+    }
+  ]
+}

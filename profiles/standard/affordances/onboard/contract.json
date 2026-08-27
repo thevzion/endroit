@@ -1,0 +1,10 @@
+{
+  "kind": "AffordanceContract",
+  "version": 1,
+  "id": "onboard",
+  "positions": ["hall"],
+  "applicability": "onboarding-required",
+  "authority": "human-consent",
+  "providerTargets": ["skill"],
+  "instructions": "instructions.md"
+}

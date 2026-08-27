@@ -1,0 +1,35 @@
+{
+  "kind": "WorkplaceBuildContract",
+  "version": 2,
+  "workplace": "workplace://demo/flappy-studio",
+  "profile": {
+    "ref": "workplace://profiles/endroit-standard",
+    "path": "../../../../profiles/standard/profile.json"
+  },
+  "composition": {
+    "ref": "workplace://demo/flappy-studio/composition",
+    "path": "composition.json"
+  },
+  "roots": ["shared", "private", "site"],
+  "policy": {
+    "disclosureSelectors": ["hall-resident", "hall-bound", "hall-navigation", "place-local", "meeting-contract", "work-contract", "site-boundary", "provider-cache"],
+    "localBuildIntent": "bounded-work-and-site",
+    "delivery": "explicit-human-only"
+  },
+  "distributionTargets": [
+    {
+      "provider": "neutral",
+      "kind": "front-door",
+      "path": "WORKPLACE.md",
+      "discovery": "manual",
+      "loadGuarantee": "qualified"
+    },
+    {
+      "provider": "codex",
+      "kind": "front-door",
+      "path": "AGENTS.md",
+      "discovery": "automatic",
+      "loadGuarantee": "unproven"
+    }
+  ]
+}

@@ -1,0 +1,34 @@
+{
+  "$schema": "https://endroit.org/schema/workplace-profile-package/v1.json",
+  "kind": "WorkplaceProfilePackage",
+  "version": 1,
+  "id": "endroit-standard",
+  "ref": "workplace://profiles/endroit-standard",
+  "release": "1.0.0-rc.1",
+  "sourceContracts": "source-contracts.json",
+  "components": {
+    "grammar": "grammar.json",
+    "lexicon": "lexicon.json",
+    "responsibilities": "responsibilities.json",
+    "composition": "composition.json",
+    "coordination": "coordination.json",
+    "disclosure": "disclosure.json",
+    "projections": "projections.json",
+    "new": "new.json"
+  },
+  "affordances": [
+    { "id": "enter", "path": "affordances/enter/contract.json" },
+    { "id": "maintain", "path": "affordances/maintain/contract.json" },
+    { "id": "onboard", "path": "affordances/onboard/contract.json" },
+    { "id": "settle", "path": "affordances/settle/contract.json" }
+  ],
+  "defaults": {
+    "constitution": "defaults/shared/CONSTITUTION.md",
+    "doctrine": "defaults/shared/DOCTRINE.md",
+    "change": "defaults/shared/CHANGE.md",
+    "member": "defaults/member/MEMBER.md",
+    "desk": "defaults/desk/DESK.md",
+    "welcome": "defaults/desk/WELCOME.md",
+    "memory": "defaults/desk/MEMORY.md"
+  }
+}
