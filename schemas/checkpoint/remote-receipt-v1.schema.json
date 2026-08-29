@@ -1,0 +1,20 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schemas/checkpoint/remote-receipt-v1.schema.json",
+  "title": "Workplace checkpoint remote receipt v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "operation", "checkpointId", "status", "controlRef", "controlCommit", "remoteIdentity", "algorithm", "recipientRefs", "objects"],
+  "properties": {
+    "schema": { "const": "workplace-checkpoint-remote-receipt/1" },
+    "operation": { "enum": ["publish", "fetch"] },
+    "checkpointId": { "type": "string", "pattern": "^checkpoint:sha256:[a-f0-9]{64}$" },
+    "status": { "enum": ["verified-remote", "fetched-verified"] },
+    "controlRef": { "type": "string", "pattern": "^refs/endroit/checkpoints/[a-f0-9]{64}/control$" },
+    "controlCommit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+    "remoteIdentity": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "algorithm": { "const": "age/1" },
+    "recipientRefs": { "type": "array", "items": { "type": "string", "pattern": "^recipient://" } },
+    "objects": { "type": "integer", "minimum": 1 }
+  }
+}

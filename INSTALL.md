@@ -93,14 +93,18 @@ The first Git State Portability vertical is local and request-driven:
 bun src/cli.ts checkpoint capture --from /path/to/capture-request.json --json
 bun src/cli.ts checkpoint verify /path/to/checkpoint --json
 bun src/cli.ts checkpoint restore /path/to/checkpoint --to /absent/target --json
+bun src/cli.ts checkpoint publish /path/to/checkpoint --from /path/to/publish-request.json --json
+bun src/cli.ts checkpoint fetch checkpoint:sha256:<digest> --from /path/to/fetch-request.json --to /absent/local-checkpoint --json
 ```
 
 Capture resolves only explicitly declared Roots and worktrees. The immutable
 package includes static recovery documents and closed schemas under
 `schemas/checkpoint/`. Restore reconstructs into an adjacent temporary target,
 proves the same portable fingerprint, then renames atomically. It never invokes
-`check`, `compile` or `ready`. Encryption, checkpoint remotes and cross-OS
-qualification are not implemented yet.
+`check`, `compile` or `ready`. The synthetic remote vertical uses an explicit
+Git remote and the installed `age` CLI; identities stay in local Request paths
+and never enter the checkpoint or remote control. Network credential policy,
+`latest` and cross-OS qualification are not implemented yet.
 
 ## Try the demonstrations
 

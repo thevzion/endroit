@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmod, cp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { captureCheckpoint, restoreCheckpoint, verifyCheckpoint, type CheckpointCaptureRequest } from "../src/checkpoint.ts";
+import { fetchCheckpoint, publishCheckpoint } from "../src/checkpoint-remote.ts";
 
 const repository = resolve(import.meta.dir, "..");
 const cli = [Bun.argv[0]!, resolve(repository, "src/cli.ts")];
@@ -155,10 +156,78 @@ describe("Git State Portability", () => {
       expect(blocked).toContain("already exists");
       expect(await readFile(join(existing, "keep.txt"), "utf8")).toBe("keep\n");
 
-      for (const name of ["capture-request", "repository", "worktree", "index", "payload", "compatibility", "manifest", "receipt"]) {
+      for (const name of ["capture-request", "repository", "worktree", "index", "payload", "compatibility", "manifest", "receipt", "publish-request", "fetch-request", "envelope-record", "remote-control", "remote-receipt"]) {
         const schemaDocument = JSON.parse(await readFile(join(repository, `schemas/checkpoint/${name}-v1.schema.json`), "utf8"));
         expect(schemaDocument.additionalProperties).toBe(false);
       }
+    } finally {
+      await rm(state.root, { recursive: true, force: true });
+    }
+  });
+
+  test("publishes only age ciphertext and fetches a deeply verified package", async () => {
+    const state = await fixture();
+    try {
+      const checkpointRemote = join(state.root, "checkpoint.git");
+      const productRemote = join(state.root, "product.git");
+      git(state.root, ["init", "-q", "--bare", checkpointRemote]);
+      git(state.root, ["init", "-q", "--bare", productRemote]);
+      git(state.shared, ["remote", "add", "origin", productRemote]);
+      const before = new Map([["shared-main", evidence(state.shared)], ["shared-detached", evidence(state.detached)], ["desk-main", evidence(state.desk)], ["site-main", evidence(state.site)]]);
+      const captured = await captureCheckpoint(state.request);
+
+      const identity = join(state.root, "identity.txt");
+      run(state.root, ["age-keygen", "-o", identity]);
+      const recipient = run(state.root, ["age-keygen", "-y", identity]);
+      const publishRequest = { kind: "CheckpointPublishRequest", version: 1, remote: checkpointRemote, recipients: [{ ref: "recipient://synthetic/member", value: recipient }], identities: [identity] };
+      const publishPath = join(state.root, "publish.json");
+      await writeFile(publishPath, `${JSON.stringify(publishRequest, null, 2)}\n`);
+      const published = JSON.parse(run(repository, [...cli, "checkpoint", "publish", captured.path, "--from", publishPath, "--json"])) as Awaited<ReturnType<typeof publishCheckpoint>>;
+      expect(published.receipt.status).toBe("verified-remote");
+      const replay = JSON.parse(run(repository, [...cli, "checkpoint", "publish", captured.path, "--from", publishPath, "--json"])) as Awaited<ReturnType<typeof publishCheckpoint>>;
+      expect(replay.receipt.controlCommit).toBe(published.receipt.controlCommit);
+
+      const checkout = join(state.root, "remote-checkout");
+      await mkdir(checkout, { recursive: true });
+      git(checkout, ["init", "-q"]); git(checkout, ["fetch", "-q", "--no-tags", checkpointRemote, published.receipt.controlRef]); git(checkout, ["checkout", "-q", "--detach", "FETCH_HEAD"]);
+      const remoteFiles = git(checkout, ["ls-tree", "-r", "--name-only", "HEAD"]).split("\n").filter(Boolean);
+      expect(remoteFiles[0]).toBe("CONTROL.json");
+      expect(remoteFiles.slice(1).every((path) => /^objects\/[a-f0-9]{64}\.age$/.test(path))).toBe(true);
+      for (const secret of ["ignored selected", "fixture note", "workplace://fixture", "refs/custom/proof"]) expect(remoteContains(checkout, remoteFiles, secret)).toBe(false);
+
+      const fetchRequest = { kind: "CheckpointFetchRequest", version: 1, remote: checkpointRemote, identities: [identity] };
+      const fetchPath = join(state.root, "fetch.json");
+      const fetchedPath = join(state.root, "fetched");
+      await writeFile(fetchPath, `${JSON.stringify(fetchRequest, null, 2)}\n`);
+      const fetched = JSON.parse(run(repository, [...cli, "checkpoint", "fetch", captured.receipt.checkpointId, "--from", fetchPath, "--to", fetchedPath, "--json"])) as Awaited<ReturnType<typeof fetchCheckpoint>>;
+      expect(fetched.receipt.status).toBe("fetched-verified");
+      expect((await verifyCheckpoint(fetched.path)).manifest.checkpointId).toBe(captured.receipt.checkpointId);
+
+      const wrongIdentity = join(state.root, "wrong-identity.txt");
+      run(state.root, ["age-keygen", "-o", wrongIdentity]);
+      const wrongTarget = join(state.root, "wrong-target");
+      let wrong = "";
+      try { await fetchCheckpoint(captured.receipt.checkpointId, { ...fetchRequest, identities: [wrongIdentity] }, wrongTarget); }
+      catch (error) { wrong = error instanceof Error ? error.message : String(error); }
+      expect(wrong).toContain("failed");
+      expect(await Bun.file(wrongTarget).exists()).toBe(false);
+
+      let collision = "";
+      try { await publishCheckpoint(captured.path, { ...publishRequest, remote: productRemote }); }
+      catch (error) { collision = error instanceof Error ? error.message : String(error); }
+      expect(collision).toContain("collides");
+      expect(git(state.root, ["--git-dir", productRemote, "show-ref"], 1)).toBe("");
+
+      const deleted = remoteFiles.find((path) => path.startsWith("objects/"))!;
+      await rm(join(checkout, deleted), { force: true, recursive: false });
+      git(checkout, ["add", "-u"]); git(checkout, ["-c", "user.name=Tamper", "-c", "user.email=tamper@example.test", "commit", "-qm", "tamper"]); git(checkout, ["push", "-q", "--force", checkpointRemote, `HEAD:${published.receipt.controlRef}`]);
+      const tamperedTarget = join(state.root, "tampered-fetch");
+      let tampered = "";
+      try { await fetchCheckpoint(captured.receipt.checkpointId, fetchRequest, tamperedTarget); }
+      catch (error) { tampered = error instanceof Error ? error.message : String(error); }
+      expect(tampered).toContain("object set changed");
+      expect(await Bun.file(tamperedTarget).exists()).toBe(false);
+      for (const [id, path] of [["shared-main", state.shared], ["shared-detached", state.detached], ["desk-main", state.desk], ["site-main", state.site]] as const) expect(evidence(path)).toBe(before.get(id));
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }
@@ -171,4 +240,13 @@ async function readlinkText(path: string): Promise<string> {
 
 function textCommon(path: string): string {
   return git(path, ["rev-parse", "--git-common-dir"]);
+}
+
+function remoteContains(checkout: string, files: string[], expected: string): boolean {
+  const needle = new TextEncoder().encode(expected);
+  return files.some((path) => {
+    const result = Bun.spawnSync(["git", "show", `HEAD:${path}`], { cwd: checkout, stdout: "pipe", stderr: "pipe" });
+    const bytes = result.stdout;
+    return bytes.some((_, index) => index + needle.length <= bytes.length && needle.every((value, offset) => bytes[index + offset] === value));
+  });
 }

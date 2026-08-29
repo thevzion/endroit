@@ -18,6 +18,7 @@ import { checkGitHistory, checkGitStaged } from "./compiler/git-witness.ts";
 import { deriveWorkplaceRegistry, enterWorkplace, FederationError } from "./federation.ts";
 import { applyWorkplaceSetup, planWorkplaceSetup, SetupError } from "./setup.ts";
 import { captureCheckpoint, CheckpointError, restoreCheckpoint, verifyCheckpoint } from "./checkpoint.ts";
+import { fetchCheckpoint, publishCheckpoint } from "./checkpoint-remote.ts";
 
 type Parsed = {
   values: Record<string, string>;
@@ -67,8 +68,8 @@ function print(value: unknown, json: boolean): void {
     console.log([`${receipt.anchor} · ${receipt.status}`, ...receipt.targets.map((target) => `${target.workplace} · ${target.status}`)].join("\n"));
   }
   else if (typeof value === "object" && value && "receipt" in value) {
-    const checkpoint = value as unknown as { path: string; receipt: { status: string; checkpointId: string; coverage: { repositories: number; worktrees: number } } };
-    console.log(`${checkpoint.receipt.status} · ${checkpoint.receipt.checkpointId}\n${checkpoint.path}\n${checkpoint.receipt.coverage.repositories} repositories · ${checkpoint.receipt.coverage.worktrees} worktrees`);
+    const checkpoint = value as unknown as { path?: string; receipt: { status: string; checkpointId: string; controlRef?: string; coverage?: { repositories: number; worktrees: number } } };
+    console.log([`${checkpoint.receipt.status} · ${checkpoint.receipt.checkpointId}`, checkpoint.path, checkpoint.receipt.controlRef, checkpoint.receipt.coverage ? `${checkpoint.receipt.coverage.repositories} repositories · ${checkpoint.receipt.coverage.worktrees} worktrees` : undefined].filter(Boolean).join("\n"));
   }
   else if (typeof value === "object" && value && "check" in value) {
     const ready = value as { mount: string; changed: boolean; check: { entryStatus: string; operationStatus: string; requiredAction?: string } };
@@ -150,7 +151,20 @@ try {
       const target = options.values.to;
       if (!checkpoint || !target) throw new Error("usage: endroit checkpoint restore <checkpoint-directory> --to <absent-target> [--json]");
       print(await restoreCheckpoint(checkpoint, target), options.flags.has("json"));
-    } else throw new Error("usage: endroit checkpoint <capture|verify|restore> ...");
+    } else if (action === "publish") {
+      const checkpoint = options.positionals[1];
+      const requestPath = options.values.from;
+      if (!checkpoint || !requestPath) throw new Error("usage: endroit checkpoint publish <checkpoint-directory> --from <request.json> [--json]");
+      const resolvedRequest = resolve(requestPath);
+      print(await publishCheckpoint(checkpoint, JSON.parse(await Bun.file(resolvedRequest).text()) as unknown, { requestDirectory: dirname(resolvedRequest) }), options.flags.has("json"));
+    } else if (action === "fetch") {
+      const checkpointId = options.positionals[1];
+      const requestPath = options.values.from;
+      const target = options.values.to;
+      if (!checkpointId || !requestPath || !target) throw new Error("usage: endroit checkpoint fetch <checkpoint-id> --from <request.json> --to <absent-checkpoint-directory> [--json]");
+      const resolvedRequest = resolve(requestPath);
+      print(await fetchCheckpoint(checkpointId, JSON.parse(await Bun.file(resolvedRequest).text()) as unknown, target, { requestDirectory: dirname(resolvedRequest) }), options.flags.has("json"));
+    } else throw new Error("usage: endroit checkpoint <capture|verify|restore|publish|fetch> ...");
   } else if (command === "compile") {
     const mount = options.values.mount ?? options.values.root;
     if (!mount) throw new Error("usage: endroit compile --mount <path> [--entry <file>] [--provider <id>]");
