@@ -1,0 +1,10 @@
+{
+  "kind": "EntryBinding",
+  "workplace": "workplace://fixture/restricted",
+  "member": "workplace://fixture/restricted/member/restricted-member",
+  "desk": "workplace://fixture/restricted/desk/restricted-member",
+  "rootBindings": {
+    "shared": "workplace",
+    "private:restricted-member": "checkouts/desks/restricted-member"
+  }
+}

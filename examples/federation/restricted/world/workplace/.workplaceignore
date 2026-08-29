@@ -1,0 +1,4 @@
+# Implicit source discovery only; never an access-control boundary.
+node_modules/
+dist/
+.git/

@@ -1,0 +1,5 @@
+{
+  "kind": "Composition",
+  "ref": "workplace://fixture/peer/composition",
+  "equipment": ["workplace://endroit/equipment/core"]
+}

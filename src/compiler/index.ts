@@ -1396,6 +1396,16 @@ export async function compileWorkplaceMount(options: { mount: string; entryPath?
       }
     }
 
+    const federationModule = await import("../federation.ts");
+    const federation = await federationModule.federationProjection(root);
+    if (federation.present) {
+      const adjacent = federationModule.renderAdjacentWorkplaces(federation.registry);
+      if (adjacent) for (const path of ["FRONTDOOR.md", "AGENTS.md", "CLAUDE.md"]) {
+        const content = selected.get(path);
+        if (content) selected.set(path, `${content.trimEnd()}\n\n${adjacent}`);
+      }
+    }
+
     const portableManifestPath = "workplace/.workplace/projection-manifest.json";
     const portableManifest = JSON.parse(selected.get(portableManifestPath) ?? fail("Compiled portable manifest is missing")) as {
       files: Array<{ path: string; digest: Revision }>;
@@ -1410,8 +1420,11 @@ export async function compileWorkplaceMount(options: { mount: string; entryPath?
     const localManifestPath = ".endroit/projection-manifest.json";
     const localManifest = JSON.parse(selected.get(localManifestPath) ?? fail("Compiled local manifest is missing")) as {
       files: Array<{ path: string; digest: Revision }>;
+      federationRevision?: string;
       [key: string]: unknown;
     };
+    if (federation.revision) localManifest.federationRevision = federation.revision;
+    else delete localManifest.federationRevision;
     localManifest.files = [...selected.entries()]
       .filter(([path]) => isLocalProjection(path) || (path.startsWith(".endroit/") && path !== localManifestPath))
       .sort(([a], [b]) => a.localeCompare(b))
@@ -1740,7 +1753,7 @@ export async function checkWorkplaceMount(options: { mount: string; provider?: s
       };
     }
     if (hasEntry && base.entryStatus === "bound") {
-      const local = await readJson<{ sourceRevision: Revision; entryBindingRevision?: Revision; providerBindingRevision?: Revision }>(join(root, ".endroit/projection-manifest.json"), "Local projection manifest");
+      const local = await readJson<{ sourceRevision: Revision; entryBindingRevision?: Revision; providerBindingRevision?: Revision; federationRevision?: string }>(join(root, ".endroit/projection-manifest.json"), "Local projection manifest");
       const expectedEntry = hash(stable(input.entry ?? null));
       const expectedProvider = hash(stable(input.provider ?? null));
       if (local.entryBindingRevision !== expectedEntry || local.providerBindingRevision !== expectedProvider) {
@@ -1751,6 +1764,17 @@ export async function checkWorkplaceMount(options: { mount: string; provider?: s
           operationStatus: "compile-required",
           requiredAction: "Run endroit ready to rebuild projections from current local bindings.",
           diagnostics: [...base.diagnostics, { severity: "error", code: "binding-revision-stale", subject: ".endroit/projection-manifest.json", message: `expected Entry ${expectedEntry} and Provider ${expectedProvider}, observed Entry ${local.entryBindingRevision ?? "missing"} and Provider ${local.providerBindingRevision ?? "missing"}` }],
+        };
+      }
+      const federation = await (await import("../federation.ts")).federationProjection(root);
+      if (local.federationRevision !== federation.revision) {
+        return {
+          ...base,
+          compileStatus: "stale",
+          entryStatus: "bound",
+          operationStatus: "compile-required",
+          requiredAction: "Run endroit ready to rebuild local adjacency from current federation bindings.",
+          diagnostics: [...base.diagnostics, { severity: "error", code: "federation-revision-stale", subject: ".endroit/projection-manifest.json", message: `expected Federation ${federation.revision ?? "absent"}, observed ${local.federationRevision ?? "absent"}` }],
         };
       }
       const expected = hash([

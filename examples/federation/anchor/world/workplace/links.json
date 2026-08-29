@@ -1,0 +1,8 @@
+{
+  "kind": "WorkplaceLinks",
+  "version": 1,
+  "workplace": "workplace://fixture/anchor",
+  "links": [
+    { "target": "workplace://fixture/peer" }
+  ]
+}

@@ -1,0 +1,10 @@
+{
+  "kind": "EntryBinding",
+  "workplace": "workplace://fixture/peer",
+  "member": "workplace://fixture/peer/member/peer-member",
+  "desk": "workplace://fixture/peer/desk/peer-member",
+  "rootBindings": {
+    "shared": "workplace",
+    "private:peer-member": "checkouts/desks/peer-member"
+  }
+}

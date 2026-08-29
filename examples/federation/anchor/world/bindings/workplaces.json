@@ -1,0 +1,20 @@
+{
+  "kind": "WorkplaceLocalBindings",
+  "version": 1,
+  "workplace": "workplace://fixture/anchor",
+  "attachments": [
+    { "target": "workplace://fixture/restricted" }
+  ],
+  "bindings": [
+    {
+      "workplace": "workplace://fixture/peer",
+      "mode": "external",
+      "mount": "../../../peer/world"
+    },
+    {
+      "workplace": "workplace://fixture/restricted",
+      "mode": "external",
+      "mount": "../../../restricted/world"
+    }
+  ]
+}

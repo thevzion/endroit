@@ -21,6 +21,9 @@ bun src/cli.ts check /path/to/shared-root --history --json
 bun src/cli.ts compile --mount examples/smallest/world \
   --entry bindings/entry.json --provider codex
 bun src/cli.ts ready examples/smallest/world --json
+bun src/cli.ts workplace list /path/to/anchor --json
+bun src/cli.ts workplace enter workplace://example/peer \
+  --anchor /path/to/anchor --json
 bun src/cli.ts preview examples/brownfield/source \
   --out /tmp/endroit-brownfield-preview --json
 ```
@@ -58,6 +61,11 @@ hook or `core.hooksPath` collision is never overwritten.
 
 `preview` is read-only with respect to its source. It creates only the new
 output directory and does not Apply an adoption.
+
+`workplace list` derives addressable peers from the Anchor's portable Links and
+local Bindings. `workplace enter` resolves one exact bound Mount, verifies its
+Workplace identity and returns its existing target-owned Front Door. Neither
+command scans the machine, clones a repository or mutates the target.
 
 ## Try the demonstrations
 

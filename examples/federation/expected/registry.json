@@ -1,0 +1,23 @@
+{
+  "kind": "WorkplaceRegistry",
+  "version": 1,
+  "anchor": "workplace://fixture/anchor",
+  "entries": [
+    {
+      "workplace": "workplace://fixture/peer",
+      "provenance": [
+        "link"
+      ],
+      "availability": "available",
+      "state": "not-entered"
+    },
+    {
+      "workplace": "workplace://fixture/restricted",
+      "provenance": [
+        "attachment"
+      ],
+      "availability": "available",
+      "state": "not-entered"
+    }
+  ]
+}
