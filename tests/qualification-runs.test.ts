@@ -55,9 +55,9 @@ describe("immutable qualification runs", () => {
       expect(recorded.mount).toBe("mount");
       const trajectory = resolve(first.evidence, "trajectory.json");
       const meetingRef = "workplace://witness/meeting/one";
-      await writeFile(trajectory, `${JSON.stringify({ kind: "QualificationTrajectory", version: 1, reads: ["FRONTDOOR.md", "checkouts/desks/alexis-desk/WELCOME.md"], skills: ["enter"], observations: [
+      await writeFile(trajectory, `${JSON.stringify({ kind: "QualificationTrajectory", version: 1, reads: ["FRONTDOOR.md", "workplace/sources/members/alexis/desk/WELCOME.md"], skills: ["enter"], observations: [
         { kind: "read", path: "FRONTDOOR.md" },
-        { kind: "read", path: "checkouts/desks/alexis-desk/WELCOME.md" }
+        { kind: "read", path: "workplace/sources/members/alexis/desk/WELCOME.md" }
       ], dispatches: [
         { role: "manager", action: "spawn", meetingRef },
         { role: "worker", action: "spawn", meetingRef },
@@ -73,7 +73,7 @@ describe("immutable qualification runs", () => {
       catch (error) { drift = error instanceof Error ? error.message : String(error); }
       expect(drift).toContain("case sources changed");
       await writeFile(expectedPath, pinnedExpected);
-      await rm(resolve(first.mount, "checkouts/desks/alexis-desk/WELCOME.md"), { recursive: false, force: false });
+      await rm(resolve(first.mount, "workplace/sources/members/alexis/desk/WELCOME.md"), { recursive: false, force: false });
       await writeFile(trajectory, `${JSON.stringify({ kind: "QualificationTrajectory", version: 1, reads: ["/tmp/outside/MEMORY.md"], skills: ["impeccable"], effects: [{ actor: "main", root: "site", kind: "write" }, { actor: "main", root: "mount", kind: "write", path: "/tmp/.codex/memories/MEMORY.md" }] }, null, 2)}\n`);
       const secondSnapshot = await snapshotQualificationRun({ repository: sandbox, runId: first.id, task: "task-fixture", trajectoryPath: trajectory, now: new Date("2026-08-25T14:02:00Z") });
       expect(firstSnapshot.path).not.toBe(secondSnapshot.path);

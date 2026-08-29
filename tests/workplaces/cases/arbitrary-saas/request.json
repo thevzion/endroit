@@ -4,7 +4,7 @@
   "target": "__RUN_MOUNT__",
   "workplace": { "id": "arbitrary-saas", "name": "Arbitrary SaaS Studio" },
   "member": { "id": "alexis", "name": "Alexis", "language": "fr" },
-  "desk": { "id": "alexis-desk", "name": "Alexis Desk", "welcome": { "tone": "Direct.", "humor": "Light.", "durableChanges": "Update WELCOME.md." } },
+  "desk": { "id": "alexis", "name": "Alexis Desk", "welcome": { "tone": "Direct.", "humor": "Light.", "durableChanges": "Update WELCOME.md." } },
   "providers": ["codex"],
   "git": { "initialize": true, "commits": true, "author": { "name": "Endroit Qualification", "email": "qualification@endroit.local" } }
 }

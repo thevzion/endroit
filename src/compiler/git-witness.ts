@@ -4,7 +4,7 @@ import { checkStaticWorkplace, discoverMount, hash, loadCompileInput, parseSourc
 import type { Diagnostic, SourceRecord } from "./model.ts";
 
 export type GitGuardHook = {
-  root: "shared" | "desk";
+  root: "shared";
   rootPath: string;
   name: "pre-commit" | "commit-msg";
   digest: `sha256:${string}`;
@@ -61,9 +61,9 @@ async function loadMountCompileInput(mount: string) {
 
 function shell(value: string): string { return `'${value.replaceAll("'", `'"'"'`)}'`; }
 
-export function planGitGuards(cliCommand: string[], deskId: string): GitGuardManifest {
+export function planGitGuards(cliCommand: string[]): GitGuardManifest {
   const command = cliCommand.map(shell).join(" ");
-  const make = (root: "shared" | "desk", rootPath: string, name: "pre-commit" | "commit-msg"): GitGuardHook => {
+  const make = (root: "shared", rootPath: string, name: "pre-commit" | "commit-msg"): GitGuardHook => {
     const message = name === "commit-msg" ? ' --commit-message "$1"' : "";
     const content = `#!/bin/sh\n${MARKER}\nexec ${command} check "$(git rev-parse --show-toplevel)" --staged${message}\n`;
     return { root, rootPath, name, digest: hash(content), content };
@@ -75,8 +75,6 @@ export function planGitGuards(cliCommand: string[], deskId: string): GitGuardMan
     hooks: [
       make("shared", "workplace", "pre-commit"),
       make("shared", "workplace", "commit-msg"),
-      make("desk", `checkouts/desks/${deskId}`, "pre-commit"),
-      make("desk", `checkouts/desks/${deskId}`, "commit-msg"),
     ],
   };
 }

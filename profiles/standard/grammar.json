@@ -121,9 +121,9 @@
     "desk": {
       "mode": "authored",
       "target": { "kind": "entity-family", "ids": ["place"] },
-      "roots": ["private"],
+      "roots": ["shared", "private"],
       "source": { "format": "markdown", "leaf": "DESK.md" },
-      "locator": "members/{relation.owned-by.id}/desks/{node.id}/DESK.md",
+      "locator": "members/{relation.owned-by.id}/desk/DESK.md",
       "requiredRelations": ["owned-by"],
       "entry": "scope"
     },
@@ -138,72 +138,72 @@
     "welcome": {
       "mode": "authored",
       "target": { "kind": "entity-family", "ids": ["material"] },
-      "roots": ["private"],
+      "roots": ["shared", "private"],
       "source": { "format": "markdown", "leaf": "WELCOME.md" },
-      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/WELCOME.md",
+      "locator": "members/{relation.owned-by.id}/desk/WELCOME.md",
       "requiredRelations": ["owned-by", "for-desk"],
       "entry": "link"
     },
     "memory-policy": {
       "mode": "authored",
       "target": { "kind": "entity-family", "ids": ["material"] },
-      "roots": ["private"],
+      "roots": ["shared", "private"],
       "source": { "format": "markdown", "leaf": "MEMORY.md" },
-      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/MEMORY.md",
+      "locator": "members/{relation.owned-by.id}/desk/MEMORY.md",
       "requiredRelations": ["owned-by", "for-desk"],
       "entry": "link"
     },
     "preference": {
       "mode": "authored",
       "target": { "kind": "entity-family", "ids": ["material"] },
-      "roots": ["private"],
+      "roots": ["shared", "private"],
       "source": { "format": "markdown" },
-      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/self/preferences/{node.id}.md",
+      "locator": "members/{relation.owned-by.id}/desk/self/preferences/{node.id}.md",
       "requiredRelations": ["owned-by", "for-desk"],
       "entry": "link"
     },
     "goal": {
       "mode": "authored",
       "target": { "kind": "entity-family", "ids": ["material"] },
-      "roots": ["private"],
+      "roots": ["shared", "private"],
       "source": { "format": "markdown" },
-      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/self/goals/{node.id}.md",
+      "locator": "members/{relation.owned-by.id}/desk/self/goals/{node.id}.md",
       "requiredRelations": ["owned-by", "for-desk"],
       "entry": "link"
     },
     "principle": {
       "mode": "authored",
       "target": { "kind": "entity-family", "ids": ["material"] },
-      "roots": ["private"],
+      "roots": ["shared", "private"],
       "source": { "format": "markdown" },
-      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/self/principles/{node.id}.md",
+      "locator": "members/{relation.owned-by.id}/desk/self/principles/{node.id}.md",
       "requiredRelations": ["owned-by", "for-desk"],
       "entry": "link"
     },
     "belief": {
       "mode": "authored",
       "target": { "kind": "entity-family", "ids": ["material"] },
-      "roots": ["private"],
+      "roots": ["shared", "private"],
       "source": { "format": "markdown" },
-      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/self/beliefs/{node.id}.md",
+      "locator": "members/{relation.owned-by.id}/desk/self/beliefs/{node.id}.md",
       "requiredRelations": ["owned-by", "for-desk"],
       "entry": "link"
     },
     "pattern": {
       "mode": "authored",
       "target": { "kind": "entity-family", "ids": ["material"] },
-      "roots": ["private"],
+      "roots": ["shared", "private"],
       "source": { "format": "markdown" },
-      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/self/patterns/{node.id}.md",
+      "locator": "members/{relation.owned-by.id}/desk/self/patterns/{node.id}.md",
       "requiredRelations": ["owned-by", "for-desk"],
       "entry": "link"
     },
     "constraint": {
       "mode": "authored",
       "target": { "kind": "entity-family", "ids": ["material"] },
-      "roots": ["private"],
+      "roots": ["shared", "private"],
       "source": { "format": "markdown" },
-      "locator": "members/{relation.owned-by.id}/desks/{relation.for-desk.id}/self/constraints/{node.id}.md",
+      "locator": "members/{relation.owned-by.id}/desk/self/constraints/{node.id}.md",
       "requiredRelations": ["owned-by", "for-desk"],
       "entry": "link"
     },
@@ -302,7 +302,7 @@
   "slots": {
     "governance": { "owner": "owner", "role": "shelf", "accepts": { "entities": ["material"], "roles": ["constitution", "doctrine", "change-policy"] }, "cardinality": "1..*", "locator": "{node.id}", "visibility": "listed", "order": 1 },
     "members": { "owner": "owner", "role": "shelf", "accepts": { "entities": ["member"], "roles": ["owner"] }, "cardinality": "1..*", "locator": "members/{node.id}", "visibility": "listed", "order": 10 },
-    "desks": { "owner": "owner", "role": "shelf", "accepts": { "entities": ["place"], "roles": ["desk"] }, "cardinality": "0..*", "locator": "members/{relation.owned-by.id}/desks/{node.id}", "visibility": "linked", "order": 15 },
+    "desks": { "owner": "owner", "role": "shelf", "accepts": { "entities": ["place"], "roles": ["desk"] }, "cardinality": "0..1", "locator": "members/{relation.owned-by.id}/desk", "visibility": "linked", "order": 15 },
     "rooms": { "owner": "owner", "role": "shelf", "accepts": { "entities": ["place"], "roles": ["room"] }, "cardinality": "0..*", "locator": "rooms/{node.id}", "visibility": "listed", "order": 20 },
     "sites": { "owner": "owner", "role": "shelf", "accepts": { "entities": ["place"], "roles": ["site"] }, "cardinality": "0..*", "locator": "sites/{node.id}", "visibility": "linked", "order": 30 },
     "room-work": { "owner": "room", "role": "shelf", "accepts": { "entities": ["work"], "roles": ["study", "initiative", "exploration"] }, "cardinality": "0..*", "locator": "work/{node.id}", "visibility": "listed", "order": 10 },

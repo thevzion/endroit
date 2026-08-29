@@ -121,11 +121,10 @@ export async function runNewWizard(options: NewWizardOptions): Promise<NewWorkpl
     return undefined;
   }
 
-  let welcome: { deskName: string; deskId: string; tone: string; humor: string; durableChanges: string };
+  let welcome: { deskName: string; tone: string; humor: string; durableChanges: string };
   try {
     welcome = await group({
       deskName: () => text({ message: "Private Desk name", initialValue: `${member.name}'s Desk`, validate: required, ...io }),
-      deskId: () => text({ message: "Desk identifier", initialValue: `${member.id}-desk`.slice(0, 63), validate: slugValidation, ...io }),
       tone: () => text({ message: "Preferred tone", initialValue: "Direct, warm and concise.", validate: required, ...io }),
       humor: () => text({ message: "Humor", initialValue: "Light when it helps; never forced.", validate: required, ...io }),
       durableChanges: () => text({ message: "Where should durable interaction changes go?", initialValue: "Update this Desk WELCOME.md, never provider memory.", validate: required, ...io }),
@@ -170,7 +169,7 @@ export async function runNewWizard(options: NewWizardOptions): Promise<NewWorkpl
     target: options.target,
     workplace,
     member: { ...member, language: customLanguage },
-    desk: { id: welcome.deskId, name: welcome.deskName, welcome: { tone: welcome.tone, humor: welcome.humor, durableChanges: welcome.durableChanges } },
+    desk: { id: member.id, name: welcome.deskName, welcome: { tone: welcome.tone, humor: welcome.humor, durableChanges: welcome.durableChanges } },
     providers,
     git: { initialize: true, commits: true, author: { name: authorName, email: authorEmail } },
   }, { profile: options.profile, cliCommand: options.cliCommand });

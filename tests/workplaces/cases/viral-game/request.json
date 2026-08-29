@@ -5,7 +5,7 @@
   "workplace": { "id": "viral-game", "name": "Viral Game Studio" },
   "member": { "id": "alexis", "name": "Alexis", "language": "fr" },
   "desk": {
-    "id": "alexis-desk",
+    "id": "alexis",
     "name": "Alexis Desk",
     "welcome": {
       "tone": "Direct, warm and concise.",

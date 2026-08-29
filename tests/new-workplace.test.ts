@@ -23,7 +23,7 @@ function request(target: string, providers: Array<"codex" | "claude"> = ["codex"
     workplace: { id: "fresh-studio", name: "Fresh Studio" },
     member: { id: "alexis", name: "Alexis", language: "fr" },
     desk: {
-      id: "alexis-desk",
+      id: "alexis",
       name: "Alexis Desk",
       welcome: {
         tone: "Direct, warm and concise.",
@@ -51,7 +51,7 @@ describe("endroit new", () => {
     expect(first.files).toEqual(second.files);
     expect(first.files.some((file) => file.path === "AGENTS.md")).toBe(true);
     expect(first.files.some((file) => file.path === "CLAUDE.md")).toBe(false);
-    expect(first.gitGuards.hooks).toHaveLength(4);
+    expect(first.gitGuards.hooks).toHaveLength(2);
     expect(first.gitGuards.hooks.some((hook) => hook.rootPath.includes("sites"))).toBe(false);
     const neutralOnly = planNewWorkplace(request("/tmp/endroit-new-neutral", []), { profile, cliCommand });
     expect(neutralOnly.files.some((file) => file.path === "FRONTDOOR.md")).toBe(true);
@@ -63,7 +63,7 @@ describe("endroit new", () => {
     expect(() => planNewWorkplace(request("/tmp/endroit-new-preview", ["codex", "codex"]), { profile, cliCommand })).toThrow("duplicates");
   });
 
-  test("creates a bound personal Workplace with separate clean Git Roots", async () => {
+  test("creates a bound Workplace with one Git Root and one situated Desk subtree", async () => {
     const target = resolve("/tmp", `endroit-new-test-${crypto.randomUUID()}`);
     await rm(target, { recursive: true, force: true });
     try {
@@ -73,13 +73,9 @@ describe("endroit new", () => {
       expect(result.check.operationStatus).toBe("ready");
       expect(result.check.entryStatus).toBe("bound");
       expect(git(result.roots.shared, ["branch", "--show-current"])).toBe("develop");
-      expect(git(result.roots.desk, ["branch", "--show-current"])).toBe("develop");
       expect(git(result.roots.shared, ["rev-list", "--count", "HEAD"])).toBe("2");
-      expect(git(result.roots.desk, ["rev-list", "--count", "HEAD"])).toBe("1");
       expect(git(result.roots.shared, ["remote"])).toBe("");
-      expect(git(result.roots.desk, ["remote"])).toBe("");
       expect(git(result.roots.shared, ["status", "--porcelain"])).toBe("");
-      expect(git(result.roots.desk, ["status", "--porcelain"])).toBe("");
       expect(git(result.roots.shared, ["log", "-2", "--format=%B"])).toContain("Authority: human-invoked");
       expect(git(result.roots.shared, ["log", "-1", "--format=%B"])).toContain("Authority: projection");
 
@@ -102,7 +98,9 @@ describe("endroit new", () => {
       expect(constitution).toContain("The human Member owns Intent");
       expect(constitution).not.toContain("Alexis owns direction");
       expect(await readFile(resolve(target, "workplace/sources/DOCTRINE.md"), "utf8")).toContain("one question and zero writes");
-      expect(await readFile(resolve(target, "checkouts/desks/alexis-desk/MEMORY.md"), "utf8")).toContain("Secrets belong in a secret store");
+      expect(result.desk).toBe(resolve(target, "workplace/sources/members/alexis/desk"));
+      expect(await readFile(resolve(result.desk, "MEMORY.md"), "utf8")).toContain("Secrets belong in a secret store");
+      expect(await Bun.file(resolve(target, "checkouts/desks")).exists()).toBe(false);
       const openRoom = await readFile(resolve(target, "methods/open-room.md"), "utf8");
       const enter = await readFile(resolve(target, ".agents/skills/enter/SKILL.md"), "utf8");
       expect(enter).toContain("directly through the resident Member Card to its WELCOME source");
@@ -319,7 +317,6 @@ describe("endroit new", () => {
     await answer("Stream Studio");
     await answer();
     await answer("Alexis");
-    await answer();
     await answer();
     await answer();
     await answer();

@@ -45,7 +45,7 @@ export type NewWorkplacePlan = {
   request: NewWorkplaceRequest;
   profile: { ref: string; revision: string };
   files: PlannedNewFile[];
-  commits: Array<{ root: "shared" | "desk"; responsibility: "sources" | "projections"; message: string }>;
+  commits: Array<{ root: "shared"; responsibility: "sources" | "projections"; message: string }>;
   gitGuards: GitGuardManifest;
   exclusions: ["Room", "Work", "Site", "remote", "hosting", "delivery"];
   contents: Record<string, string>;
@@ -55,8 +55,9 @@ export type NewWorkplaceResult = {
   kind: "NewWorkplaceResult";
   revision: string;
   mount: string;
-  roots: { shared: string; desk: string };
-  commits: { sharedSources: string; sharedProjections: string; deskSources: string };
+  roots: { shared: string };
+  desk: string;
+  commits: { sharedSources: string; sharedProjections: string };
   check: CheckResult;
 };
 
@@ -133,6 +134,7 @@ export function validateNewWorkplaceRequest(value: unknown): NewWorkplaceRequest
     return provider;
   });
   if (new Set(providers).size !== providers.length) fail("providers must not contain duplicates");
+  if (desk.id !== member.id) fail("desk.id must equal member.id; v1 has one Desk per Member x Workplace");
   if (git.initialize !== true || git.commits !== true) fail("git.initialize and git.commits must be true in version 1");
   const email = text(author.email, "git.author.email", 254);
   if (!EMAIL.test(email)) fail("git.author.email is invalid");
@@ -226,7 +228,7 @@ export function planNewWorkplace(value: unknown, options: { profile: LoadedProfi
   if (options.cliCommand.length === 0 || options.cliCommand.some((part) => !part)) fail("cliCommand must identify the Endroit executable");
   const base = `workplace://${request.workplace.id}`;
   const member = `${base}/member/${request.member.id}`;
-  const desk = `${base}/desk/${request.desk.id}`;
+  const desk = `${base}/desk/${request.member.id}`;
   const material = (id: string) => `${base}/material/${id}`;
   const contents: Record<string, string> = {};
   const put = (path: string, content: string) => { contents[path] = content; };
@@ -242,7 +244,7 @@ export function planNewWorkplace(value: unknown, options: { profile: LoadedProfi
     workplace: base,
     profile: { ref: options.profile.manifest.ref, path: "profile.json", revision: options.profile.digest },
     composition: { ref: `${base}/composition`, path: "composition.json" },
-    roots: ["shared", "private", "site"],
+    roots: ["shared", "site"],
     policy: {
       disclosureSelectors: options.profile.profile.disclosures.selectors.map((selector) => selector.id),
       localBuildIntent: "bounded-work-and-site",
@@ -265,12 +267,13 @@ export function planNewWorkplace(value: unknown, options: { profile: LoadedProfi
   put("workplace/sources/DOCTRINE.md", source({ ref: material("doctrine"), entity: "material", roles: ["doctrine"], slot: "governance", owner: member, scope: base, label: `${request.workplace.name} Doctrine`, summary: "Compile globally, disclose locally, load on intent and execute with proof.", when: ["Choosing a path from intent to outcome."] }, body("doctrine")));
   put("workplace/sources/CHANGE.md", source({ ref: material("change-policy"), entity: "material", roles: ["change-policy"], slot: "governance", owner: member, scope: base, label: `${request.workplace.name} Change Policy`, summary: "Durable changes follow one declared Operation in their owning Root with proof.", when: ["Before changing Workplace or Site state."] }, body("change")));
   put(`workplace/sources/members/${request.member.id}/MEMBER.md`, source({ ref: member, entity: "member", roles: ["owner"], slot: "members", owner: member, scope: base, label: request.member.name, language: request.member.language, summary: `Human owner of ${request.workplace.name}.`, when: ["Human ownership, judgment or consent matters."], responsibilities: ["Own direction, judgment, acceptance and delivery consent."], authorityLimits: ["Agents may prepare bounded local changes but never accept, host or deliver."], durableChanges: [request.desk.welcome.durableChanges], relations: { owns: [desk] } }, body("member")));
-  put(`checkouts/desks/${request.desk.id}/DESK.md`, source({ ref: desk, entity: "place", roles: ["desk"], slot: "desks", owner: member, scope: base, label: request.desk.name, summary: `Private Desk identity and index for ${request.member.name}.`, when: ["A bound entry resolves its Desk."], relations: { "owned-by": [member] } }, body("desk")));
+  const deskRoot = `workplace/sources/members/${request.member.id}/desk`;
+  put(`${deskRoot}/DESK.md`, source({ ref: desk, entity: "place", roles: ["desk"], slot: "desks", owner: member, scope: base, label: request.desk.name, summary: `Situated Desk identity and index for ${request.member.name}.`, when: ["A bound entry resolves its Desk."], relations: { "owned-by": [member] } }, body("desk")));
   const welcomeBody = body("welcome");
   if (new TextEncoder().encode(welcomeBody).byteLength > 4096) fail("WELCOME body exceeds 4 KiB");
-  put(`checkouts/desks/${request.desk.id}/WELCOME.md`, source({ ref: material(`welcome-${request.desk.id}`), entity: "material", roles: ["welcome"], slot: "desk-material", owner: member, scope: desk, label: `${request.member.name} welcome`, summary: `Resident disclosure selected by ${request.desk.name}.`, when: ["Every conversation bound to this Desk."], relations: { "owned-by": [member], "for-desk": [desk] } }, welcomeBody));
-  put(`checkouts/desks/${request.desk.id}/MEMORY.md`, source({ ref: material(`memory-${request.desk.id}`), entity: "material", roles: ["memory-policy"], slot: "desk-material", owner: member, scope: desk, label: `${request.member.name} memory policy`, summary: "Desk sources own durable personal continuity; provider memory is disposable cache.", when: ["A conversation considers retaining personal continuity."], relations: { "owned-by": [member], "for-desk": [desk] } }, body("memory")));
-  put(".endroit/entry.json", stable({ kind: "EntryBinding", workplace: base, member, desk, rootBindings: { shared: "workplace", [`private:${request.desk.id}`]: `checkouts/desks/${request.desk.id}` } }));
+  put(`${deskRoot}/WELCOME.md`, source({ ref: material(`welcome-${request.member.id}`), entity: "material", roles: ["welcome"], slot: "desk-material", owner: member, scope: desk, label: `${request.member.name} welcome`, summary: `Resident disclosure selected by ${request.desk.name}.`, when: ["Every conversation bound to this Desk."], relations: { "owned-by": [member], "for-desk": [desk] } }, welcomeBody));
+  put(`${deskRoot}/MEMORY.md`, source({ ref: material(`memory-${request.member.id}`), entity: "material", roles: ["memory-policy"], slot: "desk-material", owner: member, scope: desk, label: `${request.member.name} memory policy`, summary: "Desk sources own durable situated continuity; provider memory is disposable cache.", when: ["A conversation considers retaining situated continuity."], relations: { "owned-by": [member], "for-desk": [desk] } }, body("memory")));
+  put(".endroit/entry.json", stable({ kind: "EntryBinding", workplace: base, member, desk, rootBindings: { shared: "workplace" } }));
   for (const provider of request.providers) put(`.endroit/providers/${provider}.json`, stable(providerBinding(provider, options.cliCommand, request.target, options.profile)));
 
   const projectionPaths = [
@@ -279,7 +282,7 @@ export function planNewWorkplace(value: unknown, options: { profile: LoadedProfi
     ...(request.providers.includes("codex") ? ["AGENTS.md", ...["enter", "maintain"].map((id) => `.agents/skills/${id}/SKILL.md`)] : []),
     ...(request.providers.includes("claude") ? ["CLAUDE.md"] : []),
   ].sort();
-  const gitGuards = planGitGuards(options.cliCommand, request.desk.id);
+  const gitGuards = planGitGuards(options.cliCommand);
   const files: PlannedNewFile[] = [
     ...Object.entries(contents).map(([path, content]): PlannedNewFile => ({ path, responsibility: path.startsWith(".endroit/") || path === ".gitignore" ? "local-binding" : "owned-source", digest: hash(content) })),
     ...projectionPaths.map((path): PlannedNewFile => ({ path, responsibility: "projection", digest: null })),
@@ -287,7 +290,6 @@ export function planNewWorkplace(value: unknown, options: { profile: LoadedProfi
     { path: ".endroit/git-guards.json", responsibility: "local-binding" as const, digest: hash(stable(gitGuards)) },
   ].sort((a, b) => a.path.localeCompare(b.path));
   const commits: NewWorkplacePlan["commits"] = [
-    { root: "desk", responsibility: "sources", message: `adopt(desk:${request.desk.id}): create private entry sources` },
     { root: "shared", responsibility: "sources", message: `adopt(workplace:${request.workplace.id}): create owned sources` },
     { root: "shared", responsibility: "projections", message: `compile(workplace:${request.workplace.id}): project portable control plane` },
   ];
@@ -305,7 +307,7 @@ export function planNewWorkplace(value: unknown, options: { profile: LoadedProfi
 }
 
 export function renderNewWorkplacePreview(plan: NewWorkplacePlan): string {
-  const roots = [`- Mount: ${plan.request.target}`, "- Shared Root: workplace/", `- Desk Root: checkouts/desks/${plan.request.desk.id}/`];
+  const roots = [`- Mount: ${plan.request.target}`, "- Workplace Git Root: workplace/", `- Desk subtree: workplace/sources/members/${plan.request.member.id}/desk/`];
   const providers = plan.request.providers.length > 0 ? plan.request.providers.join(", ") : "none (neutral Front Door only)";
   return [
     ...roots,
@@ -364,17 +366,14 @@ export async function applyNewWorkplace(plan: NewWorkplacePlan, expectedRevision
       await writeFile(destination, content, { flag: "wx" });
     }
     const shared = join(temp, "workplace");
-    const desk = join(temp, `checkouts/desks/${plan.request.desk.id}`);
     runGit(shared, ["init", "-b", "develop"]);
-    runGit(desk, ["init", "-b", "develop"]);
-    const deskSources = commit(desk, plan.commits[0]!.message, "human-invoked", plan.request.git.author);
-    const sharedSources = commit(shared, plan.commits[1]!.message, "human-invoked", plan.request.git.author);
+    const sharedSources = commit(shared, plan.commits[0]!.message, "human-invoked", plan.request.git.author);
     await compileWorkplaceMount({ mount: temp });
-    const sharedProjections = commit(shared, plan.commits[2]!.message, "projection", plan.request.git.author, sharedSources);
+    const sharedProjections = commit(shared, plan.commits[1]!.message, "projection", plan.request.git.author, sharedSources);
     await installGitGuards(temp, plan.gitGuards);
     const check = await checkWorkplaceMount({ mount: temp });
     if (check.compileStatus !== "valid" || check.operationStatus !== "ready" || check.entryStatus !== "bound") fail(`Created Workplace did not reach ready: ${check.compileStatus}/${check.entryStatus}/${check.operationStatus}`);
-    for (const root of [shared, desk]) {
+    for (const root of [shared]) {
       if (runGit(root, ["status", "--porcelain"])) fail(`Git Root is dirty after creation: ${root}`);
       if (runGit(root, ["remote"])) fail(`Git Root unexpectedly has a remote: ${root}`);
     }
@@ -386,8 +385,9 @@ export async function applyNewWorkplace(plan: NewWorkplacePlan, expectedRevision
       kind: "NewWorkplaceResult",
       revision: plan.revision,
       mount: target,
-      roots: { shared: join(target, "workplace"), desk: join(target, `checkouts/desks/${plan.request.desk.id}`) },
-      commits: { sharedSources, sharedProjections, deskSources },
+      roots: { shared: join(target, "workplace") },
+      desk: join(target, `workplace/sources/members/${plan.request.member.id}/desk`),
+      commits: { sharedSources, sharedProjections },
       check: finalCheck,
     };
   } catch (error) {

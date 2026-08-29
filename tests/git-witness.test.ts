@@ -19,7 +19,7 @@ function request(target: string): NewWorkplaceRequest {
     kind: "NewWorkplaceRequest", version: 1, target,
     workplace: { id: "witness-studio", name: "Witness Studio" },
     member: { id: "alexis", name: "Alexis", language: "fr" },
-    desk: { id: "alexis-desk", name: "Alexis Desk", welcome: { tone: "Direct.", humor: "Light.", durableChanges: "Update WELCOME.md." } },
+    desk: { id: "alexis", name: "Alexis Desk", welcome: { tone: "Direct.", humor: "Light.", durableChanges: "Update WELCOME.md." } },
     providers: ["codex"],
     git: { initialize: true, commits: true, author: { name: "Witness Fixture", email: "witness@example.test" } },
   };
@@ -32,9 +32,9 @@ describe("Git witness", () => {
     try {
       const profile = await loadStandardProfile(resolve(repository, "profiles/standard/profile.json"));
       const plan = planNewWorkplace(request(target), { profile, cliCommand });
-      expect(plan.gitGuards.hooks).toHaveLength(4);
+      expect(plan.gitGuards.hooks).toHaveLength(2);
       const created = await applyNewWorkplace(plan, plan.revision);
-      for (const root of [created.roots.shared, created.roots.desk]) for (const name of ["pre-commit", "commit-msg"]) {
+      for (const root of [created.roots.shared]) for (const name of ["pre-commit", "commit-msg"]) {
         const hook = await readFile(resolve(root, `.git/hooks/${name}`), "utf8");
         expect(hook).toContain("endroit-git-guard:v1");
         expect(hook).toContain("check");
