@@ -1,0 +1,16 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/workplace-checkpoint-receipt/1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "operation", "checkpointId", "workplaceRef", "portableFingerprint", "status", "coverage"],
+  "properties": {
+    "schema": { "const": "workplace-checkpoint-receipt/1" },
+    "operation": { "enum": ["capture", "verify", "restore"] },
+    "checkpointId": { "type": "string", "pattern": "^checkpoint:sha256:[a-f0-9]{64}$" },
+    "workplaceRef": { "type": "string", "pattern": "^workplace://" },
+    "portableFingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "status": { "enum": ["captured", "verified-local", "restored-equivalent"] },
+    "coverage": { "type": "object", "additionalProperties": false, "required": ["repositories", "worktrees", "untracked", "ignored", "exclusions"], "properties": { "repositories": { "type": "integer", "minimum": 0 }, "worktrees": { "type": "integer", "minimum": 0 }, "untracked": { "type": "integer", "minimum": 0 }, "ignored": { "type": "integer", "minimum": 0 }, "exclusions": { "type": "array", "items": { "type": "string" } } } }
+  }
+}

@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/workplace-checkpoint-index/1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "entries", "unsupportedExtensions"],
+  "properties": {
+    "schema": { "const": "workplace-checkpoint-index/1" },
+    "entries": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["path", "stage", "mode", "oid", "assumeUnchanged", "skipWorktree", "intentToAdd"], "properties": { "path": { "type": "string" }, "stage": { "enum": [0, 1, 2, 3] }, "mode": { "enum": ["100644", "100755", "120000", "160000"] }, "oid": { "type": "string" }, "assumeUnchanged": { "type": "boolean" }, "skipWorktree": { "type": "boolean" }, "intentToAdd": { "type": "boolean" } } } },
+    "unsupportedExtensions": { "type": "array", "items": { "type": "string" } }
+  }
+}

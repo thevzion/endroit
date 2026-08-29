@@ -87,6 +87,21 @@ Request and Receipt stay local; they contain no credentials. Setup transports
 committed Git only. Dirty worktrees, local refs and untracked files belong to
 the separate Git State Portability checkpoint contract.
 
+The first Git State Portability vertical is local and request-driven:
+
+```sh
+bun src/cli.ts checkpoint capture --from /path/to/capture-request.json --json
+bun src/cli.ts checkpoint verify /path/to/checkpoint --json
+bun src/cli.ts checkpoint restore /path/to/checkpoint --to /absent/target --json
+```
+
+Capture resolves only explicitly declared Roots and worktrees. The immutable
+package includes static recovery documents and closed schemas under
+`schemas/checkpoint/`. Restore reconstructs into an adjacent temporary target,
+proves the same portable fingerprint, then renames atomically. It never invokes
+`check`, `compile` or `ready`. Encryption, checkpoint remotes and cross-OS
+qualification are not implemented yet.
+
 ## Try the demonstrations
 
 - [ADOPT.md](ADOPT.md) explains the shipped static brownfield Preview and the

@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/workplace-checkpoint-manifest/1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "checkpointId", "workplaceRef", "workplaceRevision", "fidelityPolicy", "repositories", "worktrees", "payloads", "compatibility", "portableFingerprint"],
+  "properties": {
+    "schema": { "const": "workplace-checkpoint-manifest/1" },
+    "checkpointId": { "type": "string", "pattern": "^checkpoint:sha256:[a-f0-9]{64}$" },
+    "workplaceRef": { "type": "string", "pattern": "^workplace://" },
+    "workplaceRevision": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "fidelityPolicy": { "type": "object", "additionalProperties": false, "required": ["includeUntracked", "ignoredPaths"], "properties": { "includeUntracked": { "type": "boolean" }, "ignoredPaths": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["worktree", "path"], "properties": { "worktree": { "type": "string" }, "path": { "type": "string" } } } } } },
+    "repositories": { "type": "array", "items": { "$ref": "repository-v1.schema.json" } },
+    "worktrees": { "type": "array", "items": { "$ref": "worktree-v1.schema.json" } },
+    "payloads": { "type": "array", "items": { "$ref": "payload-v1.schema.json" } },
+    "compatibility": { "$ref": "compatibility-v1.schema.json" },
+    "portableFingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" }
+  }
+}

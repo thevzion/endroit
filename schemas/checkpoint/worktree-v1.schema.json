@@ -1,0 +1,28 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/workplace-checkpoint-worktree/1",
+  "$defs": {
+    "content": {
+      "oneOf": [
+        { "type": "object", "additionalProperties": false, "required": ["path", "kind", "mode"], "properties": { "path": { "type": "string" }, "kind": { "const": "absent" }, "mode": { "const": "000000" } } },
+        { "type": "object", "additionalProperties": false, "required": ["path", "kind", "mode", "sha256", "size", "payload"], "properties": { "path": { "type": "string" }, "kind": { "enum": ["regular", "symlink"] }, "mode": { "enum": ["100644", "100755", "120000"] }, "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" }, "size": { "type": "integer", "minimum": 0 }, "payload": { "type": "string" } } }
+      ]
+    }
+  },
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "worktreeId", "repositoryId", "logicalPath", "head", "branchRef", "index", "tracked", "untracked", "ignored", "operation"],
+  "properties": {
+    "schema": { "const": "workplace-checkpoint-worktree/1" },
+    "worktreeId": { "type": "string" },
+    "repositoryId": { "type": "string", "pattern": "^[a-f0-9]{16}$" },
+    "logicalPath": { "type": "string" },
+    "head": { "type": "string", "pattern": "^[a-f0-9]{40}([a-f0-9]{24})?$" },
+    "branchRef": { "type": ["string", "null"] },
+    "index": { "$ref": "index-v1.schema.json" },
+    "tracked": { "type": "array", "items": { "$ref": "#/$defs/content" } },
+    "untracked": { "type": "array", "items": { "$ref": "#/$defs/content" } },
+    "ignored": { "type": "array", "items": { "$ref": "#/$defs/content" } },
+    "operation": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["path", "sha256", "size", "payload"], "properties": { "path": { "type": "string" }, "sha256": { "type": "string" }, "size": { "type": "integer", "minimum": 0 }, "payload": { "type": "string" } } } }
+  }
+}

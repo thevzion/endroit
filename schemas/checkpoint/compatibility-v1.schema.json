@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/workplace-checkpoint-compatibility/1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["platform", "objectFormats", "symlinks"],
+  "properties": {
+    "platform": { "type": "string" },
+    "objectFormats": { "type": "array", "items": { "enum": ["sha1", "sha256"] } },
+    "symlinks": { "const": true }
+  }
+}

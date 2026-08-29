@@ -5,6 +5,7 @@ interface ImportMeta {
 declare const process: {
   exitCode?: number;
   readonly pid: number;
+  readonly platform: string;
   readonly env: Record<string, string | undefined>;
   readonly stdin: import("node:stream").Readable & { isTTY?: boolean };
   readonly stdout: import("node:stream").Writable & { columns?: number; isTTY?: boolean };
@@ -33,6 +34,7 @@ declare namespace Bun {
   function spawnSync(command: string[], options: {
     cwd: string;
     env?: Record<string, string | undefined>;
+    stdin?: string | Uint8Array;
     stdout: "pipe";
     stderr: "pipe";
   }): {
@@ -64,11 +66,12 @@ declare module "node:fs/promises" {
 
   export function cp(source: string, destination: string, options: { recursive: boolean }): Promise<void>;
   export function chmod(path: string, mode: number): Promise<void>;
-  export function lstat(path: string): Promise<{ isSymbolicLink(): boolean }>;
+  export function lstat(path: string): Promise<{ mode: number; size: number; isFile(): boolean; isDirectory(): boolean; isSymbolicLink(): boolean }>;
   export function mkdtemp(prefix: string): Promise<string>;
   export function mkdir(path: string, options: { recursive: boolean }): Promise<string | undefined>;
   export function readFile(path: string, encoding: "utf8"): Promise<string>;
   export function readFile(path: string): Promise<Uint8Array>;
+  export function readlink(path: string): Promise<string>;
   export function realpath(path: string): Promise<string>;
   export function readdir(path: string, options: { withFileTypes: true }): Promise<Dirent[]>;
   export function rename(from: string, to: string): Promise<void>;
@@ -76,6 +79,7 @@ declare module "node:fs/promises" {
   export function stat(path: string): Promise<{ size: number; mode: number; isFile(): boolean }>;
   export function symlink(target: string, path: string): Promise<void>;
   export function writeFile(path: string, data: string, options?: { flag: "wx" }): Promise<void>;
+  export function writeFile(path: string, data: Uint8Array, options?: { flag: "wx" }): Promise<void>;
 }
 
 declare module "node:stream" {
@@ -88,6 +92,15 @@ declare module "node:stream" {
 
 declare module "node:readline" {
   export type Key = { name?: string; ctrl?: boolean; meta?: boolean; shift?: boolean; sequence?: string };
+}
+
+declare module "node:child_process" {
+  export function spawnSync(command: string, args: string[], options: {
+    cwd: string;
+    input?: string | Uint8Array;
+    env?: Record<string, string | undefined>;
+    maxBuffer?: number;
+  }): { status: number | null; stdout: Uint8Array; stderr: Uint8Array };
 }
 
 declare module "node:path" {

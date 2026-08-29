@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schema/workplace-checkpoint-payload/1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["sha256", "size", "path"],
+  "properties": {
+    "sha256": { "type": "string", "pattern": "^[a-f0-9]{64}$" },
+    "size": { "type": "integer", "minimum": 0 },
+    "path": { "type": "string", "pattern": "^payloads/[a-f0-9]{64}$" }
+  }
+}

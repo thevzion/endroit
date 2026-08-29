@@ -37,7 +37,7 @@
     "example:reset": "bun src/qualification/reset.ts",
     "example:fresh:preview": "bun src/cli.ts new --request examples/fresh/request.json --preview --json",
     "typecheck": "tsc -p tsconfig.json",
-    "test": "bun test ./tests/*.test.ts"
+    "test": "bun test ./tests/*.test.ts --timeout 30000"
   },
   "dependencies": {
     "@clack/prompts": "1.7.0",

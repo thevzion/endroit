@@ -12,6 +12,7 @@ It currently provides:
 - a private-package Bun + TypeScript CLI installed from source;
 - a consent-first `endroit new` wizard for a fresh personal Workplace;
 - a digest-bound `workplace setup` command for cloning or attaching declared peer Workplaces;
+- local Git-state checkpoints that round-trip dirty, detached and conflicted declared Roots;
 - a pinned Workplace Profile Package whose Grammar, Lexicon, defaults,
   affordances and policies are inspectable data;
 - a provider-opened Mount separated from portable and sovereign Git Roots;
