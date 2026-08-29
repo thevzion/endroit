@@ -1,0 +1,18 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schemas/checkpoint/toolchain-v1.schema.json",
+  "title": "Workplace checkpoint toolchain capability v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["schema", "toolchain", "reads", "writes", "gitObjectFormats", "qualifiedPlatforms", "executors", "commands"],
+  "properties": {
+    "schema": { "const": "workplace-checkpoint-toolchain/1" },
+    "toolchain": { "type": "object", "additionalProperties": false, "required": ["name", "version"], "properties": { "name": { "type": "string" }, "version": { "type": "string" } } },
+    "reads": { "type": "array", "items": { "type": "string" } },
+    "writes": { "type": "array", "items": { "type": "string" } },
+    "gitObjectFormats": { "type": "array", "items": { "enum": ["sha1", "sha256"] } },
+    "qualifiedPlatforms": { "type": "array", "items": { "enum": ["darwin", "linux", "win32"] } },
+    "executors": { "type": "array", "items": { "type": "string" } },
+    "commands": { "type": "array", "items": { "type": "string" } }
+  }
+}

@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { chmod, cp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { captureCheckpoint, restoreCheckpoint, verifyCheckpoint, type CheckpointCaptureRequest } from "../src/checkpoint.ts";
+import { captureCheckpoint, checkpointRestorePlan, restoreCheckpoint, verifyCheckpoint, type CheckpointCaptureRequest } from "../src/checkpoint.ts";
 import { fetchCheckpoint, publishCheckpoint, restoreCheckpointFromRemote } from "../src/checkpoint-remote.ts";
 
 const repository = resolve(import.meta.dir, "..");
@@ -107,6 +107,10 @@ describe("Git State Portability", () => {
       expect(captured.receipt.coverage.repositories).toBe(3);
       expect(captured.receipt.coverage.worktrees).toBe(4);
       expect(JSON.parse(run(repository, [...cli, "checkpoint", "verify", captured.path, "--json"]).trim()).receipt.status).toBe("verified-local");
+      const verified = await verifyCheckpoint(captured.path);
+      const staticProof = JSON.parse(run(repository, ["node", resolve(repository, "scripts/checkpoint-validate.mjs"), captured.path]));
+      expect(staticProof.status).toBe("verified-static");
+      expect(staticProof.plan).toEqual(checkpointRestorePlan(verified.manifest));
 
       const restoredPath = join(state.root, "restored");
       const restored = JSON.parse(run(repository, [...cli, "checkpoint", "restore", captured.path, "--to", restoredPath, "--json"])) as Awaited<ReturnType<typeof restoreCheckpoint>>;
@@ -139,6 +143,7 @@ describe("Git State Portability", () => {
       let schema = "";
       try { await verifyCheckpoint(tampered); } catch (error) { schema = error instanceof Error ? error.message : String(error); }
       expect(schema).toContain("unknown fields");
+      run(repository, ["node", resolve(repository, "scripts/checkpoint-validate.mjs"), tampered], 1);
 
       const payloadTampered = join(state.root, "payload-tampered");
       await cp(captured.path, payloadTampered, { recursive: true });
@@ -147,6 +152,7 @@ describe("Git State Portability", () => {
       let payload = "";
       try { await verifyCheckpoint(payloadTampered); } catch (error) { payload = error instanceof Error ? error.message : String(error); }
       expect(payload).toContain("changed");
+      run(repository, ["node", resolve(repository, "scripts/checkpoint-validate.mjs"), payloadTampered], 1);
 
       const existing = join(state.root, "existing");
       await mkdir(existing, { recursive: true });
@@ -156,10 +162,13 @@ describe("Git State Portability", () => {
       expect(blocked).toContain("already exists");
       expect(await readFile(join(existing, "keep.txt"), "utf8")).toBe("keep\n");
 
-      for (const name of ["capture-request", "repository", "worktree", "index", "payload", "compatibility", "manifest", "receipt", "publish-request", "fetch-request", "envelope-record", "remote-control", "remote-receipt"]) {
+      for (const name of ["capture-request", "repository", "worktree", "index", "payload", "compatibility", "manifest", "receipt", "publish-request", "fetch-request", "envelope-record", "remote-control", "remote-receipt", "restore-plan", "toolchain"]) {
         const schemaDocument = JSON.parse(await readFile(join(repository, `schemas/checkpoint/${name}-v1.schema.json`), "utf8"));
         expect(schemaDocument.additionalProperties).toBe(false);
       }
+      const toolchain = JSON.parse(await readFile(join(repository, "schemas/checkpoint/TOOLCHAIN.json"), "utf8"));
+      const packageDocument = JSON.parse(await readFile(join(repository, "package.json"), "utf8"));
+      expect(toolchain.toolchain.version).toBe(packageDocument.version);
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }

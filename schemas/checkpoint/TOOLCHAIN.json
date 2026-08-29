@@ -1,0 +1,32 @@
+{
+  "commands": [
+    "checkpoint capture",
+    "checkpoint fetch",
+    "checkpoint publish",
+    "checkpoint restore",
+    "checkpoint restore-remote",
+    "checkpoint verify"
+  ],
+  "executors": [
+    "age",
+    "git"
+  ],
+  "gitObjectFormats": [
+    "sha1",
+    "sha256"
+  ],
+  "qualifiedPlatforms": [],
+  "reads": [
+    "workplace-checkpoint-manifest/1",
+    "workplace-checkpoint-remote-control/1"
+  ],
+  "schema": "workplace-checkpoint-toolchain/1",
+  "toolchain": {
+    "name": "@endroit/cli",
+    "version": "0.1.0-rc.1"
+  },
+  "writes": [
+    "workplace-checkpoint-manifest/1",
+    "workplace-checkpoint-remote-control/1"
+  ]
+}

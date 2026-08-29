@@ -19,3 +19,7 @@ ciphertext digests/sizes; package paths and content remain encrypted.
 Network credential policy, `latest`, cross-OS qualification and real Workplace
 dogfood are not part of this vertical. A successful Receipt means physical
 fidelity only; it never means accepted, valid, ready or delivered.
+
+`TOOLCHAIN.json` declares the exact formats and commands of this distribution.
+`node scripts/checkpoint-validate.mjs <checkpoint>` is a standalone Node + Git
+validator that does not import Endroit and emits the same closed restore plan.

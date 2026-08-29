@@ -81,6 +81,13 @@ export type CheckpointReceipt = {
   coverage: { repositories: number; worktrees: number; untracked: number; ignored: number; exclusions: string[] };
 };
 
+export type CheckpointRestorePlan = {
+  schema: "workplace-checkpoint-restore-plan/1";
+  checkpointId: string;
+  repositories: Array<{ repositoryId: string; rootRef: string; objectFormat: string; bundle: string; refs: number; worktrees: string[] }>;
+  worktrees: Array<{ worktreeId: string; repositoryId: string; logicalPath: string; head: string; branchRef: string | null; indexEntries: number; tracked: number; untracked: number; ignored: number; operation: number }>;
+};
+
 export class CheckpointError extends Error {
   constructor(readonly code: string, message: string) {
     super(message);
@@ -668,6 +675,15 @@ export async function verifyCheckpoint(path: string): Promise<{ path: string; re
   const missing = [...expected].filter((file) => !actual.includes(file));
   if (extras.length || missing.length) fail("checkpoint-file-set-mismatch", `Unexpected: ${extras.join(", ") || "none"}; missing: ${missing.join(", ") || "none"}`);
   return { path: root, receipt: receipt("verify", "verified-local", manifest), manifest };
+}
+
+export function checkpointRestorePlan(manifest: CheckpointManifest): CheckpointRestorePlan {
+  return {
+    schema: "workplace-checkpoint-restore-plan/1",
+    checkpointId: manifest.checkpointId,
+    repositories: manifest.repositories.map((repository) => ({ repositoryId: repository.repositoryId, rootRef: repository.rootRef, objectFormat: repository.objectFormat, bundle: repository.bundle.path, refs: repository.refs.length, worktrees: repository.worktrees })),
+    worktrees: manifest.worktrees.map((worktree) => ({ worktreeId: worktree.worktreeId, repositoryId: worktree.repositoryId, logicalPath: worktree.logicalPath, head: worktree.head, branchRef: worktree.branchRef, indexEntries: worktree.index.entries.length, tracked: worktree.tracked.length, untracked: worktree.untracked.length, ignored: worktree.ignored.length, operation: worktree.operation.length })),
+  };
 }
 
 async function materialize(record: ContentRecord | OperationRecord, root: string, packageRoot: string): Promise<void> {

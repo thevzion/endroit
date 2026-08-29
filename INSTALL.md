@@ -96,6 +96,7 @@ bun src/cli.ts checkpoint restore /path/to/checkpoint --to /absent/target --json
 bun src/cli.ts checkpoint publish /path/to/checkpoint --from /path/to/publish-request.json --json
 bun src/cli.ts checkpoint fetch checkpoint:sha256:<digest> --from /path/to/fetch-request.json --to /absent/local-checkpoint --json
 bun src/cli.ts checkpoint restore-remote checkpoint:sha256:<digest> --from /path/to/fetch-request.json --to /absent/target --json
+node scripts/checkpoint-validate.mjs /path/to/checkpoint
 ```
 
 Capture resolves only explicitly declared Roots and worktrees. The immutable
