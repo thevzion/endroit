@@ -1,7 +1,7 @@
 {
   "kind": "OutcomeScenario",
   "id": "flappy-manual-v0",
-  "initialRevision": "sha256:a67686a48fb9a64b9c761adef1e8e9c6ca65a8c8a4c0ded92821ea4eb717bd35",
+  "initialRevision": "sha256:fe4dbc8f0a6af0cde8cf3c36ac4603ca156e2fe789e7b4d2949c782e472ffc96",
   "initialFacts": [
     "question-framed"
   ],
@@ -11,7 +11,7 @@
   "expectedReads": [
     {
       "ref": "workplace://demo/flappy-studio",
-      "revision": "sha256:a67686a48fb9a64b9c761adef1e8e9c6ca65a8c8a4c0ded92821ea4eb717bd35",
+      "revision": "sha256:fe4dbc8f0a6af0cde8cf3c36ac4603ca156e2fe789e7b4d2949c782e472ffc96",
       "order": 1
     },
     {
