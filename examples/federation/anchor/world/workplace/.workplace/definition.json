@@ -1,0 +1,372 @@
+{
+  "affordances": [
+    {
+      "applicability": "bound",
+      "authority": "none",
+      "id": "enter",
+      "positions": [
+        "hall"
+      ],
+      "providerTargets": [
+        "skill"
+      ],
+      "revision": "sha256:ce2883bda1395f97578fa95c7a8c097e268893afbaa3469aba2c4f5d97d4d0e3"
+    },
+    {
+      "applicability": "bound",
+      "authority": "bounded",
+      "id": "maintain",
+      "positions": [
+        "hall"
+      ],
+      "providerTargets": [
+        "skill"
+      ],
+      "revision": "sha256:0745e132b5b251b6faaebf3787e9bca8ce385c5eb9370aeb363e5120903bf935"
+    },
+    {
+      "applicability": "onboarding-required",
+      "authority": "human-consent",
+      "id": "onboard",
+      "positions": [
+        "hall"
+      ],
+      "providerTargets": [
+        "skill"
+      ],
+      "revision": "sha256:e50aac35e7c0b7d66b3efa21fb75834cb55f9ef9743edf88e05abc462f03e0db"
+    },
+    {
+      "applicability": "active-meeting",
+      "authority": "bounded",
+      "id": "settle",
+      "positions": [
+        "meeting"
+      ],
+      "providerTargets": [
+        "skill"
+      ],
+      "revision": "sha256:7e85df22a96e595f75a22e860773d5777be6ee3c2b5ee84ed4f9b10bd94b006d"
+    }
+  ],
+  "controls": [
+    {
+      "consequenceIfMissed": "The effect path is invalid.",
+      "criticality": "critical",
+      "enforcement": "staged",
+      "id": "classify-before-write",
+      "placement": "Resident",
+      "positions": [
+        "hall"
+      ],
+      "reasonForDisclosure": "Coordination must be selected before the first write.",
+      "requiredEvidence": [
+        "coordination-route"
+      ],
+      "trigger": "write"
+    },
+    {
+      "consequenceIfMissed": "Work completion and ready are RED.",
+      "criticality": "critical",
+      "enforcement": "history",
+      "id": "integration-dispatch",
+      "placement": "RequiredRead",
+      "positions": [
+        "place",
+        "meeting",
+        "work",
+        "site"
+      ],
+      "reasonForDisclosure": "Multi-Root effects require Manager and Worker dispatch.",
+      "requiredEvidence": [
+        "presence",
+        "manager-occupant",
+        "worker-occupant",
+        "complete-dispatch"
+      ],
+      "trigger": "integration"
+    },
+    {
+      "consequenceIfMissed": "Context qualification is RED.",
+      "criticality": "critical",
+      "enforcement": "qualification",
+      "id": "provider-containment",
+      "placement": "Guard",
+      "positions": [
+        "hall",
+        "place",
+        "meeting",
+        "work",
+        "site"
+      ],
+      "reasonForDisclosure": "Unselected provider capabilities cannot influence the valid path.",
+      "requiredEvidence": [
+        "trajectory"
+      ],
+      "trigger": "context-expand"
+    },
+    {
+      "consequenceIfMissed": "Work cannot become a qualified Outcome.",
+      "criticality": "critical",
+      "enforcement": "history",
+      "id": "causal-outcome",
+      "placement": "Guard",
+      "positions": [
+        "work",
+        "site"
+      ],
+      "reasonForDisclosure": "Outcome claims require exact Site and verification OIDs.",
+      "requiredEvidence": [
+        "site-oid",
+        "verification-oid",
+        "plan-revision"
+      ],
+      "trigger": "outcome-complete"
+    }
+  ],
+  "equipment": [
+    {
+      "methods": [
+        "open-room",
+        "open-work"
+      ],
+      "ref": "workplace://endroit/equipment/core",
+      "revision": "sha256:8847110543db46cef3c12487e23fabdd3c4e8d28c503530ab12209f036863139"
+    }
+  ],
+  "grammar": {
+    "ref": "workplace://profiles/endroit-standard",
+    "revision": "sha256:35e964b8cd199e6dbd6536db509d6ada0eb97f2dabb0c7de15f7600a44f7cca1"
+  },
+  "kind": "WorkplaceDefinition",
+  "lexicon": {
+    "revision": "sha256:9e260354646ab22d82062f7fcf09f61f1d604856d43d4855453d535fc6475fbc",
+    "terms": [
+      "agent",
+      "desk",
+      "material",
+      "meeting",
+      "member",
+      "place",
+      "room",
+      "shelf",
+      "site",
+      "work",
+      "workbench",
+      "workshop",
+      "workspace"
+    ]
+  },
+  "profile": {
+    "digest": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53",
+    "ref": "workplace://profiles/endroit-standard",
+    "release": "1.0.0-rc.1"
+  },
+  "providers": [
+    {
+      "discovery": "manual",
+      "kind": "front-door",
+      "loadGuarantee": "qualified",
+      "path": "WORKPLACE.md",
+      "provider": "neutral"
+    }
+  ],
+  "responsibilities": [
+    {
+      "default": "defaults/shared/CONSTITUTION.md",
+      "id": "constitution",
+      "owner": "shared",
+      "required": true,
+      "role": "constitution"
+    },
+    {
+      "default": "defaults/shared/DOCTRINE.md",
+      "id": "doctrine",
+      "owner": "shared",
+      "required": true,
+      "role": "doctrine"
+    },
+    {
+      "default": "defaults/shared/CHANGE.md",
+      "id": "change",
+      "owner": "shared",
+      "required": true,
+      "role": "change-policy"
+    },
+    {
+      "default": "defaults/member/MEMBER.md",
+      "id": "member",
+      "owner": "shared",
+      "required": true,
+      "role": "owner"
+    },
+    {
+      "default": "defaults/desk/DESK.md",
+      "id": "desk",
+      "owner": "private",
+      "required": "bound",
+      "role": "desk"
+    },
+    {
+      "default": "defaults/desk/WELCOME.md",
+      "id": "welcome",
+      "owner": "private",
+      "required": "bound",
+      "role": "welcome"
+    },
+    {
+      "default": "defaults/desk/MEMORY.md",
+      "id": "memory",
+      "owner": "private",
+      "required": "bound",
+      "role": "memory-policy"
+    }
+  ],
+  "sourceContracts": [
+    {
+      "consumers": [
+        "open-room"
+      ],
+      "id": "meeting",
+      "maxBytes": 16384,
+      "projection": "workplace/.workplace/source-contracts/MEETING.md",
+      "revision": "sha256:4790f9c97a68ae71283300cf56d4b88210856643e588feccc4c85b918b377d63",
+      "source": {
+        "path": "source-contracts/MEETING.md",
+        "profile": "workplace://profiles/endroit-standard"
+      },
+      "templateRevision": "sha256:c8591ed56fb83f1d48df1ab73329393fd43c17ba845ebb90182d7f196904c669",
+      "variables": [
+        "MEETING_REF",
+        "OWNER_REF",
+        "ROOM_REF",
+        "MEETING_LABEL",
+        "MEETING_SUMMARY",
+        "MEETING_WHEN",
+        "MEETING_INTENT",
+        "NEXT_BOUNDARY"
+      ]
+    },
+    {
+      "consumers": [
+        "open-room"
+      ],
+      "id": "room",
+      "maxBytes": 16384,
+      "projection": "workplace/.workplace/source-contracts/ROOM.md",
+      "revision": "sha256:1bcfdb86914573248f5e319797249be4142a6c0467a74123aa7ad80b83f86b68",
+      "source": {
+        "path": "source-contracts/ROOM.md",
+        "profile": "workplace://profiles/endroit-standard"
+      },
+      "templateRevision": "sha256:8df74982f608a330fbda3f62aa672b74f1329280b49879e2beef221db36ac91e",
+      "variables": [
+        "ROOM_REF",
+        "OWNER_REF",
+        "WORKPLACE_REF",
+        "ROOM_LABEL",
+        "ROOM_SUMMARY",
+        "ROOM_WHEN",
+        "MEETING_REF"
+      ]
+    },
+    {
+      "consumers": [
+        "open-work"
+      ],
+      "id": "site",
+      "maxBytes": 16384,
+      "projection": "workplace/.workplace/source-contracts/SITE.md",
+      "revision": "sha256:d97a45c0269a2594bd517b0eebde8bb26cccf752341717c7a8622dcad91a51a5",
+      "source": {
+        "path": "source-contracts/SITE.md",
+        "profile": "workplace://profiles/endroit-standard"
+      },
+      "templateRevision": "sha256:59bfc4a2f67bc51b20633591ade60c1ca8c691af0f3c8d47df1c43a2a4ea7f4c",
+      "variables": [
+        "SITE_REF",
+        "OWNER_REF",
+        "WORKPLACE_REF",
+        "SITE_SUMMARY",
+        "SITE_WHEN",
+        "WORK_REF"
+      ]
+    },
+    {
+      "consumers": [
+        "open-work"
+      ],
+      "id": "work",
+      "maxBytes": 16384,
+      "projection": "workplace/.workplace/source-contracts/WORK.md",
+      "revision": "sha256:1c716f879cd6ca5a6cc83f2a162bb6cc71d5f9e37eca3c4f0e4279bcde9f5aed",
+      "source": {
+        "path": "source-contracts/WORK.md",
+        "profile": "workplace://profiles/endroit-standard"
+      },
+      "templateRevision": "sha256:64dfc2737d4c7f2b329330fe9fbccc4754f6c0603427d8489ee496ca869ac67a",
+      "variables": [
+        "WORK_REF",
+        "OWNER_REF",
+        "ROOM_REF",
+        "WORK_SUMMARY",
+        "WORK_WHEN",
+        "WORK_OUTCOME",
+        "WORK_VERIFICATION",
+        "SITE_REF"
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "path": "workplace/sources/CHANGE.md",
+      "ref": "workplace://fixture/anchor/material/change-policy",
+      "revision": "sha256:bbebf78387bcfe7601563a3dff9f06f479ddcde989bbc95c36a433c0ae7ab4cc",
+      "root": "shared"
+    },
+    {
+      "path": "workplace/sources/CONSTITUTION.md",
+      "ref": "workplace://fixture/anchor/material/constitution",
+      "revision": "sha256:728901551319d9bdb8e9a554adf97a4cabc544024f064806807d93369354e1d9",
+      "root": "shared"
+    },
+    {
+      "path": "workplace/sources/DOCTRINE.md",
+      "ref": "workplace://fixture/anchor/material/doctrine",
+      "revision": "sha256:d9ca4ea59a89a6be60768a417fb4947ad5be8e8d8676a192e9847320c97c2889",
+      "root": "shared"
+    },
+    {
+      "path": "workplace/sources/rooms/product/meetings/demo-build/MEETING.md",
+      "ref": "workplace://fixture/anchor/meeting/demo-build",
+      "revision": "sha256:75eb7252298a5cdbfed88b3bb3bfd6fdd78483cc4ee00d9dac89344103634d79",
+      "root": "shared"
+    },
+    {
+      "path": "workplace/sources/members/anchor-member/MEMBER.md",
+      "ref": "workplace://fixture/anchor/member/anchor-member",
+      "revision": "sha256:4c84f9e26ba9be9e12e690f5cd9e28383f55a340f75584d08184664a883ee194",
+      "root": "shared"
+    },
+    {
+      "path": "workplace/sources/rooms/product/ROOM.md",
+      "ref": "workplace://fixture/anchor/room/product",
+      "revision": "sha256:5920188ce0264543a60090b38455901f8a2d4bfb0955cacf93f916c2c6ffe7e5",
+      "root": "shared"
+    },
+    {
+      "path": "workplace/sources/sites/demo/SITE.md",
+      "ref": "workplace://fixture/anchor/site/demo",
+      "revision": "sha256:16a00af8d82cd1363d932aaec076dca8522505f4104b47b036a772fe5e000491",
+      "root": "shared"
+    },
+    {
+      "path": "workplace/sources/rooms/product/work/demo/WORK.md",
+      "ref": "workplace://fixture/anchor/work/demo",
+      "revision": "sha256:8a81b3248351096c5781481259f2c96f6e5415e7875abd5114a9b5bc661835ed",
+      "root": "shared"
+    }
+  ],
+  "version": 1,
+  "workplace": "workplace://fixture/anchor"
+}

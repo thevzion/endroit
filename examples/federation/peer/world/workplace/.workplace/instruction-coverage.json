@@ -1,0 +1,88 @@
+{
+  "coverage": [
+    {
+      "responsibility": "source:material",
+      "source": {
+        "ref": "workplace://fixture/peer/material/change-policy",
+        "revision": "sha256:3980fbee776c75fa93b74057c63966ba68d766ceccb5d4bb3cfd0f2f7c109e5e"
+      },
+      "surfaces": [
+        "workplace/sources/CHANGE.md",
+        "FRONTDOOR.md"
+      ]
+    },
+    {
+      "responsibility": "source:material",
+      "source": {
+        "ref": "workplace://fixture/peer/material/constitution",
+        "revision": "sha256:8d639a2494f9d5cabf86355d82d6de6f65a676afa19997ad591d365209dee8d3"
+      },
+      "surfaces": [
+        "workplace/sources/CONSTITUTION.md",
+        "FRONTDOOR.md"
+      ]
+    },
+    {
+      "responsibility": "source:material",
+      "source": {
+        "ref": "workplace://fixture/peer/material/doctrine",
+        "revision": "sha256:c64da00862d9149f3509c1c2d4196956db018f864437357d600d73499fce94fd"
+      },
+      "surfaces": [
+        "workplace/sources/DOCTRINE.md",
+        "FRONTDOOR.md"
+      ]
+    },
+    {
+      "responsibility": "source:member",
+      "source": {
+        "ref": "workplace://fixture/peer/member/peer-member",
+        "revision": "sha256:a829db214e7a41ff52ad21a6f9588efe9f6d05b5b6cb0cf46206bbeb61b9e9ee"
+      },
+      "surfaces": [
+        "workplace/sources/members/peer-member/MEMBER.md"
+      ]
+    },
+    {
+      "responsibility": "source:meeting",
+      "source": {
+        "ref": "workplace://fixture/peer/meeting/demo-build",
+        "revision": "sha256:edfb9cf7e88da034eab5da157da03043c4203bbf792bab231af0248f8e34c164"
+      },
+      "surfaces": [
+        "workplace/sources/rooms/product/meetings/demo-build/MEETING.md"
+      ]
+    },
+    {
+      "responsibility": "source:place",
+      "source": {
+        "ref": "workplace://fixture/peer/room/product",
+        "revision": "sha256:648560f270d662efb02ee02d09964e1c63c7eb67419be767c2ba80601b6a5058"
+      },
+      "surfaces": [
+        "workplace/sources/rooms/product/ROOM.md"
+      ]
+    },
+    {
+      "responsibility": "source:work",
+      "source": {
+        "ref": "workplace://fixture/peer/work/demo",
+        "revision": "sha256:b7acaf6ac7ec290711a330eabea01dfccaf978880471c1b369c1144b5e7aeaa8"
+      },
+      "surfaces": [
+        "workplace/sources/rooms/product/work/demo/WORK.md"
+      ]
+    },
+    {
+      "responsibility": "source:place",
+      "source": {
+        "ref": "workplace://fixture/peer/site/demo",
+        "revision": "sha256:aeba79f6d052d177143ab86198265549bf3b60f4e04daad91614a9c35ab275a0"
+      },
+      "surfaces": [
+        "workplace/sources/sites/demo/SITE.md"
+      ]
+    }
+  ],
+  "workplace": "workplace://fixture/peer"
+}

@@ -1,0 +1,210 @@
+{
+  "compiler": "@endroit/cli/0.1.0-rc.1",
+  "dependencies": [
+    {
+      "ref": "workplace://endroit/equipment/core",
+      "revision": "sha256:8847110543db46cef3c12487e23fabdd3c4e8d28c503530ab12209f036863139"
+    },
+    {
+      "ref": "workplace://fixture/peer/coordination",
+      "revision": "sha256:42b396466dcf6f5e4ac37ec57232b70f5a19f7e1cc935e22f93b906a68a1a6d2"
+    },
+    {
+      "ref": "workplace://fixture/peer/material/change-policy",
+      "revision": "sha256:3980fbee776c75fa93b74057c63966ba68d766ceccb5d4bb3cfd0f2f7c109e5e"
+    },
+    {
+      "ref": "workplace://fixture/peer/material/constitution",
+      "revision": "sha256:8d639a2494f9d5cabf86355d82d6de6f65a676afa19997ad591d365209dee8d3"
+    },
+    {
+      "ref": "workplace://fixture/peer/material/doctrine",
+      "revision": "sha256:c64da00862d9149f3509c1c2d4196956db018f864437357d600d73499fce94fd"
+    },
+    {
+      "ref": "workplace://fixture/peer/meeting/demo-build",
+      "revision": "sha256:edfb9cf7e88da034eab5da157da03043c4203bbf792bab231af0248f8e34c164"
+    },
+    {
+      "ref": "workplace://fixture/peer/member/peer-member",
+      "revision": "sha256:a829db214e7a41ff52ad21a6f9588efe9f6d05b5b6cb0cf46206bbeb61b9e9ee"
+    },
+    {
+      "ref": "workplace://fixture/peer/room/product",
+      "revision": "sha256:648560f270d662efb02ee02d09964e1c63c7eb67419be767c2ba80601b6a5058"
+    },
+    {
+      "ref": "workplace://fixture/peer/site/demo",
+      "revision": "sha256:aeba79f6d052d177143ab86198265549bf3b60f4e04daad91614a9c35ab275a0"
+    },
+    {
+      "ref": "workplace://fixture/peer/work/demo",
+      "revision": "sha256:b7acaf6ac7ec290711a330eabea01dfccaf978880471c1b369c1144b5e7aeaa8"
+    },
+    {
+      "ref": "workplace://profiles/endroit-standard",
+      "revision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53"
+    }
+  ],
+  "entryProjection": "neutral",
+  "files": [
+    {
+      "digest": "sha256:e9a3439d25f4eb6eb2c6e35155c6833b94732aef0c746ceadd77766de407c707",
+      "path": "workplace/.workplace/composition.json"
+    },
+    {
+      "digest": "sha256:42b396466dcf6f5e4ac37ec57232b70f5a19f7e1cc935e22f93b906a68a1a6d2",
+      "path": "workplace/.workplace/coordination.json"
+    },
+    {
+      "digest": "sha256:d5edb99a285d7532ad8c4a4e1f3e3bfb57ca8fbb185dd54b26e27e88f2ac72df",
+      "path": "workplace/.workplace/definition.json"
+    },
+    {
+      "digest": "sha256:8d8eb960451a601ddf9576b0c622ef4e5034cfa18d03904ae72eaa586b84202d",
+      "path": "workplace/.workplace/instruction-coverage.json"
+    },
+    {
+      "digest": "sha256:9a0b1927b51c6906fc127109c33e334495decdda3dbd4e78e2e55803daba67a6",
+      "path": "workplace/.workplace/lexicon.json"
+    },
+    {
+      "digest": "sha256:8b56dd1b0a6debf40b96fbb9b2a9f13c04b42f4578d97917979734e681d70f26",
+      "path": "workplace/.workplace/profile.json"
+    },
+    {
+      "digest": "sha256:c8591ed56fb83f1d48df1ab73329393fd43c17ba845ebb90182d7f196904c669",
+      "path": "workplace/.workplace/source-contracts/MEETING.md"
+    },
+    {
+      "digest": "sha256:8df74982f608a330fbda3f62aa672b74f1329280b49879e2beef221db36ac91e",
+      "path": "workplace/.workplace/source-contracts/ROOM.md"
+    },
+    {
+      "digest": "sha256:59bfc4a2f67bc51b20633591ade60c1ca8c691af0f3c8d47df1c43a2a4ea7f4c",
+      "path": "workplace/.workplace/source-contracts/SITE.md"
+    },
+    {
+      "digest": "sha256:64dfc2737d4c7f2b329330fe9fbccc4754f6c0603427d8489ee496ca869ac67a",
+      "path": "workplace/.workplace/source-contracts/WORK.md"
+    },
+    {
+      "digest": "sha256:600967244773e7901abe6bd65e99f1f6697399c16a2acf35fa1d62ab77b7342c",
+      "path": "workplace/.workplace/views/COMPOSITION.md"
+    },
+    {
+      "digest": "sha256:41cc9cea1ae47db9055ed9d494c334f3eeb420aed8d1efc1b64d04c7529163f6",
+      "path": "workplace/.workplace/views/PROFILE.md"
+    },
+    {
+      "digest": "sha256:550325d6b05b7f0feaba6ae4c32fa83beeb997c97c1d173d1162125bec839374",
+      "path": "workplace/.workplace/workplace-map.json"
+    },
+    {
+      "digest": "sha256:02b5ef4fdb35a71f7861fb748b3eebe7e19705f6d5c0b51ed2abbe5738e26b94",
+      "path": "workplace/LEXICON.md"
+    },
+    {
+      "digest": "sha256:687d2e98f18550d59ff0642d950fecb4c92401e15360a5bf29d5957609dcab84",
+      "path": "workplace/WORKPLACE.md"
+    }
+  ],
+  "profileRevision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53",
+  "sourceContracts": [
+    {
+      "consumers": [
+        "open-room"
+      ],
+      "id": "meeting",
+      "maxBytes": 16384,
+      "projection": "workplace/.workplace/source-contracts/MEETING.md",
+      "revision": "sha256:4790f9c97a68ae71283300cf56d4b88210856643e588feccc4c85b918b377d63",
+      "source": {
+        "path": "source-contracts/MEETING.md",
+        "profile": "workplace://profiles/endroit-standard"
+      },
+      "templateRevision": "sha256:c8591ed56fb83f1d48df1ab73329393fd43c17ba845ebb90182d7f196904c669",
+      "variables": [
+        "MEETING_REF",
+        "OWNER_REF",
+        "ROOM_REF",
+        "MEETING_LABEL",
+        "MEETING_SUMMARY",
+        "MEETING_WHEN",
+        "MEETING_INTENT",
+        "NEXT_BOUNDARY"
+      ]
+    },
+    {
+      "consumers": [
+        "open-room"
+      ],
+      "id": "room",
+      "maxBytes": 16384,
+      "projection": "workplace/.workplace/source-contracts/ROOM.md",
+      "revision": "sha256:1bcfdb86914573248f5e319797249be4142a6c0467a74123aa7ad80b83f86b68",
+      "source": {
+        "path": "source-contracts/ROOM.md",
+        "profile": "workplace://profiles/endroit-standard"
+      },
+      "templateRevision": "sha256:8df74982f608a330fbda3f62aa672b74f1329280b49879e2beef221db36ac91e",
+      "variables": [
+        "ROOM_REF",
+        "OWNER_REF",
+        "WORKPLACE_REF",
+        "ROOM_LABEL",
+        "ROOM_SUMMARY",
+        "ROOM_WHEN",
+        "MEETING_REF"
+      ]
+    },
+    {
+      "consumers": [
+        "open-work"
+      ],
+      "id": "site",
+      "maxBytes": 16384,
+      "projection": "workplace/.workplace/source-contracts/SITE.md",
+      "revision": "sha256:d97a45c0269a2594bd517b0eebde8bb26cccf752341717c7a8622dcad91a51a5",
+      "source": {
+        "path": "source-contracts/SITE.md",
+        "profile": "workplace://profiles/endroit-standard"
+      },
+      "templateRevision": "sha256:59bfc4a2f67bc51b20633591ade60c1ca8c691af0f3c8d47df1c43a2a4ea7f4c",
+      "variables": [
+        "SITE_REF",
+        "OWNER_REF",
+        "WORKPLACE_REF",
+        "SITE_SUMMARY",
+        "SITE_WHEN",
+        "WORK_REF"
+      ]
+    },
+    {
+      "consumers": [
+        "open-work"
+      ],
+      "id": "work",
+      "maxBytes": 16384,
+      "projection": "workplace/.workplace/source-contracts/WORK.md",
+      "revision": "sha256:1c716f879cd6ca5a6cc83f2a162bb6cc71d5f9e37eca3c4f0e4279bcde9f5aed",
+      "source": {
+        "path": "source-contracts/WORK.md",
+        "profile": "workplace://profiles/endroit-standard"
+      },
+      "templateRevision": "sha256:64dfc2737d4c7f2b329330fe9fbccc4754f6c0603427d8489ee496ca869ac67a",
+      "variables": [
+        "WORK_REF",
+        "OWNER_REF",
+        "ROOM_REF",
+        "WORK_SUMMARY",
+        "WORK_WHEN",
+        "WORK_OUTCOME",
+        "WORK_VERIFICATION",
+        "SITE_REF"
+      ]
+    }
+  ],
+  "workplace": "workplace://fixture/peer",
+  "workplaceIgnoreRevision": "sha256:df2d9f971b80a51dc565a99aac0ef4ec2a93d2e5d0122eff93b5517f357226a4"
+}

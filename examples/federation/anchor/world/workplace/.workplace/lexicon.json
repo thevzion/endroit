@@ -1,0 +1,76 @@
+{
+  "kind": "LexiconIR",
+  "profile": {
+    "digest": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53",
+    "ref": "workplace://profiles/endroit-standard"
+  },
+  "terms": {
+    "agent": {
+      "aliases": [],
+      "definition": "A durable non-human identity only when independently owned.",
+      "label": "Agent"
+    },
+    "desk": {
+      "aliases": [],
+      "definition": "A private Member-indexed Place with a bound Root.",
+      "label": "Desk"
+    },
+    "material": {
+      "aliases": [],
+      "definition": "Retained evidence, knowledge or contract.",
+      "label": "Material"
+    },
+    "meeting": {
+      "aliases": [],
+      "definition": "A present collaboration event with Occupants and disposition.",
+      "label": "Meeting"
+    },
+    "member": {
+      "aliases": [],
+      "definition": "A human owner of judgment and consent.",
+      "label": "Member"
+    },
+    "place": {
+      "aliases": [],
+      "definition": "A governed addressable location or sovereignty boundary.",
+      "label": "Place"
+    },
+    "room": {
+      "aliases": [],
+      "definition": "A Place owning one durable semantic domain.",
+      "label": "Room"
+    },
+    "shelf": {
+      "aliases": [],
+      "definition": "A typed Placement contract inside a Place.",
+      "label": "Shelf"
+    },
+    "site": {
+      "aliases": [],
+      "definition": "A Workplace declaration of a sovereign external Root.",
+      "label": "Site"
+    },
+    "work": {
+      "aliases": [],
+      "definition": "A commitment to a bounded durable Outcome.",
+      "label": "Work"
+    },
+    "workbench": {
+      "aliases": [],
+      "definition": "A reconstructible projection of the Items needed now.",
+      "label": "Workbench"
+    },
+    "workshop": {
+      "aliases": [],
+      "definition": "A situated resolution of Work, Place, Equipment and Authority.",
+      "label": "Workshop"
+    },
+    "workspace": {
+      "aliases": [],
+      "definition": "A Place used for a bounded responsibility.",
+      "label": "Workspace"
+    }
+  },
+  "version": 1,
+  "workplace": "workplace://fixture/anchor"
+}

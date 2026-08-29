@@ -1,0 +1,98 @@
+{
+  "$schema": "https://endroit.org/schema/workplace-map/v1.json",
+  "entries": [
+    {
+      "entity": "material",
+      "path": "workplace/sources/CHANGE.md",
+      "projectionPath": "CHANGE.md",
+      "ref": "workplace://fixture/anchor/material/change-policy",
+      "revision": "sha256:bbebf78387bcfe7601563a3dff9f06f479ddcde989bbc95c36a433c0ae7ab4cc",
+      "roles": [
+        "change-policy"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "material",
+      "path": "workplace/sources/CONSTITUTION.md",
+      "projectionPath": "CONSTITUTION.md",
+      "ref": "workplace://fixture/anchor/material/constitution",
+      "revision": "sha256:728901551319d9bdb8e9a554adf97a4cabc544024f064806807d93369354e1d9",
+      "roles": [
+        "constitution"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "material",
+      "path": "workplace/sources/DOCTRINE.md",
+      "projectionPath": "DOCTRINE.md",
+      "ref": "workplace://fixture/anchor/material/doctrine",
+      "revision": "sha256:d9ca4ea59a89a6be60768a417fb4947ad5be8e8d8676a192e9847320c97c2889",
+      "roles": [
+        "doctrine"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "meeting",
+      "lifecycle": "active",
+      "path": "workplace/sources/rooms/product/meetings/demo-build/MEETING.md",
+      "projectionPath": "rooms/product/meetings/demo-build/FRONTDOOR.md",
+      "ref": "workplace://fixture/anchor/meeting/demo-build",
+      "revision": "sha256:75eb7252298a5cdbfed88b3bb3bfd6fdd78483cc4ee00d9dac89344103634d79",
+      "roles": [
+        "meeting"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "member",
+      "path": "workplace/sources/members/anchor-member/MEMBER.md",
+      "projectionPath": "members/anchor-member/MEMBER.md",
+      "ref": "workplace://fixture/anchor/member/anchor-member",
+      "revision": "sha256:4c84f9e26ba9be9e12e690f5cd9e28383f55a340f75584d08184664a883ee194",
+      "roles": [
+        "owner"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "place",
+      "path": "workplace/sources/rooms/product/ROOM.md",
+      "projectionPath": "rooms/product/FRONTDOOR.md",
+      "ref": "workplace://fixture/anchor/room/product",
+      "revision": "sha256:5920188ce0264543a60090b38455901f8a2d4bfb0955cacf93f916c2c6ffe7e5",
+      "roles": [
+        "room"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "place",
+      "path": "workplace/sources/sites/demo/SITE.md",
+      "projectionPath": "sites/demo/FRONTDOOR.md",
+      "ref": "workplace://fixture/anchor/site/demo",
+      "revision": "sha256:16a00af8d82cd1363d932aaec076dca8522505f4104b47b036a772fe5e000491",
+      "roles": [
+        "site"
+      ],
+      "root": "shared"
+    },
+    {
+      "entity": "work",
+      "path": "workplace/sources/rooms/product/work/demo/WORK.md",
+      "projectionPath": "work/demo/FRONTDOOR.md",
+      "ref": "workplace://fixture/anchor/work/demo",
+      "revision": "sha256:8a81b3248351096c5781481259f2c96f6e5415e7875abd5114a9b5bc661835ed",
+      "roles": [
+        "initiative"
+      ],
+      "root": "shared"
+    }
+  ],
+  "profileRevision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53",
+  "sourceRevision": "sha256:7e755a23017d0f32949a9a3b38f93c30846eca9bfa96629d90ba37590fb01214",
+  "workplace": "workplace://fixture/anchor",
+  "workplaceIgnoreRevision": "sha256:df2d9f971b80a51dc565a99aac0ef4ec2a93d2e5d0122eff93b5517f357226a4"
+}
