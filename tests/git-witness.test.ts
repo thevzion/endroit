@@ -72,6 +72,15 @@ describe("Git witness", () => {
       git(created.roots.shared, ["-c", "user.name=Witness Fixture", "-c", "user.email=witness@example.test", "commit", "-m", message]);
       expect((await checkGitHistory(created.roots.shared, target)).status).toBe("valid");
 
+      await writeFile(resolve(created.roots.shared, "links.json"), `${JSON.stringify({
+        kind: "WorkplaceLinks", version: 1, workplace,
+        links: [{ target: "workplace://peer" }],
+      }, null, 2)}\n`);
+      git(created.roots.shared, ["add", "links.json"]);
+      const linkMessage = `work(workplace:federation): declare portable Workplace Link\n\nMeeting: ${meeting.ref}\nAuthority: human-invoked\n`;
+      expect((await checkGitStaged({ start: created.roots.shared, commitMessage: linkMessage })).status).toBe("valid");
+      git(created.roots.shared, ["-c", "user.name=Witness Fixture", "-c", "user.email=witness@example.test", "commit", "-m", linkMessage]);
+
       const sourceOid = git(created.roots.shared, ["rev-parse", "HEAD"]);
       const ready = await readyWorkplace({ start: target });
       expect(ready.check.operationStatus).toBe("ready");

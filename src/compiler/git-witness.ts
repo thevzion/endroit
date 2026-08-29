@@ -263,7 +263,7 @@ export async function checkGitHistory(root: string, mount?: string): Promise<Git
 function classify(root: string, mount: string, path: string): "source" | "projection" | "foreign" {
   const shared = resolve(root) === resolve(mount, "workplace");
   if (shared && (path === "WORKPLACE.md" || path.startsWith(".workplace/"))) return "projection";
-  if (shared && (path.startsWith("sources/") || ["profile.json", "composition.json", "coordination.json", "workplace.json", ".workplaceignore"].includes(path))) return "source";
+  if (shared && (path.startsWith("sources/") || ["profile.json", "composition.json", "coordination.json", "workplace.json", "links.json", ".workplaceignore"].includes(path))) return "source";
   if (!shared && path.endsWith(".md")) return "source";
   return "foreign";
 }
