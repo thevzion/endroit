@@ -146,6 +146,16 @@ describe("portable Workplace setup", () => {
   test("preserves a divergent existing Mount and rejects its identity", async () => {
     const state = await fixture();
     try {
+      const wrongFamily: WorkplaceSetupRequest = {
+        kind: "WorkplaceSetupRequest", version: 1, anchor: "workplace://anchor",
+        targets: [target("workplace://peer", "managed", "checkouts/sites/peer", await entry(state.peer.mount), state.peerRemote)],
+      };
+      let family = "";
+      try { await planWorkplaceSetup(wrongFamily, { anchorMount: state.anchor, requestDirectory: state.root }); }
+      catch (error) { family = error instanceof Error ? error.message : String(error); }
+      expect(family).toContain("must be checkouts/workplaces/peer");
+      expect(await Bun.file(join(state.anchor, ".endroit/workplaces.json")).exists()).toBe(false);
+
       const existing = await createWorkplace(join(state.root, "existing"), "other");
       const expectedEntry = { kind: "EntryBinding", workplace: "workplace://expected", member: "workplace://expected/member/operator", desk: "workplace://expected/desk/operator", rootBindings: { shared: "workplace" } };
       const adoption: WorkplaceSetupRequest = { kind: "WorkplaceSetupRequest", version: 1, anchor: "workplace://anchor", targets: [target("workplace://expected", "external", existing.mount, expectedEntry)] };

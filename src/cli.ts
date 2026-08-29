@@ -19,6 +19,7 @@ import { deriveWorkplaceRegistry, enterWorkplace, FederationError } from "./fede
 import { applyWorkplaceSetup, planWorkplaceSetup, SetupError } from "./setup.ts";
 import { captureCheckpoint, CheckpointError, restoreCheckpoint, verifyCheckpoint } from "./checkpoint.ts";
 import { fetchCheckpoint, publishCheckpoint, restoreCheckpointFromRemote } from "./checkpoint-remote.ts";
+import { applyWorkplaceRecovery, planWorkplaceRecovery, RecoveryError } from "./recovery.ts";
 
 type Parsed = {
   values: Record<string, string>;
@@ -66,6 +67,14 @@ function print(value: unknown, json: boolean): void {
   else if (typeof value === "object" && value && "kind" in value && value.kind === "WorkplaceSetupReceipt") {
     const receipt = value as unknown as { anchor: string; status: string; targets: Array<{ workplace: string; status: string }> };
     console.log([`${receipt.anchor} · ${receipt.status}`, ...receipt.targets.map((target) => `${target.workplace} · ${target.status}`)].join("\n"));
+  }
+  else if (typeof value === "object" && value && "kind" in value && value.kind === "WorkplaceRecoveryPlan") {
+    const plan = value as unknown as { anchor: string; revision: string; checkpoints: Array<{ id: string; action: string; worktrees: unknown[] }> };
+    console.log([`${plan.anchor} · recovery preview`, ...plan.checkpoints.map((checkpoint) => `${checkpoint.id} · ${checkpoint.action} · ${checkpoint.worktrees.length} worktrees`), plan.revision].join("\n"));
+  }
+  else if (typeof value === "object" && value && "kind" in value && value.kind === "WorkplaceRecoveryReceipt") {
+    const receipt = value as unknown as { anchor: string; status: string; checkpoints: Array<{ id: string; action: string; status: string }> };
+    console.log([`${receipt.anchor} · ${receipt.status}`, ...receipt.checkpoints.map((checkpoint) => `${checkpoint.id} · ${checkpoint.action} · ${checkpoint.status}`)].join("\n"));
   }
   else if (typeof value === "object" && value && "receipt" in value) {
     const checkpoint = value as unknown as { path?: string; receipt: { status: string; checkpointId: string; controlRef?: string; coverage?: { repositories: number; worktrees: number } } };
@@ -132,7 +141,17 @@ try {
       const request = JSON.parse(await Bun.file(resolvedRequest).text()) as unknown;
       const plan = await planWorkplaceSetup(request, { anchorMount: anchor, requestDirectory: dirname(resolvedRequest), ...(options.values.bindings ? { localPath: options.values.bindings } : {}) });
       print(wantsPreview ? plan : await applyWorkplaceSetup(plan, applyRevision!), options.flags.has("json"));
-    } else throw new Error("usage: endroit workplace <list|enter|setup> ...");
+    } else if (action === "recover") {
+      const anchor = options.positionals[1];
+      const requestPath = options.values.from;
+      const wantsPreview = options.flags.has("preview");
+      const applyRevision = options.values.apply;
+      if (!anchor || !requestPath || wantsPreview === Boolean(applyRevision)) throw new Error("usage: endroit workplace recover <anchor-mount> --from <recovery.json> (--preview | --apply <sha256>) [--bindings <file>] [--json]");
+      const resolvedRequest = resolve(requestPath);
+      const request = JSON.parse(await Bun.file(resolvedRequest).text()) as unknown;
+      const plan = await planWorkplaceRecovery(request, { anchorMount: anchor, requestDirectory: dirname(resolvedRequest), ...(options.values.bindings ? { localPath: options.values.bindings } : {}) });
+      print(wantsPreview ? plan : await applyWorkplaceRecovery(plan, applyRevision!), options.flags.has("json"));
+    } else throw new Error("usage: endroit workplace <list|enter|setup|recover> ...");
   } else if (command === "checkpoint") {
     const action = options.positionals[0];
     if (action === "capture") {
@@ -204,7 +223,7 @@ try {
   }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
-  const code = error instanceof FederationError || error instanceof SetupError || error instanceof CheckpointError ? error.code : undefined;
+  const code = error instanceof FederationError || error instanceof SetupError || error instanceof CheckpointError || error instanceof RecoveryError ? error.code : undefined;
   console.error(options.flags.has("json") ? JSON.stringify({ ...(code ? { code } : {}), error: message }, null, 2) : message);
-  process.exitCode = error instanceof CheckpointError ? error.code === "checkpoint-schema-invalid" || error.code === "checkpoint-path-invalid" ? 2 : 1 : code && ["unavailable", "unsafe-mount", "identity-mismatch", "compile-required", "setup-unavailable", "setup-collision"].includes(code) ? 1 : 2;
+  process.exitCode = error instanceof CheckpointError ? error.code === "checkpoint-schema-invalid" || error.code === "checkpoint-path-invalid" ? 2 : 1 : code && ["unavailable", "unsafe-mount", "identity-mismatch", "compile-required", "setup-unavailable", "setup-collision", "recovery-collision", "recovery-unavailable", "recovery-position-mismatch"].includes(code) ? 1 : 2;
 }

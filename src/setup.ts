@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { hash, readyWorkplace, stable, type EntryBinding, type ProviderBinding } from "./compiler/index.ts";
 import {
@@ -93,10 +93,24 @@ function within(parent: string, child: string): boolean {
 }
 
 async function exists(path: string): Promise<boolean> {
-  try { await stat(path); return true; }
+  try { await lstat(path); return true; }
   catch (error) {
     if (error instanceof Error && error.message.includes("ENOENT")) return false;
     throw error;
+  }
+}
+
+async function assertManagedAddress(anchorMount: string, target: string, workplaceId: string): Promise<void> {
+  const canonicalAnchor = await realpath(anchorMount);
+  const addresses: Array<[string, string]> = [
+    [resolve(anchorMount, "checkouts"), resolve(canonicalAnchor, "checkouts")],
+    [resolve(anchorMount, "checkouts/workplaces"), resolve(canonicalAnchor, "checkouts/workplaces")],
+    [target, resolve(canonicalAnchor, `checkouts/workplaces/${workplaceId}`)],
+  ];
+  for (const [path, expected] of addresses) {
+    if (!await exists(path)) continue;
+    const info = await lstat(path);
+    if (info.isSymbolicLink() || !info.isDirectory() || await realpath(path) !== expected) fail("setup-collision", `${path} must be a physical directory inside the managed Workplace family`);
   }
 }
 
@@ -202,6 +216,9 @@ export async function planWorkplaceSetup(value: unknown, options: { anchorMount:
   const targets = await Promise.all(request.targets.map(async (target) => {
     if (target.relation === "link" && !state.links.some((link) => link.target === target.workplace)) fail("invalid-setup-request", `${target.workplace} is not declared by a portable Link`);
     const resolvedMount = target.mount.mode === "managed" ? resolve(anchorMount, target.mount.path) : resolve(options.requestDirectory ?? process.cwd(), target.mount.path);
+    const workplaceId = target.workplace.split("/").at(-1)!;
+    if (target.mount.mode === "managed" && normalizeManaged(target.mount.path) !== `checkouts/workplaces/${workplaceId}`) fail("invalid-setup-request", `${target.mount.path} must be checkouts/workplaces/${workplaceId}`);
+    if (target.mount.mode === "managed") await assertManagedAddress(anchorMount, resolvedMount, workplaceId);
     if (target.mount.mode === "managed" && (!within(managedRoot, resolvedMount) || resolvedMount === managedRoot)) fail("invalid-setup-request", `${target.mount.path} escapes checkouts/workplaces`);
     if (target.mount.mode === "external" && within(anchorMount, resolvedMount)) fail("invalid-setup-request", `External Mount must stay outside the Anchor: ${target.mount.path}`);
     if (within(resolvedMount, anchorMount)) fail("invalid-setup-request", `Mount cannot be the Anchor or its ancestor: ${target.mount.path}`);
@@ -285,7 +302,7 @@ async function cloneTarget(target: WorkplaceSetupPlan["targets"][number]): Promi
   }
 }
 
-export async function applyWorkplaceSetup(plan: WorkplaceSetupPlan, expectedRevision: string): Promise<WorkplaceSetupReceipt> {
+export async function applyWorkplaceSetup(plan: WorkplaceSetupPlan, expectedRevision: string, options: { afterApply?: (receipt: WorkplaceSetupReceipt) => Promise<void> } = {}): Promise<WorkplaceSetupReceipt> {
   if (expectedRevision !== plan.revision) fail("setup-digest-mismatch", `Preview digest mismatch: expected current ${plan.revision}`);
   const state = await readWorkplaceFederationState(plan.anchorMount, plan.localPath);
   if (state.anchor !== plan.anchor) fail("invalid-setup-request", `Plan Anchor ${plan.anchor} no longer matches ${state.anchor}`);
@@ -298,6 +315,7 @@ export async function applyWorkplaceSetup(plan: WorkplaceSetupPlan, expectedRevi
   try {
     for (const target of [...plan.targets.filter((item) => item.required), ...plan.targets.filter((item) => !item.required)]) {
       try {
+        if (target.mount.mode === "managed") await assertManagedAddress(plan.anchorMount, target.resolvedMount, target.workplace.split("/").at(-1)!);
         if (target.action === "unavailable") fail("setup-unavailable", `${target.workplace} has neither an existing Mount nor a Git source`);
         if (target.action === "clone") {
           if (await exists(target.resolvedMount)) fail("setup-collision", `${target.resolvedMount} appeared after preview`);
@@ -324,7 +342,9 @@ export async function applyWorkplaceSetup(plan: WorkplaceSetupPlan, expectedRevi
     }
     const ready = await readyWorkplace({ start: plan.anchorMount });
     if (ready.check.operationStatus !== "ready") fail("setup-unavailable", `Anchor is not ready: ${ready.check.requiredAction ?? "unknown reason"}`);
-    return { kind: "WorkplaceSetupReceipt", version: 1, plan: plan.revision, anchor: plan.anchor, status: results.some((target) => target.status === "unavailable") ? "partial" : "ready", targets: results.sort((a, b) => a.workplace.localeCompare(b.workplace)) };
+    const receipt: WorkplaceSetupReceipt = { kind: "WorkplaceSetupReceipt", version: 1, plan: plan.revision, anchor: plan.anchor, status: results.some((target) => target.status === "unavailable") ? "partial" : "ready", targets: results.sort((a, b) => a.workplace.localeCompare(b.workplace)) };
+    await options.afterApply?.(receipt);
+    return receipt;
   } catch (error) {
     if (localWritten) {
       if (previousLocal === undefined) await rm(state.localPath, { recursive: false, force: true });

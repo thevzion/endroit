@@ -636,6 +636,11 @@ async function readManifest(root: string): Promise<CheckpointManifest> {
   }
 }
 
+export async function inspectCheckpoint(path: string): Promise<{ path: string; manifest: CheckpointManifest }> {
+  const root = await realpath(resolve(path)).catch(() => fail("checkpoint-unavailable", `${path} is unavailable`));
+  return { path: root, manifest: await readManifest(root) };
+}
+
 export async function verifyCheckpoint(path: string): Promise<{ path: string; receipt: CheckpointReceipt; manifest: CheckpointManifest }> {
   const root = await realpath(resolve(path)).catch(() => fail("checkpoint-unavailable", `${path} is unavailable`));
   const manifest = await readManifest(root);
@@ -756,6 +761,24 @@ async function observeRestored(manifest: CheckpointManifest, target: string, pac
   return { fingerprint: portableFingerprint({ fidelityPolicy: manifest.fidelityPolicy, repositories, worktrees }), repositories, worktrees };
 }
 
+async function assertRestoredEquivalent(manifest: CheckpointManifest, target: string): Promise<void> {
+  const observation = await mkdtemp(join(dirname(target), ".workplace-observe-"));
+  let observed: Awaited<ReturnType<typeof observeRestored>>;
+  try { observed = await observeRestored(manifest, target, observation); }
+  finally { await rm(observation, { recursive: true, force: true }); }
+  if (observed.fingerprint === manifest.portableFingerprint) return;
+  const repository = manifest.repositories.find((item) => stable(semanticRepository(item)) !== stable(semanticRepository(observed.repositories.find((candidate) => candidate.repositoryId === item.repositoryId) ?? item)));
+  const worktree = manifest.worktrees.find((item) => stable(item) !== stable(observed.worktrees.find((candidate) => candidate.worktreeId === item.worktreeId) ?? item));
+  fail("checkpoint-restore-mismatch", `Expected ${manifest.portableFingerprint}, observed ${observed.fingerprint}; first difference: ${repository?.repositoryId ?? worktree?.worktreeId ?? "unknown"}`);
+}
+
+export async function verifyRestoredCheckpoint(checkpoint: string, targetPath: string): Promise<{ path: string; receipt: CheckpointReceipt }> {
+  const verified = await verifyCheckpoint(checkpoint);
+  const target = await realpath(resolve(targetPath)).catch(() => fail("checkpoint-unavailable", `${targetPath} is unavailable`));
+  await assertRestoredEquivalent(verified.manifest, target);
+  return { path: target, receipt: receipt("restore", "restored-equivalent", verified.manifest) };
+}
+
 export async function restoreCheckpoint(checkpoint: string, targetPath: string): Promise<{ path: string; receipt: CheckpointReceipt }> {
   const verified = await verifyCheckpoint(checkpoint);
   const target = resolve(targetPath);
@@ -800,15 +823,7 @@ export async function restoreCheckpoint(checkpoint: string, targetPath: string):
         }
       }
     }
-    const observation = await mkdtemp(join(parent, ".workplace-observe-"));
-    let observed: Awaited<ReturnType<typeof observeRestored>>;
-    try { observed = await observeRestored(verified.manifest, temporary, observation); }
-    finally { await rm(observation, { recursive: true, force: true }); }
-    if (observed.fingerprint !== verified.manifest.portableFingerprint) {
-      const repository = verified.manifest.repositories.find((item) => stable(semanticRepository(item)) !== stable(semanticRepository(observed.repositories.find((candidate) => candidate.repositoryId === item.repositoryId) ?? item)));
-      const worktree = verified.manifest.worktrees.find((item) => stable(item) !== stable(observed.worktrees.find((candidate) => candidate.worktreeId === item.worktreeId) ?? item));
-      fail("checkpoint-restore-mismatch", `Expected ${verified.manifest.portableFingerprint}, observed ${observed.fingerprint}; first difference: ${repository?.repositoryId ?? worktree?.worktreeId ?? "unknown"}`);
-    }
+    await assertRestoredEquivalent(verified.manifest, temporary);
     await rebaseWorktreePointers(verified.manifest, temporary, final);
     await rename(temporary, final);
     try {
