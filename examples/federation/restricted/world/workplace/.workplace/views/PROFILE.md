@@ -39,7 +39,7 @@ Entity families: `agent`, `material`, `meeting`, `member`, `place`, `work`.
 ## Slots
 
 - `desk-material` — 1..*, linked, locator `self/{node.id}`
-- `desks` — 0..*, linked, locator `members/{relation.owned-by.id}/desks/{node.id}`
+- `desks` — 0..1, linked, locator `members/{relation.owned-by.id}/desk`
 - `governance` — 1..*, listed, locator `{node.id}`
 - `members` — 1..*, listed, locator `members/{node.id}`
 - `room-material` — 0..*, listed, locator `material/{node.id}`

@@ -67,7 +67,7 @@
     },
     {
       "ref": "workplace://profiles/endroit-standard",
-      "revision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53"
+      "revision": "sha256:296f230ecac78b43d4f7e61b78c4f9e92db351b10514678230547b4efc7d3c92"
     }
   ],
   "entryProjection": "neutral",
@@ -81,19 +81,19 @@
       "path": "workplace/.workplace/coordination.json"
     },
     {
-      "digest": "sha256:58bdf7340e1f710c2009b10edd71f0fcb6a27f0ba188256bc7af11e07663450a",
+      "digest": "sha256:8c9d5716ed32d96dfe7e968e4f3234f4077474f8d449f27b400b39304d937e81",
       "path": "workplace/.workplace/definition.json"
     },
     {
-      "digest": "sha256:30f3ffb9f41b96f086a82542e2ae424d1b957009b6402618b13517593acab732",
+      "digest": "sha256:a86857e865d90a8139ba7d6986ce0618430adee3e1ee2bdaa2d157e0e6411991",
       "path": "workplace/.workplace/instruction-coverage.json"
     },
     {
-      "digest": "sha256:61f09f397f201174ea5eded77aa02e848a7c9a51eef136bd3c911fbeca51d035",
+      "digest": "sha256:979b361173774ae7425317187a1a83bc82cde4a3b0d787d36b0fa49cfdc6caaf",
       "path": "workplace/.workplace/lexicon.json"
     },
     {
-      "digest": "sha256:8b56dd1b0a6debf40b96fbb9b2a9f13c04b42f4578d97917979734e681d70f26",
+      "digest": "sha256:51e532674439821ebe37a99ba223310f422a8f2e84de02e315d51c24368f6ab0",
       "path": "workplace/.workplace/profile.json"
     },
     {
@@ -117,11 +117,11 @@
       "path": "workplace/.workplace/views/COMPOSITION.md"
     },
     {
-      "digest": "sha256:41cc9cea1ae47db9055ed9d494c334f3eeb420aed8d1efc1b64d04c7529163f6",
+      "digest": "sha256:7d09cc8dd35dee6d685420e0916316f70af4fa686f09a14e68bdc200ba1343c9",
       "path": "workplace/.workplace/views/PROFILE.md"
     },
     {
-      "digest": "sha256:90ce8796e88fc639fd30f7c21fb9fdfff1ed8b32b0503b3eadf5cc661c314f60",
+      "digest": "sha256:07b4e144469bc2596f4982aa3f6877c1b246fd54c54370ce2558f9ecb318f170",
       "path": "workplace/.workplace/workplace-map.json"
     },
     {
@@ -129,63 +129,11 @@
       "path": "workplace/LEXICON.md"
     },
     {
-      "digest": "sha256:3ef961969dac77a9127a0d778339b833b74f04e69b34cf6683076be2afdb498b",
-      "path": "workplace/sources/agents/researcher/AGENT.md"
-    },
-    {
-      "digest": "sha256:8fe515fa592c3f1528cccbb823464e935772a5933350065e20692b744428145a",
-      "path": "workplace/sources/CHANGE.md"
-    },
-    {
-      "digest": "sha256:d711b7638024ef401c5b8b2583ae3d35f9870e3eade2f1e928da899150f08702",
-      "path": "workplace/sources/CONSTITUTION.md"
-    },
-    {
-      "digest": "sha256:a7e2a5f403f4e16f61ca2d4129236bc8091038b475f67f22693046fbe19b7d08",
-      "path": "workplace/sources/DOCTRINE.md"
-    },
-    {
-      "digest": "sha256:eb373fb5fd446049cb935de18d4ea592c53e7c88d8d46eeabed28b353279012e",
-      "path": "workplace/sources/members/alexis/MEMBER.md"
-    },
-    {
-      "digest": "sha256:7c82f3aab7dabaee63fd3cbbf75bb432fbde89cb73951104b3752f1c98b0841a",
-      "path": "workplace/sources/members/mira/MEMBER.md"
-    },
-    {
-      "digest": "sha256:362ad59a55f3d19a76b97132259189db9c7254a3acf7ecd985deea38dc663424",
-      "path": "workplace/sources/members/sam/MEMBER.md"
-    },
-    {
-      "digest": "sha256:520f6fd4e6cead02dcfbb94a49ca65eaf538f7bbe210264a05393810ceced901",
-      "path": "workplace/sources/rooms/lab/decisions/candidate/DECISION.md"
-    },
-    {
-      "digest": "sha256:3a0f2d5352d98a208c29e8f101de7c527df9d53a285327aff9a77216e5a6913b",
-      "path": "workplace/sources/rooms/lab/material/old-observation.md"
-    },
-    {
-      "digest": "sha256:3e24e1cd9583674ff5550e01b43e300e02934945924ff164b12334b36f1bde75",
-      "path": "workplace/sources/rooms/lab/meetings/choice-review/MEETING.md"
-    },
-    {
-      "digest": "sha256:e546468c8a4a36328e796ef35efe509b87785259382cad8991acd214a5e9d724",
-      "path": "workplace/sources/rooms/lab/ROOM.md"
-    },
-    {
-      "digest": "sha256:35ddd44d0efbc6bc06251f6486ea52fc55b79dd37304da3e445c47b3b16a7944",
-      "path": "workplace/sources/rooms/lab/work/choice/WORK.md"
-    },
-    {
-      "digest": "sha256:6e7e058cf44b142f0e8a3f94715f0f54a98e8e77ff9a3b1def862fda90421539",
-      "path": "workplace/sources/sites/lab-product/SITE.md"
-    },
-    {
       "digest": "sha256:ccb28dedbfc0033a3669f7f43e6c7e007cbe47c21cb35a8facebe293d4db3238",
       "path": "workplace/WORKPLACE.md"
     }
   ],
-  "profileRevision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53",
+  "profileRevision": "sha256:296f230ecac78b43d4f7e61b78c4f9e92db351b10514678230547b4efc7d3c92",
   "sourceContracts": [
     {
       "consumers": [

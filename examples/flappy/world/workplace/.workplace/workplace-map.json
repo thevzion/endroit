@@ -102,8 +102,8 @@
       "root": "shared"
     }
   ],
-  "profileRevision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53",
-  "sourceRevision": "sha256:a67686a48fb9a64b9c761adef1e8e9c6ca65a8c8a4c0ded92821ea4eb717bd35",
+  "profileRevision": "sha256:296f230ecac78b43d4f7e61b78c4f9e92db351b10514678230547b4efc7d3c92",
+  "sourceRevision": "sha256:fe4dbc8f0a6af0cde8cf3c36ac4603ca156e2fe789e7b4d2949c782e472ffc96",
   "workplace": "workplace://demo/flappy-studio",
   "workplaceIgnoreRevision": "sha256:df2d9f971b80a51dc565a99aac0ef4ec2a93d2e5d0122eff93b5517f357226a4"
 }

@@ -51,7 +51,7 @@
     },
     {
       "ref": "workplace://profiles/endroit-standard",
-      "revision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53"
+      "revision": "sha256:296f230ecac78b43d4f7e61b78c4f9e92db351b10514678230547b4efc7d3c92"
     }
   ],
   "entryProjection": "neutral",
@@ -65,19 +65,19 @@
       "path": "workplace/.workplace/coordination.json"
     },
     {
-      "digest": "sha256:46074ffa16dfe521482ec8454d9d9565adcb23cad98780fbd4051906a09a924f",
+      "digest": "sha256:43c7e56f54a6fe2df5938d1e26d6be29f10d6708aba57f91a83d655b3ef3894e",
       "path": "workplace/.workplace/definition.json"
     },
     {
-      "digest": "sha256:ab44da6b8996a486857c901da85ad109f8a07b24c93eaa31e7dcdb386dc7c236",
+      "digest": "sha256:715e2b46fee08e1e6e1359f305b9b2e3965b336b9fe0d9cc2f470f5ab36e43e8",
       "path": "workplace/.workplace/instruction-coverage.json"
     },
     {
-      "digest": "sha256:85196e5335c0215248b2c814c3fc89f681cdf1f8d0c94b3e53cf779b8bbe9e03",
+      "digest": "sha256:cdb600c300958029c9af13c17edba05ddcd03322b033d0b33a8459bcbc192a12",
       "path": "workplace/.workplace/lexicon.json"
     },
     {
-      "digest": "sha256:8b56dd1b0a6debf40b96fbb9b2a9f13c04b42f4578d97917979734e681d70f26",
+      "digest": "sha256:51e532674439821ebe37a99ba223310f422a8f2e84de02e315d51c24368f6ab0",
       "path": "workplace/.workplace/profile.json"
     },
     {
@@ -101,11 +101,11 @@
       "path": "workplace/.workplace/views/COMPOSITION.md"
     },
     {
-      "digest": "sha256:41cc9cea1ae47db9055ed9d494c334f3eeb420aed8d1efc1b64d04c7529163f6",
+      "digest": "sha256:7d09cc8dd35dee6d685420e0916316f70af4fa686f09a14e68bdc200ba1343c9",
       "path": "workplace/.workplace/views/PROFILE.md"
     },
     {
-      "digest": "sha256:93b3c466d53ddc47c44702c43e73393b30de1372785af214581787b2b393092d",
+      "digest": "sha256:6164643c7ae27d8dbddafc2345f055cdeb5452a3d33d1d3c739c8dc985ed7e30",
       "path": "workplace/.workplace/workplace-map.json"
     },
     {
@@ -113,47 +113,11 @@
       "path": "workplace/LEXICON.md"
     },
     {
-      "digest": "sha256:9cf3522689021e8fdf09a1660715bd5e0964ecd676316d04f12fe6d8ae5cd554",
-      "path": "workplace/sources/CHANGE.md"
-    },
-    {
-      "digest": "sha256:cf3152161f2d6e7485da491b818f608b6ac7d70f82358b3086db0cebd20bceb5",
-      "path": "workplace/sources/CONSTITUTION.md"
-    },
-    {
-      "digest": "sha256:71a80bc94a740958cab12cc1ff126ee2cbee6f5ae78bca00c4ec7a807251a6ee",
-      "path": "workplace/sources/DOCTRINE.md"
-    },
-    {
-      "digest": "sha256:821725d4157c5507e1e21a7f6d79846bbe78f9f4713fbc40bcb66b86b099fbd0",
-      "path": "workplace/sources/members/alexis/MEMBER.md"
-    },
-    {
-      "digest": "sha256:590d925bc76cdbe11981ef2e4469cb9f7b84ccdf1e88d60d45bf434cdff54aca",
-      "path": "workplace/sources/rooms/product/material/one-button-twist.md"
-    },
-    {
-      "digest": "sha256:c7ff0e7a8ee0d75eee8575aae6ed869a336992598697b54571a7b1491d52e921",
-      "path": "workplace/sources/rooms/product/meetings/flappy-qualification/MEETING.md"
-    },
-    {
-      "digest": "sha256:1f1dfb894de3979c50c4141125ef45b5299f6c4c3bda0e66eb7111721eb3c907",
-      "path": "workplace/sources/rooms/product/ROOM.md"
-    },
-    {
-      "digest": "sha256:d3e0365970791fb78907a10fb20eeda4c4d31a1130144ecb221e8a0c55e29357",
-      "path": "workplace/sources/rooms/product/work/flappy-bird/WORK.md"
-    },
-    {
-      "digest": "sha256:95028dfd5c44ea6af73640c0163ad4f9cf600aa4b9b80f00b66307a1ed8c0ddd",
-      "path": "workplace/sources/sites/flappy-bird/SITE.md"
-    },
-    {
       "digest": "sha256:b4682f28ae36267b7eb1eac1556461f5ce656677ba985aa3b8e300c79fee8f4b",
       "path": "workplace/WORKPLACE.md"
     }
   ],
-  "profileRevision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53",
+  "profileRevision": "sha256:296f230ecac78b43d4f7e61b78c4f9e92db351b10514678230547b4efc7d3c92",
   "sourceContracts": [
     {
       "consumers": [

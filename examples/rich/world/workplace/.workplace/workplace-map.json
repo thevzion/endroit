@@ -146,8 +146,8 @@
       "root": "shared"
     }
   ],
-  "profileRevision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53",
-  "sourceRevision": "sha256:a9fa8442c4aa32762b6d00a8fdb837a575bbe55dc20c0525ed55fa8478faa06c",
+  "profileRevision": "sha256:296f230ecac78b43d4f7e61b78c4f9e92db351b10514678230547b4efc7d3c92",
+  "sourceRevision": "sha256:51f868a7fffdf2e5cf78083bac8b449f7248bd461e68ceb79f9f031a6baa53b4",
   "workplace": "workplace://demo/rich-studio",
   "workplaceIgnoreRevision": "sha256:df2d9f971b80a51dc565a99aac0ef4ec2a93d2e5d0122eff93b5517f357226a4"
 }

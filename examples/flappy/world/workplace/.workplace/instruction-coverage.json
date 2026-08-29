@@ -8,7 +8,9 @@
       },
       "surfaces": [
         "workplace/sources/CHANGE.md",
-        "FRONTDOOR.md"
+        "FRONTDOOR.md",
+        "AGENTS.md",
+        "AGENTS.md"
       ]
     },
     {
@@ -19,7 +21,9 @@
       },
       "surfaces": [
         "workplace/sources/CONSTITUTION.md",
-        "FRONTDOOR.md"
+        "FRONTDOOR.md",
+        "AGENTS.md",
+        "AGENTS.md"
       ]
     },
     {
@@ -30,7 +34,9 @@
       },
       "surfaces": [
         "workplace/sources/DOCTRINE.md",
-        "FRONTDOOR.md"
+        "FRONTDOOR.md",
+        "AGENTS.md",
+        "AGENTS.md"
       ]
     },
     {
@@ -60,7 +66,8 @@
         "revision": "sha256:c7ff0e7a8ee0d75eee8575aae6ed869a336992598697b54571a7b1491d52e921"
       },
       "surfaces": [
-        "workplace/sources/rooms/product/meetings/flappy-qualification/MEETING.md"
+        "workplace/sources/rooms/product/meetings/flappy-qualification/MEETING.md",
+        "rooms/product/meetings/flappy-qualification/AGENTS.md"
       ]
     },
     {
@@ -70,7 +77,8 @@
         "revision": "sha256:1f1dfb894de3979c50c4141125ef45b5299f6c4c3bda0e66eb7111721eb3c907"
       },
       "surfaces": [
-        "workplace/sources/rooms/product/ROOM.md"
+        "workplace/sources/rooms/product/ROOM.md",
+        "rooms/product/AGENTS.md"
       ]
     },
     {
@@ -80,7 +88,8 @@
         "revision": "sha256:d3e0365970791fb78907a10fb20eeda4c4d31a1130144ecb221e8a0c55e29357"
       },
       "surfaces": [
-        "workplace/sources/rooms/product/work/flappy-bird/WORK.md"
+        "workplace/sources/rooms/product/work/flappy-bird/WORK.md",
+        "work/flappy-bird/AGENTS.md"
       ]
     },
     {
@@ -90,7 +99,8 @@
         "revision": "sha256:95028dfd5c44ea6af73640c0163ad4f9cf600aa4b9b80f00b66307a1ed8c0ddd"
       },
       "surfaces": [
-        "workplace/sources/sites/flappy-bird/SITE.md"
+        "workplace/sources/sites/flappy-bird/SITE.md",
+        "sites/flappy-bird/AGENTS.md"
       ]
     }
   ],

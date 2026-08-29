@@ -18,7 +18,9 @@
       },
       "surfaces": [
         "workplace/sources/CHANGE.md",
-        "FRONTDOOR.md"
+        "FRONTDOOR.md",
+        "AGENTS.md",
+        "AGENTS.md"
       ]
     },
     {
@@ -29,7 +31,9 @@
       },
       "surfaces": [
         "workplace/sources/CONSTITUTION.md",
-        "FRONTDOOR.md"
+        "FRONTDOOR.md",
+        "AGENTS.md",
+        "AGENTS.md"
       ]
     },
     {
@@ -40,7 +44,9 @@
       },
       "surfaces": [
         "workplace/sources/DOCTRINE.md",
-        "FRONTDOOR.md"
+        "FRONTDOOR.md",
+        "AGENTS.md",
+        "AGENTS.md"
       ]
     },
     {
@@ -100,7 +106,8 @@
         "revision": "sha256:3e24e1cd9583674ff5550e01b43e300e02934945924ff164b12334b36f1bde75"
       },
       "surfaces": [
-        "workplace/sources/rooms/lab/meetings/choice-review/MEETING.md"
+        "workplace/sources/rooms/lab/meetings/choice-review/MEETING.md",
+        "rooms/lab/meetings/choice-review/AGENTS.md"
       ]
     },
     {
@@ -110,7 +117,8 @@
         "revision": "sha256:e546468c8a4a36328e796ef35efe509b87785259382cad8991acd214a5e9d724"
       },
       "surfaces": [
-        "workplace/sources/rooms/lab/ROOM.md"
+        "workplace/sources/rooms/lab/ROOM.md",
+        "rooms/lab/AGENTS.md"
       ]
     },
     {
@@ -120,7 +128,8 @@
         "revision": "sha256:35ddd44d0efbc6bc06251f6486ea52fc55b79dd37304da3e445c47b3b16a7944"
       },
       "surfaces": [
-        "workplace/sources/rooms/lab/work/choice/WORK.md"
+        "workplace/sources/rooms/lab/work/choice/WORK.md",
+        "work/choice/AGENTS.md"
       ]
     },
     {
@@ -130,7 +139,8 @@
         "revision": "sha256:6e7e058cf44b142f0e8a3f94715f0f54a98e8e77ff9a3b1def862fda90421539"
       },
       "surfaces": [
-        "workplace/sources/sites/lab-product/SITE.md"
+        "workplace/sources/sites/lab-product/SITE.md",
+        "sites/lab-product/AGENTS.md"
       ]
     }
   ],

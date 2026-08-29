@@ -143,7 +143,7 @@
   ],
   "grammar": {
     "ref": "workplace://profiles/endroit-standard",
-    "revision": "sha256:35e964b8cd199e6dbd6536db509d6ada0eb97f2dabb0c7de15f7600a44f7cca1"
+    "revision": "sha256:f012b5975524788c5de8d5e53cb7a599715b20e0ae527c322b5c071e40f355d5"
   },
   "kind": "WorkplaceDefinition",
   "lexicon": {
@@ -165,7 +165,7 @@
     ]
   },
   "profile": {
-    "digest": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53",
+    "digest": "sha256:296f230ecac78b43d4f7e61b78c4f9e92db351b10514678230547b4efc7d3c92",
     "ref": "workplace://profiles/endroit-standard",
     "release": "1.0.0-rc.1"
   },

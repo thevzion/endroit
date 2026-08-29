@@ -43,7 +43,7 @@
     },
     {
       "ref": "workplace://profiles/endroit-standard",
-      "revision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53"
+      "revision": "sha256:296f230ecac78b43d4f7e61b78c4f9e92db351b10514678230547b4efc7d3c92"
     }
   ],
   "entryProjection": "neutral",
@@ -57,19 +57,19 @@
       "path": "workplace/.workplace/coordination.json"
     },
     {
-      "digest": "sha256:d5edb99a285d7532ad8c4a4e1f3e3bfb57ca8fbb185dd54b26e27e88f2ac72df",
+      "digest": "sha256:aa04d236f1e4469cd474108903d3ce77f2beb23bf7a96553b9eef78f03e838f3",
       "path": "workplace/.workplace/definition.json"
     },
     {
-      "digest": "sha256:8d8eb960451a601ddf9576b0c622ef4e5034cfa18d03904ae72eaa586b84202d",
+      "digest": "sha256:f33fe3addc2ceefcf079073cf0e9e8201cbd06cfa2093c117c8e238c8d03afa7",
       "path": "workplace/.workplace/instruction-coverage.json"
     },
     {
-      "digest": "sha256:9a0b1927b51c6906fc127109c33e334495decdda3dbd4e78e2e55803daba67a6",
+      "digest": "sha256:a0131d044dd51dd1522df508a2c3bba4f371af6ebf57ae111b1c19348bece15c",
       "path": "workplace/.workplace/lexicon.json"
     },
     {
-      "digest": "sha256:8b56dd1b0a6debf40b96fbb9b2a9f13c04b42f4578d97917979734e681d70f26",
+      "digest": "sha256:51e532674439821ebe37a99ba223310f422a8f2e84de02e315d51c24368f6ab0",
       "path": "workplace/.workplace/profile.json"
     },
     {
@@ -93,11 +93,11 @@
       "path": "workplace/.workplace/views/COMPOSITION.md"
     },
     {
-      "digest": "sha256:41cc9cea1ae47db9055ed9d494c334f3eeb420aed8d1efc1b64d04c7529163f6",
+      "digest": "sha256:7d09cc8dd35dee6d685420e0916316f70af4fa686f09a14e68bdc200ba1343c9",
       "path": "workplace/.workplace/views/PROFILE.md"
     },
     {
-      "digest": "sha256:550325d6b05b7f0feaba6ae4c32fa83beeb997c97c1d173d1162125bec839374",
+      "digest": "sha256:f2feca207672829493b0498e51c3fcfc4fe9ded4be82bc359f7963ee4b3ef89d",
       "path": "workplace/.workplace/workplace-map.json"
     },
     {
@@ -109,7 +109,7 @@
       "path": "workplace/WORKPLACE.md"
     }
   ],
-  "profileRevision": "sha256:cb4d3476e18b98ee22abb463ee16e86ce6bc6e2fc521f266a023f5c75313bc53",
+  "profileRevision": "sha256:296f230ecac78b43d4f7e61b78c4f9e92db351b10514678230547b4efc7d3c92",
   "sourceContracts": [
     {
       "consumers": [
