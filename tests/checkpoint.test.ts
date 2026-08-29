@@ -2,7 +2,7 @@ import { describe, expect, test } from "bun:test";
 import { chmod, cp, mkdir, readFile, realpath, rm, symlink, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
 import { captureCheckpoint, restoreCheckpoint, verifyCheckpoint, type CheckpointCaptureRequest } from "../src/checkpoint.ts";
-import { fetchCheckpoint, publishCheckpoint } from "../src/checkpoint-remote.ts";
+import { fetchCheckpoint, publishCheckpoint, restoreCheckpointFromRemote } from "../src/checkpoint-remote.ts";
 
 const repository = resolve(import.meta.dir, "..");
 const cli = [Bun.argv[0]!, resolve(repository, "src/cli.ts")];
@@ -179,13 +179,14 @@ describe("Git State Portability", () => {
       const identity = join(state.root, "identity.txt");
       run(state.root, ["age-keygen", "-o", identity]);
       const recipient = run(state.root, ["age-keygen", "-y", identity]);
-      const publishRequest = { kind: "CheckpointPublishRequest", version: 1, remote: checkpointRemote, recipients: [{ ref: "recipient://synthetic/member", value: recipient }], identities: [identity] };
+      const publishRequest = { kind: "CheckpointPublishRequest", version: 1, remote: checkpointRemote, recipients: [{ ref: "recipient://synthetic/member", value: recipient }], identities: [identity], baseCheckpoint: null };
       const publishPath = join(state.root, "publish.json");
       await writeFile(publishPath, `${JSON.stringify(publishRequest, null, 2)}\n`);
       const published = JSON.parse(run(repository, [...cli, "checkpoint", "publish", captured.path, "--from", publishPath, "--json"])) as Awaited<ReturnType<typeof publishCheckpoint>>;
       expect(published.receipt.status).toBe("verified-remote");
       const replay = JSON.parse(run(repository, [...cli, "checkpoint", "publish", captured.path, "--from", publishPath, "--json"])) as Awaited<ReturnType<typeof publishCheckpoint>>;
       expect(replay.receipt.controlCommit).toBe(published.receipt.controlCommit);
+      expect(replay.receipt.latest?.status).toBe("advanced");
 
       const checkout = join(state.root, "remote-checkout");
       await mkdir(checkout, { recursive: true });
@@ -202,6 +203,25 @@ describe("Git State Portability", () => {
       const fetched = JSON.parse(run(repository, [...cli, "checkpoint", "fetch", captured.receipt.checkpointId, "--from", fetchPath, "--to", fetchedPath, "--json"])) as Awaited<ReturnType<typeof fetchCheckpoint>>;
       expect(fetched.receipt.status).toBe("fetched-verified");
       expect((await verifyCheckpoint(fetched.path)).manifest.checkpointId).toBe(captured.receipt.checkpointId);
+
+      const remoteRestoredPath = join(state.root, "remote-restored");
+      const remoteRestored = JSON.parse(run(repository, [...cli, "checkpoint", "restore-remote", captured.receipt.checkpointId, "--from", fetchPath, "--to", remoteRestoredPath, "--json"])) as Awaited<ReturnType<typeof restoreCheckpointFromRemote>>;
+      expect(remoteRestored.receipt.status).toBe("restored-equivalent");
+      expect(remoteRestored.remote.status).toBe("fetched-verified");
+      for (const [id, path] of [["shared-main", join(remoteRestoredPath, "roots/shared/main")], ["shared-detached", join(remoteRestoredPath, "roots/shared/detached")], ["desk-main", join(remoteRestoredPath, "roots/desk/main")], ["site-main", join(remoteRestoredPath, "roots/site/main")]] as const) expect(evidence(path)).toBe(before.get(id));
+
+      await writeFile(join(state.desk, "untracked.txt"), "branch one\n");
+      const firstBranch = await captureCheckpoint({ ...state.request, output: join(state.root, "checkpoint-branch-one") });
+      const firstPublished = await publishCheckpoint(firstBranch.path, { ...publishRequest, baseCheckpoint: captured.receipt.checkpointId });
+      expect(firstPublished.receipt.status).toBe("verified-remote");
+      await writeFile(join(state.desk, "untracked.txt"), "branch two\n");
+      const secondBranch = await captureCheckpoint({ ...state.request, output: join(state.root, "checkpoint-branch-two") });
+      const secondPublished = await publishCheckpoint(secondBranch.path, { ...publishRequest, baseCheckpoint: captured.receipt.checkpointId });
+      expect(secondPublished.receipt.status).toBe("diverged");
+      expect(secondPublished.receipt.latest?.observedCheckpoint).toBe(firstBranch.receipt.checkpointId);
+      expect(git(state.root, ["ls-remote", checkpointRemote, firstPublished.receipt.controlRef]).startsWith(firstPublished.receipt.controlCommit)).toBe(true);
+      expect(git(state.root, ["ls-remote", checkpointRemote, secondPublished.receipt.controlRef]).startsWith(secondPublished.receipt.controlCommit)).toBe(true);
+      expect(git(state.root, ["ls-remote", checkpointRemote, "refs/endroit/checkpoints/latest"]).startsWith(firstPublished.receipt.controlCommit)).toBe(true);
 
       const wrongIdentity = join(state.root, "wrong-identity.txt");
       run(state.root, ["age-keygen", "-o", wrongIdentity]);
@@ -227,7 +247,9 @@ describe("Git State Portability", () => {
       catch (error) { tampered = error instanceof Error ? error.message : String(error); }
       expect(tampered).toContain("object set changed");
       expect(await Bun.file(tamperedTarget).exists()).toBe(false);
-      for (const [id, path] of [["shared-main", state.shared], ["shared-detached", state.detached], ["desk-main", state.desk], ["site-main", state.site]] as const) expect(evidence(path)).toBe(before.get(id));
+      expect(evidence(state.shared)).toBe(before.get("shared-main"));
+      expect(evidence(state.detached)).toBe(before.get("shared-detached"));
+      expect(evidence(state.site)).toBe(before.get("site-main"));
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }

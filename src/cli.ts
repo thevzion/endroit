@@ -18,7 +18,7 @@ import { checkGitHistory, checkGitStaged } from "./compiler/git-witness.ts";
 import { deriveWorkplaceRegistry, enterWorkplace, FederationError } from "./federation.ts";
 import { applyWorkplaceSetup, planWorkplaceSetup, SetupError } from "./setup.ts";
 import { captureCheckpoint, CheckpointError, restoreCheckpoint, verifyCheckpoint } from "./checkpoint.ts";
-import { fetchCheckpoint, publishCheckpoint } from "./checkpoint-remote.ts";
+import { fetchCheckpoint, publishCheckpoint, restoreCheckpointFromRemote } from "./checkpoint-remote.ts";
 
 type Parsed = {
   values: Record<string, string>;
@@ -164,7 +164,14 @@ try {
       if (!checkpointId || !requestPath || !target) throw new Error("usage: endroit checkpoint fetch <checkpoint-id> --from <request.json> --to <absent-checkpoint-directory> [--json]");
       const resolvedRequest = resolve(requestPath);
       print(await fetchCheckpoint(checkpointId, JSON.parse(await Bun.file(resolvedRequest).text()) as unknown, target, { requestDirectory: dirname(resolvedRequest) }), options.flags.has("json"));
-    } else throw new Error("usage: endroit checkpoint <capture|verify|restore|publish|fetch> ...");
+    } else if (action === "restore-remote") {
+      const checkpointId = options.positionals[1];
+      const requestPath = options.values.from;
+      const target = options.values.to;
+      if (!checkpointId || !requestPath || !target) throw new Error("usage: endroit checkpoint restore-remote <checkpoint-id> --from <request.json> --to <absent-target> [--json]");
+      const resolvedRequest = resolve(requestPath);
+      print(await restoreCheckpointFromRemote(checkpointId, JSON.parse(await Bun.file(resolvedRequest).text()) as unknown, target, { requestDirectory: dirname(resolvedRequest) }), options.flags.has("json"));
+    } else throw new Error("usage: endroit checkpoint <capture|verify|restore|publish|fetch|restore-remote> ...");
   } else if (command === "compile") {
     const mount = options.values.mount ?? options.values.root;
     if (!mount) throw new Error("usage: endroit compile --mount <path> [--entry <file>] [--provider <id>]");

@@ -95,6 +95,7 @@ bun src/cli.ts checkpoint verify /path/to/checkpoint --json
 bun src/cli.ts checkpoint restore /path/to/checkpoint --to /absent/target --json
 bun src/cli.ts checkpoint publish /path/to/checkpoint --from /path/to/publish-request.json --json
 bun src/cli.ts checkpoint fetch checkpoint:sha256:<digest> --from /path/to/fetch-request.json --to /absent/local-checkpoint --json
+bun src/cli.ts checkpoint restore-remote checkpoint:sha256:<digest> --from /path/to/fetch-request.json --to /absent/target --json
 ```
 
 Capture resolves only explicitly declared Roots and worktrees. The immutable
@@ -103,8 +104,10 @@ package includes static recovery documents and closed schemas under
 proves the same portable fingerprint, then renames atomically. It never invokes
 `check`, `compile` or `ready`. The synthetic remote vertical uses an explicit
 Git remote and the installed `age` CLI; identities stay in local Request paths
-and never enter the checkpoint or remote control. Network credential policy,
-`latest` and cross-OS qualification are not implemented yet.
+and never enter the checkpoint or remote control. Publish advances `latest`
+only when its explicit `baseCheckpoint` still matches; divergence preserves all
+immutable checkpoint refs. Network credential policy and cross-OS
+qualification are not implemented yet.
 
 ## Try the demonstrations
 

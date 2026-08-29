@@ -1,7 +1,7 @@
 import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { CheckpointError, verifyCheckpoint, type CheckpointManifest } from "./checkpoint.ts";
+import { CheckpointError, restoreCheckpoint, verifyCheckpoint, type CheckpointManifest, type CheckpointReceipt } from "./checkpoint.ts";
 import { hash, stable } from "./compiler/index.ts";
 
 const CHECKPOINT_ID = /^checkpoint:sha256:[a-f0-9]{64}$/;
@@ -11,11 +11,12 @@ const AGE_RECIPIENT = /^age1[a-z0-9]+$/;
 const CONTROL_SCHEMA = "workplace-checkpoint-remote-control/1" as const;
 const RECORD_SCHEMA = "workplace-checkpoint-envelope-record/1" as const;
 
-export type CheckpointPublishRequest = { kind: "CheckpointPublishRequest"; version: 1; remote: string; recipients: Array<{ ref: string; value: string }>; identities: string[] };
+export type CheckpointPublishRequest = { kind: "CheckpointPublishRequest"; version: 1; remote: string; recipients: Array<{ ref: string; value: string }>; identities: string[]; baseCheckpoint: string | null };
 export type CheckpointFetchRequest = { kind: "CheckpointFetchRequest"; version: 1; remote: string; identities: string[] };
 type RemoteObject = { sha256: string; size: number };
 type RemoteControl = { schema: typeof CONTROL_SCHEMA; checkpointId: string; algorithm: "age/1"; recipientRefs: string[]; objects: RemoteObject[] };
-export type CheckpointRemoteReceipt = { schema: "workplace-checkpoint-remote-receipt/1"; operation: "publish" | "fetch"; checkpointId: string; status: "verified-remote" | "fetched-verified"; controlRef: string; controlCommit: string; remoteIdentity: string; algorithm: "age/1"; recipientRefs: string[]; objects: number };
+type LatestResult = { status: "advanced" | "diverged"; baseCheckpoint: string | null; observedCheckpoint: string | null };
+export type CheckpointRemoteReceipt = { schema: "workplace-checkpoint-remote-receipt/1"; operation: "publish" | "fetch"; checkpointId: string; status: "verified-remote" | "fetched-verified" | "diverged"; controlRef: string; controlCommit: string; remoteIdentity: string; algorithm: "age/1"; recipientRefs: string[]; objects: number; latest: LatestResult | null };
 
 function fail(code: string, message: string): never { throw new CheckpointError(code, message); }
 function object(value: unknown, subject: string): Record<string, unknown> {
@@ -50,15 +51,16 @@ function identities(value: unknown, requestDirectory: string): string[] {
 
 export function parsePublishRequest(value: unknown, requestDirectory: string): CheckpointPublishRequest {
   const source = object(value, "CheckpointPublishRequest");
-  exact(source, ["kind", "version", "remote", "recipients", "identities"], "CheckpointPublishRequest");
+  exact(source, ["kind", "version", "remote", "recipients", "identities", "baseCheckpoint"], "CheckpointPublishRequest");
   if (source.kind !== "CheckpointPublishRequest" || source.version !== 1 || !Array.isArray(source.recipients) || source.recipients.length === 0) fail("checkpoint-schema-invalid", "Unsupported CheckpointPublishRequest");
+  if (source.baseCheckpoint !== null && (typeof source.baseCheckpoint !== "string" || !CHECKPOINT_ID.test(source.baseCheckpoint))) fail("checkpoint-schema-invalid", "baseCheckpoint must be null or a checkpoint ID");
   const recipients = source.recipients.map((value, index) => {
     const subject = `recipients[${index}]`; const item = object(value, subject); exact(item, ["ref", "value"], subject);
     if (typeof item.ref !== "string" || !RECIPIENT_REF.test(item.ref) || typeof item.value !== "string" || !AGE_RECIPIENT.test(item.value)) fail("checkpoint-schema-invalid", `${subject} is invalid`);
     return { ref: item.ref, value: item.value };
   }).sort((a, b) => a.ref.localeCompare(b.ref));
   if (new Set(recipients.map((item) => item.ref)).size !== recipients.length || new Set(recipients.map((item) => item.value)).size !== recipients.length) fail("checkpoint-schema-invalid", "recipients must be unique");
-  return { kind: "CheckpointPublishRequest", version: 1, remote: remoteValue(source.remote, requestDirectory), recipients, identities: identities(source.identities, requestDirectory) };
+  return { kind: "CheckpointPublishRequest", version: 1, remote: remoteValue(source.remote, requestDirectory), recipients, identities: identities(source.identities, requestDirectory), baseCheckpoint: source.baseCheckpoint as string | null };
 }
 
 export function parseFetchRequest(value: unknown, requestDirectory: string): CheckpointFetchRequest {
@@ -152,8 +154,30 @@ async function fetchCheckout(remote: string, ref: string, destination: string): 
   await mkdir(destination, { recursive: true }); git(destination, ["init", "-q"]); git(destination, ["fetch", "-q", "--no-tags", remote, ref]); git(destination, ["checkout", "-q", "--detach", "FETCH_HEAD"]);
   return output(git(destination, ["rev-parse", "HEAD"]));
 }
-function remoteReceipt(operation: "publish" | "fetch", status: CheckpointRemoteReceipt["status"], control: RemoteControl, remote: string, commit: string): CheckpointRemoteReceipt {
-  return { schema: "workplace-checkpoint-remote-receipt/1", operation, checkpointId: control.checkpointId, status, controlRef: controlRef(control.checkpointId), controlCommit: commit, remoteIdentity: hash(remote), algorithm: "age/1", recipientRefs: control.recipientRefs, objects: control.objects.length };
+function remoteReceipt(operation: "publish" | "fetch", status: CheckpointRemoteReceipt["status"], control: RemoteControl, remote: string, commit: string, latest: LatestResult | null): CheckpointRemoteReceipt {
+  return { schema: "workplace-checkpoint-remote-receipt/1", operation, checkpointId: control.checkpointId, status, controlRef: controlRef(control.checkpointId), controlCommit: commit, remoteIdentity: hash(remote), algorithm: "age/1", recipientRefs: control.recipientRefs, objects: control.objects.length, latest };
+}
+
+const LATEST_REF = "refs/endroit/checkpoints/latest";
+
+async function observedLatest(remote: string, parent: string): Promise<{ commit: string; checkpointId: string } | null> {
+  const line = output(git(process.cwd(), ["ls-remote", remote, LATEST_REF]));
+  if (!line) return null;
+  const checkout = await mkdtemp(join(parent, ".checkpoint-latest-"));
+  try { const commit = await fetchCheckout(remote, LATEST_REF, checkout); return { commit, checkpointId: (await readControl(checkout)).checkpointId }; }
+  finally { await rm(checkout, { recursive: true, force: true }); }
+}
+
+async function advanceLatest(checkout: string, remote: string, control: RemoteControl, commit: string, baseCheckpoint: string | null): Promise<LatestResult> {
+  const current = await observedLatest(remote, dirname(checkout));
+  if (current?.checkpointId === control.checkpointId) return { status: "advanced", baseCheckpoint, observedCheckpoint: control.checkpointId };
+  if ((current?.checkpointId ?? null) !== baseCheckpoint) return { status: "diverged", baseCheckpoint, observedCheckpoint: current?.checkpointId ?? null };
+  const lease = current ? `${LATEST_REF}:${current.commit}` : `${LATEST_REF}:`;
+  const pushed = spawnSync("git", ["push", "-q", `--force-with-lease=${lease}`, remote, `${commit}:${LATEST_REF}`], { cwd: checkout, env: { ...process.env, LC_ALL: "C" }, maxBuffer: 1024 * 1024 * 1024 });
+  if (pushed.status !== 0) return { status: "diverged", baseCheckpoint, observedCheckpoint: (await observedLatest(remote, dirname(checkout)))?.checkpointId ?? null };
+  const after = await observedLatest(remote, dirname(checkout));
+  if (after?.commit !== commit || after.checkpointId !== control.checkpointId) fail("checkpoint-remote-mismatch", "latest did not resolve to the verified control commit");
+  return { status: "advanced", baseCheckpoint, observedCheckpoint: control.checkpointId };
 }
 
 export async function publishCheckpoint(checkpointPath: string, value: unknown, options: { requestDirectory?: string } = {}): Promise<{ receipt: CheckpointRemoteReceipt }> {
@@ -165,7 +189,8 @@ export async function publishCheckpoint(checkpointPath: string, value: unknown, 
     try {
       const commit = await fetchCheckout(request.remote, ref, checkout); const observed = await decryptCheckout(checkout, request.identities, decrypted);
       if (observed.control.checkpointId !== verified.manifest.checkpointId || stable(observed.control.recipientRefs) !== stable(recipientRefs)) fail("checkpoint-remote-diverged", "Existing remote ref has different checkpoint or recipients");
-      return { receipt: remoteReceipt("publish", "verified-remote", observed.control, request.remote, commit) };
+      const latest = await advanceLatest(checkout, request.remote, observed.control, commit, request.baseCheckpoint);
+      return { receipt: remoteReceipt("publish", latest.status === "diverged" ? "diverged" : "verified-remote", observed.control, request.remote, commit, latest) };
     }
     finally { await rm(checkout, { recursive: true, force: true }); await rm(decrypted, { recursive: true, force: true }); }
   }
@@ -186,7 +211,8 @@ export async function publishCheckpoint(checkpointPath: string, value: unknown, 
     try {
       const commit = await fetchCheckout(request.remote, ref, checkout); const observed = await decryptCheckout(checkout, request.identities, remoteProof);
       if (observed.control.checkpointId !== verified.manifest.checkpointId || stable(observed.control.recipientRefs) !== stable(recipientRefs)) fail("checkpoint-remote-diverged", "Fetched remote ref differs from the published checkpoint");
-      return { receipt: remoteReceipt("publish", "verified-remote", observed.control, request.remote, commit) };
+      const latest = await advanceLatest(checkout, request.remote, observed.control, commit, request.baseCheckpoint);
+      return { receipt: remoteReceipt("publish", latest.status === "diverged" ? "diverged" : "verified-remote", observed.control, request.remote, commit, latest) };
     }
     finally { await rm(checkout, { recursive: true, force: true }); await rm(remoteProof, { recursive: true, force: true }); }
   } finally { await rm(staging, { recursive: true, force: true }); await rm(localProof, { recursive: true, force: true }); }
@@ -198,7 +224,19 @@ export async function fetchCheckpoint(checkpointId: string, value: unknown, targ
   await mkdir(dirname(target), { recursive: true }); const parent = await realpath(dirname(target)); const final = join(parent, basename(target)); const checkout = await mkdtemp(join(parent, ".checkpoint-remote-fetch-")); const decrypted = await mkdtemp(join(parent, ".checkpoint-remote-decrypt-"));
   try {
     const commit = await fetchCheckout(request.remote, ref, checkout); const observed = await decryptCheckout(checkout, request.identities, decrypted); rejectProductRemote(observed.manifest, request.remote); await rename(decrypted, final);
-    return { path: final, receipt: remoteReceipt("fetch", "fetched-verified", observed.control, request.remote, commit) };
+    return { path: final, receipt: remoteReceipt("fetch", "fetched-verified", observed.control, request.remote, commit, null) };
   } catch (error) { await rm(decrypted, { recursive: true, force: true }); throw error; }
   finally { await rm(checkout, { recursive: true, force: true }); }
+}
+
+export async function restoreCheckpointFromRemote(checkpointId: string, value: unknown, targetPath: string, options: { requestDirectory?: string } = {}): Promise<{ path: string; receipt: CheckpointReceipt; remote: CheckpointRemoteReceipt }> {
+  const target = resolve(targetPath);
+  if (await lstat(target).then(() => true).catch(() => false)) fail("checkpoint-target-exists", `${target} already exists`);
+  await mkdir(dirname(target), { recursive: true });
+  const temporary = await mkdtemp(join(await realpath(dirname(target)), ".checkpoint-fresh-machine-"));
+  try {
+    const fetched = await fetchCheckpoint(checkpointId, value, join(temporary, "checkpoint"), options);
+    const restored = await restoreCheckpoint(fetched.path, target);
+    return { ...restored, remote: fetched.receipt };
+  } finally { await rm(temporary, { recursive: true, force: true }); }
 }
