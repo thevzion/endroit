@@ -67,6 +67,26 @@ local Bindings. `workplace enter` resolves one exact bound Mount, verifies its
 Workplace identity and returns its existing target-owned Front Door. Neither
 command scans the machine, clones a repository or mutates the target.
 
+`workplace setup` is the explicit materialization step. Its local Request names
+every target, relation, Mount, EntryBinding and ProviderBinding. Preview emits a
+digest without running Git; Apply accepts only that digest. A target with a Git
+source is cloned into `<Mount>/workplace`; a target without one must already be
+present at the exact declared Mount.
+
+```sh
+bun src/cli.ts workplace setup /path/to/anchor \
+  --from /path/to/setup.json --preview --json
+
+bun src/cli.ts workplace setup /path/to/anchor \
+  --from /path/to/setup.json --apply sha256:<preview-digest> --json
+```
+
+Required target failure rolls back setup-owned Mounts and the Anchor Binding.
+An unavailable optional target returns a partial Receipt and is not bound. The
+Request and Receipt stay local; they contain no credentials. Setup transports
+committed Git only. Dirty worktrees, local refs and untracked files belong to
+the separate Git State Portability checkpoint contract.
+
 ## Try the demonstrations
 
 - [ADOPT.md](ADOPT.md) explains the shipped static brownfield Preview and the
@@ -81,5 +101,5 @@ No provider run is part of installation or tests.
 ## Remove Endroit
 
 Compiled Front Doors and portable maps remain navigable after removing this
-checkout, Bun and `.endroit/`. New guarded Shared/Desk commits fail closed until
+checkout, Bun and `.endroit/`. New guarded owned-Root commits fail closed until
 the bound CLI is restored; recompilation and stale repair also require it.

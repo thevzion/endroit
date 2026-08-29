@@ -1,4 +1,4 @@
-import { readFile, realpath, stat } from "node:fs/promises";
+import { mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 
 const REF = /^workplace:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
@@ -17,10 +17,10 @@ export type WorkplaceRegistry = {
   entries: WorkplaceRegistryEntry[];
 };
 
-type WorkplaceLink = { target: string };
-type WorkplaceBinding = { workplace: string; mode: "managed" | "external"; mount: string };
+export type WorkplaceLink = { target: string };
+export type WorkplaceBinding = { workplace: string; mode: "managed" | "external"; mount: string };
 type WorkplaceLinks = { kind: "WorkplaceLinks"; version: 1; workplace: string; links: WorkplaceLink[] };
-type WorkplaceLocalBindings = {
+export type WorkplaceLocalBindings = {
   kind: "WorkplaceLocalBindings";
   version: 1;
   workplace: string;
@@ -128,7 +128,7 @@ function localSourcePath(anchorMount: string, localPath?: string): string {
   return localPath ? resolve(anchorMount, localPath) : join(resolve(anchorMount), ".endroit/workplaces.json");
 }
 
-function declaredMount(anchorMount: string, localPath: string, binding: WorkplaceBinding): string {
+export function resolveDeclaredWorkplaceMount(anchorMount: string, localPath: string, binding: WorkplaceBinding): string {
   if (binding.mode === "external") return absolutePath(binding.mount) ? resolve(binding.mount) : resolve(dirname(localPath), binding.mount);
   const base = resolve(anchorMount, "checkouts/workplaces");
   const target = resolve(anchorMount, binding.mount);
@@ -147,7 +147,7 @@ async function available(path: string): Promise<boolean> {
   }
 }
 
-async function load(anchorMount: string, localPath?: string): Promise<{
+export async function readWorkplaceFederationState(anchorMount: string, localPath?: string): Promise<{
   anchor: string;
   localPath: string;
   links: WorkplaceLink[];
@@ -172,8 +172,20 @@ async function load(anchorMount: string, localPath?: string): Promise<{
   };
 }
 
+export async function writeWorkplaceLocalBindings(anchorMount: string, value: WorkplaceLocalBindings, localPath?: string): Promise<string> {
+  const mount = resolve(anchorMount);
+  const anchor = await workplaceIdentity(mount);
+  const parsed = parseLocal(value, anchor);
+  const path = localSourcePath(mount, localPath);
+  await mkdir(dirname(path), { recursive: true });
+  const temp = `${path}.tmp-${process.pid}-${crypto.randomUUID()}`;
+  await writeFile(temp, `${JSON.stringify(parsed, null, 2)}\n`, { flag: "wx" });
+  await rename(temp, path);
+  return path;
+}
+
 export async function deriveWorkplaceRegistry(anchorMount: string, localPath?: string): Promise<WorkplaceRegistry> {
-  const source = await load(anchorMount, localPath);
+  const source = await readWorkplaceFederationState(anchorMount, localPath);
   const targets = new Map<string, Set<"link" | "attachment">>();
   for (const link of source.links) (targets.get(link.target) ?? targets.set(link.target, new Set()).get(link.target)!).add("link");
   for (const attachment of source.attachments) (targets.get(attachment.target) ?? targets.set(attachment.target, new Set()).get(attachment.target)!).add("attachment");
@@ -181,7 +193,7 @@ export async function deriveWorkplaceRegistry(anchorMount: string, localPath?: s
   const entries: WorkplaceRegistryEntry[] = [];
   for (const [workplace, provenance] of [...targets.entries()].sort(([a], [b]) => a.localeCompare(b))) {
     const binding = bindings.get(workplace);
-    const mount = binding ? declaredMount(anchorMount, source.localPath, binding) : undefined;
+    const mount = binding ? resolveDeclaredWorkplaceMount(anchorMount, source.localPath, binding) : undefined;
     entries.push({
       workplace,
       provenance: [...provenance].sort((a, b) => a.localeCompare(b)),
@@ -193,7 +205,7 @@ export async function deriveWorkplaceRegistry(anchorMount: string, localPath?: s
 }
 
 export async function federationProjection(anchorMount: string, localPath?: string): Promise<{ present: boolean; registry: WorkplaceRegistry; revision?: string }> {
-  const source = await load(anchorMount, localPath);
+  const source = await readWorkplaceFederationState(anchorMount, localPath);
   const registry = await deriveWorkplaceRegistry(anchorMount, localPath);
   if (!source.present) return { present: false, registry };
   const bytes = JSON.stringify(registry);
@@ -208,12 +220,12 @@ export function renderAdjacentWorkplaces(registry: WorkplaceRegistry): string {
 
 export async function resolveWorkplaceMount(anchorMount: string, target: string, localPath?: string): Promise<{ mount: string; realpath: string }> {
   semanticRef(target, "target");
-  const source = await load(anchorMount, localPath);
+  const source = await readWorkplaceFederationState(anchorMount, localPath);
   const registry = await deriveWorkplaceRegistry(anchorMount, localPath);
   if (!registry.entries.some((entry) => entry.workplace === target)) throw new FederationError("unavailable", `${target} is not adjacent to ${registry.anchor}`);
   const binding = source.bindings.find((item) => item.workplace === target);
   if (!binding) throw new FederationError("unavailable", `${target} has no local Binding`);
-  const mount = declaredMount(anchorMount, source.localPath, binding);
+  const mount = resolveDeclaredWorkplaceMount(anchorMount, source.localPath, binding);
   let targetRealpath: string;
   try {
     targetRealpath = await realpath(mount);

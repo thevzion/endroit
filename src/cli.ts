@@ -13,9 +13,10 @@ import {
   renderNewWorkplacePreview,
 } from "./compiler/new-workplace.ts";
 import { runNewWizard } from "./new-wizard.ts";
-import { resolve } from "node:path";
+import { dirname, resolve } from "node:path";
 import { checkGitHistory, checkGitStaged } from "./compiler/git-witness.ts";
 import { deriveWorkplaceRegistry, enterWorkplace, FederationError } from "./federation.ts";
+import { applyWorkplaceSetup, planWorkplaceSetup, SetupError } from "./setup.ts";
 
 type Parsed = {
   values: Record<string, string>;
@@ -55,6 +56,14 @@ function print(value: unknown, json: boolean): void {
   else if (typeof value === "object" && value && "kind" in value && value.kind === "NewWorkplaceResult") {
     const created = value as unknown as { mount: string; revision: string; check: { operationStatus: string } };
     console.log(`${created.check.operationStatus} · created\n${created.mount}\n${created.revision}`);
+  }
+  else if (typeof value === "object" && value && "kind" in value && value.kind === "WorkplaceSetupPlan") {
+    const plan = value as unknown as { anchor: string; revision: string; targets: Array<{ workplace: string; action: string; required: boolean }> };
+    console.log([`${plan.anchor} · setup preview`, ...plan.targets.map((target) => `${target.workplace} · ${target.action} · ${target.required ? "required" : "optional"}`), plan.revision].join("\n"));
+  }
+  else if (typeof value === "object" && value && "kind" in value && value.kind === "WorkplaceSetupReceipt") {
+    const receipt = value as unknown as { anchor: string; status: string; targets: Array<{ workplace: string; status: string }> };
+    console.log([`${receipt.anchor} · ${receipt.status}`, ...receipt.targets.map((target) => `${target.workplace} · ${target.status}`)].join("\n"));
   }
   else if (typeof value === "object" && value && "check" in value) {
     const ready = value as { mount: string; changed: boolean; check: { entryStatus: string; operationStatus: string; requiredAction?: string } };
@@ -107,7 +116,17 @@ try {
       const anchor = options.values.anchor;
       if (!target || !anchor) throw new Error("usage: endroit workplace enter <target-ref> --anchor <anchor-mount> [--bindings <file>] [--provider <id>] [--profile <file>] [--json]");
       print(await enterWorkplace({ anchorMount: anchor, target, ...(options.values.bindings ? { localPath: options.values.bindings } : {}), ...(options.values.provider ? { provider: options.values.provider } : {}), ...(options.values.profile ? { profilePath: resolve(options.values.profile) } : {}) }), options.flags.has("json"));
-    } else throw new Error("usage: endroit workplace <list|enter> ...");
+    } else if (action === "setup") {
+      const anchor = options.positionals[1];
+      const requestPath = options.values.from;
+      const wantsPreview = options.flags.has("preview");
+      const applyRevision = options.values.apply;
+      if (!anchor || !requestPath || wantsPreview === Boolean(applyRevision)) throw new Error("usage: endroit workplace setup <anchor-mount> --from <request.json> (--preview | --apply <sha256>) [--bindings <file>] [--json]");
+      const resolvedRequest = resolve(requestPath);
+      const request = JSON.parse(await Bun.file(resolvedRequest).text()) as unknown;
+      const plan = await planWorkplaceSetup(request, { anchorMount: anchor, requestDirectory: dirname(resolvedRequest), ...(options.values.bindings ? { localPath: options.values.bindings } : {}) });
+      print(wantsPreview ? plan : await applyWorkplaceSetup(plan, applyRevision!), options.flags.has("json"));
+    } else throw new Error("usage: endroit workplace <list|enter|setup> ...");
   } else if (command === "compile") {
     const mount = options.values.mount ?? options.values.root;
     if (!mount) throw new Error("usage: endroit compile --mount <path> [--entry <file>] [--provider <id>]");
@@ -140,7 +159,7 @@ try {
   }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
-  const code = error instanceof FederationError ? error.code : undefined;
+  const code = error instanceof FederationError || error instanceof SetupError ? error.code : undefined;
   console.error(options.flags.has("json") ? JSON.stringify({ ...(code ? { code } : {}), error: message }, null, 2) : message);
-  process.exitCode = code && ["unavailable", "unsafe-mount", "identity-mismatch", "compile-required"].includes(code) ? 1 : 2;
+  process.exitCode = code && ["unavailable", "unsafe-mount", "identity-mismatch", "compile-required", "setup-unavailable", "setup-collision"].includes(code) ? 1 : 2;
 }
