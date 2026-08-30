@@ -1,4 +1,4 @@
-import { cp, lstat, mkdir, mkdtemp, realpath, rename, rm } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
 import { gitArguments, gitTransportArguments } from "./platform.ts";
 import { basename, dirname, join, resolve } from "node:path";
@@ -142,6 +142,13 @@ function run(cwd: string, args: string[], options: { allowFailure?: boolean; env
   return value;
 }
 function git(cwd: string, args: string[], options?: { env?: Record<string, string> }): string { return run(cwd, args, options).stdout; }
+async function initializeTransportRepository(repository: string): Promise<void> {
+  // Only fresh, owned transport repositories: never inherit templates or rewrite a product's policy.
+  git(repository, ["init", "--template=", "-q"]);
+  await mkdir(join(repository, ".git/info"), { recursive: true });
+  // Highest-precedence attributes preserve the envelope bytes on both add and checkout.
+  await writeFile(join(repository, ".git/info/attributes"), "checkpoint/** -text -filter -ident -working-tree-encoding\n", { flag: "wx" });
+}
 function memberKey(ownerMember: string): string { return hash(ownerMember).slice("sha256:".length); }
 function checkpointKey(checkpointId: string): string {
   if (!CHECKPOINT_ID.test(checkpointId)) fail("checkpoint-schema-invalid", "checkpointId is invalid");
@@ -160,7 +167,7 @@ function listRemote(locatorValue: string, ref: string): string | null {
 }
 async function fetchCommit(locatorValue: string, ref: string, destination: string): Promise<string> {
   await mkdir(destination, { recursive: true });
-  git(destination, ["init", "-q"]);
+  await initializeTransportRepository(destination);
   git(destination, ["fetch", ...gitTransportArguments("fetch", locatorValue), "-q", "--no-tags", locatorValue, ref]);
   git(destination, ["checkout", "-q", "--detach", "FETCH_HEAD"]);
   return git(destination, ["rev-parse", "HEAD"]);
@@ -210,7 +217,7 @@ async function createCheckpointCommit(checkpointPath: string, manifest: Checkpoi
   const repository = await mkdtemp(join(temporaryRoot, ".checkpoint-remote-stage-"));
   await mkdir(join(repository, "checkpoint"), { recursive: false });
   await cp(checkpointPath, join(repository, "checkpoint"), { recursive: true });
-  git(repository, ["init", "-q"]);
+  await initializeTransportRepository(repository);
   git(repository, ["add", "checkpoint"]);
   const tree = git(repository, ["write-tree"]);
   let parentCommit: string | null = null;

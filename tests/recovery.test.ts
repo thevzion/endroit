@@ -231,7 +231,7 @@ describe("fresh-machine Workplace recovery", () => {
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }
-  });
+  }, heavyGitTimeout);
 
   test("materializes physical state while Current Member is pending, then bootstraps and reuses the local binding", async () => {
     const state = await recoveryFixture();
@@ -278,7 +278,7 @@ describe("fresh-machine Workplace recovery", () => {
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }
-  });
+  }, heavyGitTimeout);
 
   test("rolls back a newly persisted Binding without deleting its pre-existing clean Route", async () => {
     const state = await recoveryFixture();

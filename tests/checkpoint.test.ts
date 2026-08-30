@@ -66,7 +66,66 @@ describe("Git State Portability", () => {
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }
-  });
+  }, process.platform === "win32" ? 180_000 : 30_000); // Capture, restore and repeat capture of four worktrees.
+
+  test("preserves transport bytes under inherited autocrlf and hostile global attributes", async () => {
+    const state = await checkpointFixture({ platformNeutral: true });
+    try {
+      git(state.shared, ["config", "core.autocrlf", "false"]);
+      const staged = "staged\r\n$Id$\r\n";
+      const dirty = "dirty\r\n$Id$\r\nlast LF\n";
+      const binary = new Uint8Array([0, 255, 13, 10, 36, 73, 100, 36, 10, 128]);
+      await writeFile(join(state.shared, "mixed.txt"), staged);
+      git(state.shared, ["add", "mixed.txt"]);
+      await writeFile(join(state.shared, "mixed.txt"), dirty);
+      await writeFile(join(state.shared, "untracked.bin"), binary);
+      const before = evidence(state.shared);
+      const sourceConfig = await readFile(join(state.shared, ".git/config"));
+      const root = state.request.roots[0]!;
+      const captured = await captureCheckpoint({ ...state.request, roots: [{ ...root, worktrees: [root.worktrees[0]!] }] });
+      const invoke = (args: string[], env: Record<string, string | undefined>) => {
+        const result = Bun.spawnSync([...cli, ...args, "--json"], { cwd: repository, stdout: "pipe", stderr: "pipe", env });
+        if (result.exitCode !== 0) throw new Error(new TextDecoder().decode(result.stderr));
+        return JSON.parse(new TextDecoder().decode(result.stdout));
+      };
+      for (const attributes of [false, true]) {
+        const name = attributes ? "attributes" : "autocrlf";
+        const config = join(state.root, `${name}.gitconfig`);
+        const attributesPath = join(state.root, `${name}.gitattributes`);
+        await writeFile(attributesPath, "checkpoint/** text eol=crlf ident filter=reject-transport\n");
+        const template = join(state.root, `${name}-template`);
+        await mkdir(join(template, "info"), { recursive: true });
+        await writeFile(join(template, "info/attributes"), "checkpoint/** filter=reject-transport\n");
+        const configBytes = `[core]\n  autocrlf = true\n${attributes ? `  attributesFile = ${JSON.stringify(attributesPath.replaceAll("\\", "/"))}\n` : ""}[init]\n  templateDir = ${JSON.stringify(template.replaceAll("\\", "/"))}\n[filter "reject-transport"]\n  clean = exit 97\n  smudge = exit 97\n  required = true\n`;
+        await writeFile(config, configBytes);
+        const env = { ...process.env, GIT_CONFIG_GLOBAL: config, GIT_CONFIG_NOSYSTEM: "1" };
+        const remote = join(state.root, `${name}.git`);
+        git(state.root, ["init", "-q", "--bare", remote]);
+        const remoteConfig = await readFile(join(remote, "config"));
+        const binding = { kind: "ContinuityBinding", version: 1, workplace: "workplace://fixture", role: "product", locator: remote, productLocator: remote, productVisibility: "private", continuityVisibility: "private", credentialBinding: "git:fixture" };
+        const publish = join(state.root, `${name}-publish.json`);
+        const fetch = join(state.root, `${name}-fetch.json`);
+        await writeFile(publish, JSON.stringify({ kind: "CheckpointPublishRequest", version: 1, binding, ownerMember: state.request.ownerMember, line: "main", parentCheckpoint: null }));
+        await writeFile(fetch, JSON.stringify({ kind: "CheckpointFetchRequest", version: 1, binding, ownerMember: state.request.ownerMember, line: "main" }));
+        expect(invoke(["checkpoint", "publish", captured.path, "--from", publish], env).receipt.status).toBe("verified-remote");
+        const fetchedPath = join(state.root, `${name}-fetched`);
+        invoke(["checkpoint", "fetch", captured.receipt.checkpointId, "--from", fetch, "--to", fetchedPath], env);
+        expect((await verifyCheckpoint(fetchedPath)).receipt.portableFingerprint).toBe(captured.receipt.portableFingerprint);
+        const target = join(state.root, `${name}-restored`);
+        const restored = await restoreCheckpoint(fetchedPath, target);
+        const restoredRoot = join(target, "roots/shared/main");
+        expect(restored.receipt.status).toBe("restored-equivalent");
+        expect(evidence(restoredRoot)).toBe(before);
+        expect(await readFile(join(restoredRoot, "mixed.txt"), "utf8")).toBe(dirty);
+        expect(await readFile(join(restoredRoot, "untracked.bin"))).toEqual(binary);
+        expect(await readFile(config, "utf8")).toBe(configBytes);
+        expect(await readFile(join(remote, "config"))).toEqual(remoteConfig);
+        expect(await readFile(join(template, "info/attributes"), "utf8")).toBe("checkpoint/** filter=reject-transport\n");
+      }
+      expect(evidence(state.shared)).toBe(before);
+      expect(await readFile(join(state.shared, ".git/config"))).toEqual(sourceConfig);
+    } finally { await rm(state.root, { recursive: true, force: true }); }
+  }, process.platform === "win32" ? 180_000 : 30_000);
 
   test("fails closed on manifest tampering and an existing restore target", async () => {
     const state = await checkpointFixture();

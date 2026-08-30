@@ -446,7 +446,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(evidence(join(peerMount, "workplace"))).toBe(changedPeer);
       expect(evidence(join(target, "workplace"))).toBe(before);
     } finally { await rm(state.root, { recursive: true, force: true }); }
-  });
+  }, heavyGitTimeout);
 
   test("keeps the restored Root usable when an optional managed peer is unavailable", async () => {
     const state = await fixture();

@@ -112,6 +112,7 @@ describe("portable Site and Route setup", () => {
     try {
       const external = join(state.root, "external-checkout");
       git(state.root, ["clone", "-q", "--branch", "develop", "--", state.remote, external]);
+      const externalBytes = await readFile(join(external, "product.txt"));
       const site = state.request.sites[0]!;
       const request: SiteRouteSetupRequest = {
         ...state.request,
@@ -139,7 +140,7 @@ describe("portable Site and Route setup", () => {
       expect(detached.status).toBe("detached");
       expect(detached.binding.kind).toBe("external-link");
       expect(await exists(routes.get("external")!.path)).toBe(false);
-      expect(await readFile(join(external, "product.txt"), "utf8")).toBe("clean product\n");
+      expect(await readFile(join(external, "product.txt"))).toEqual(externalBytes);
       const afterDetach = JSON.parse(await readFile(join(state.workplaceMount, ".endroit/site-route-bindings.json"), "utf8")) as { bindings: Array<{ route: string }> };
       expect(afterDetach.bindings.some((record) => record.route === "external")).toBe(false);
     } finally { await rm(state.root, { recursive: true, force: true }); }
@@ -148,6 +149,7 @@ describe("portable Site and Route setup", () => {
     try {
       const external = join(failed.root, "external-checkout");
       git(failed.root, ["clone", "-q", "--branch", "develop", "--", failed.remote, external]);
+      const externalBytes = await readFile(join(external, "product.txt"));
       const site = failed.request.sites[0]!;
       const request: SiteRouteSetupRequest = {
         ...failed.request,
@@ -160,7 +162,7 @@ describe("portable Site and Route setup", () => {
       const plan = await planSiteRouteSetup(request, { workplaceMount: failed.workplaceMount, requestDirectory: failed.requestDirectory });
       expect(await errorCode(() => applySiteRouteSetup(plan, plan.revision))).toBe("site-route-unavailable");
       expect(await exists(join(failed.workplaceMount, "checkouts/sites/product/external"))).toBe(false);
-      expect(await readFile(join(external, "product.txt"), "utf8")).toBe("clean product\n");
+      expect(await readFile(join(external, "product.txt"))).toEqual(externalBytes);
     } finally { await rm(failed.root, { recursive: true, force: true }); }
   });
 
