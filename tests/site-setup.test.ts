@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { lstat, mkdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { applySiteRouteSetup, planSiteRouteSetup, SiteRouteSetupError, type SiteRouteSetupRequest } from "../src/site-setup.ts";
 
@@ -29,7 +30,7 @@ async function errorCode(effect: () => Promise<unknown>): Promise<string> {
 }
 
 async function fixture() {
-  const root = resolve("/tmp", `endroit-site-setup-${crypto.randomUUID()}`);
+  const root = resolve(tmpdir(), `endroit-site-setup-${crypto.randomUUID()}`);
   const source = join(root, "source");
   const remote = join(root, "remotes/product.git");
   const workplaceMount = join(root, "workplace-mount");

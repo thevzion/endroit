@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { cp, readFile, rm, writeFile } from "node:fs/promises";
+import { cp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { loadProfilePackage } from "../src/compiler/profile-package.ts";
 import { renderSourceContract, stable } from "../src/compiler/index.ts";
@@ -8,7 +9,7 @@ const repository = resolve(import.meta.dir, "..");
 const standard = resolve(repository, "profiles/standard");
 
 async function fixture(): Promise<string> {
-  const root = resolve("/tmp", `endroit-profile-package-${crypto.randomUUID()}`);
+  const root = resolve(tmpdir(), `endroit-profile-package-${crypto.randomUUID()}`);
   await cp(standard, root, { recursive: true });
   return root;
 }
@@ -23,6 +24,22 @@ describe("Workplace Profile Package", () => {
     expect(first.controls.map((item) => item.placement).sort()).toEqual(["Guard", "Guard", "RequiredRead", "Resident"]);
     expect(Object.keys(first.sourceContracts)).toEqual(["room", "meeting", "work", "site"]);
     expect(first.responsibilities.every((item) => Boolean(first.defaults[item.id]))).toBe(true);
+  });
+
+  test("canonicalizes semantic Profile Package text to LF before hashing", async () => {
+    const lf = await loadProfilePackage(standard);
+    const root = await fixture();
+    const rewrite = async (directory: string): Promise<void> => {
+      for (const entry of await readdir(directory, { withFileTypes: true })) {
+        const path = resolve(directory, entry.name);
+        if (entry.isDirectory()) await rewrite(path);
+        else if (entry.isFile()) await writeFile(path, (await readFile(path, "utf8")).replaceAll("\n", "\r\n"));
+      }
+    };
+    try {
+      await rewrite(root);
+      expect((await loadProfilePackage(root)).digest).toBe(lf.digest);
+    } finally { await rm(root, { recursive: true, force: true }); }
   });
 
   test("renders each declared Source Contract through the production parser", async () => {

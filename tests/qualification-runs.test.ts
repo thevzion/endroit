@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { firstPathDivergence, createQualificationRun, snapshotQualificationRun, verdictQualificationRun } from "../src/qualification/runs.ts";
 import { outsideInstructionPaths, trajectoryFromCodexEvents } from "../src/qualification/case-run.ts";
 
@@ -9,28 +10,32 @@ const repository = resolve(import.meta.dir, "..");
 describe("immutable qualification runs", () => {
   test("extracts a nested Manager and Worker dispatch graph without retaining prompts", () => {
     const meetingRef = "workplace://viral/meeting/20260826t200000z-game-1234abcd";
-    const trajectory = trajectoryFromCodexEvents("/tmp/mount", [
+    const mount = resolve(tmpdir(), "endroit-qualification-mount");
+    const outside = resolve(tmpdir(), "endroit-qualification-outside/RTK.md");
+    const globalSkill = resolve(tmpdir(), "endroit-qualification-outside/skills/testing/SKILL.md");
+    const trajectory = trajectoryFromCodexEvents(mount, [
       { type: "thread.started", thread_id: "main" },
       { type: "item.completed", item: { type: "collab_tool_call", tool: "spawn_agent", status: "completed", sender_thread_id: "main", receiver_thread_ids: ["manager"], prompt: `Position Hall. Meeting ${meetingRef}.` } },
-      { type: "item.completed", item: { type: "command_execution", command: "/bin/zsh -lc 'sed -n 1,80p z-last.md a-first.md'", status: "completed" } },
-      { type: "item.completed", item: { type: "command_execution", command: "/bin/zsh -lc 'sed -n 1,80p AGENTS.md'", status: "completed" } },
+      { type: "item.completed", item: { type: "command_execution", command: "bun inspect z-last.md a-first.md", status: "completed" } },
+      { type: "item.completed", item: { type: "command_execution", command: "bun inspect AGENTS.md", status: "completed" } },
       { type: "item.completed", item: { type: "collab_tool_call", tool: "spawn_agent", status: "completed", sender_thread_id: "manager", receiver_thread_ids: ["worker"], prompt: `Position Site. Meeting ${meetingRef}.` } },
-      { type: "item.completed", item: { type: "file_change", sender_thread_id: "worker", changes: [{ path: "/tmp/mount/checkouts/sites/game/index.html", kind: "add" }] } },
+      { type: "item.completed", item: { type: "file_change", sender_thread_id: "worker", changes: [{ path: resolve(mount, "checkouts/sites/game/index.html"), kind: "add" }] } },
       { type: "item.completed", item: { type: "collab_tool_call", tool: "wait", status: "completed", sender_thread_id: "manager", receiver_thread_ids: ["worker"], agents_states: { worker: { status: "completed" } } } },
       { type: "item.completed", item: { type: "collab_tool_call", tool: "wait", status: "completed", sender_thread_id: "main", receiver_thread_ids: ["manager"], agents_states: { manager: { status: "completed" } } } },
     ]);
     expect(trajectory.dispatches.map((item) => `${item.role}:${item.action}`)).toEqual(["manager:spawn", "worker:spawn", "worker:complete", "manager:complete"]);
     expect(trajectory.dispatches.every((item) => item.meetingRef === meetingRef)).toBe(true);
     expect(trajectory.reads).toContain("AGENTS.md");
-    expect(trajectory.reads).not.toContain("/bin/zsh");
+    expect(trajectory.reads).not.toContain("bun");
     expect(trajectory.reads.indexOf("z-last.md") < trajectory.reads.indexOf("a-first.md")).toBe(true);
+    expect(trajectory.effects.some((item) => item.root === "site" && item.kind === "write")).toBe(true);
     expect(JSON.stringify(trajectory)).not.toContain("Position Hall");
     expect(firstPathDivergence(["Hall", "Room"], ["Hall", "Meeting"])).toEqual({ index: 1, expected: "Room", observed: "Meeting" });
-    expect(outsideInstructionPaths('"/tmp/mount/AGENTS.md" "/Users/alexisrobert/.codex/RTK.md" "/Users/alexisrobert/.agents/skills/testing/SKILL.md"', "/tmp/mount")).toEqual(["/Users/alexisrobert/.codex/RTK.md"]);
+    expect(outsideInstructionPaths([resolve(mount, "AGENTS.md"), outside, globalSkill].map((path) => JSON.stringify(path)).join(" "), mount)).toEqual([outside]);
   });
 
   test("allocates unique explicit CLI targets without latest or overwrite", async () => {
-    const sandbox = resolve("/tmp", `endroit-runs-${crypto.randomUUID()}`);
+    const sandbox = resolve(tmpdir(), `endroit-runs-${crypto.randomUUID()}`);
     await rm(sandbox, { recursive: true, force: true });
     try {
       const caseRoot = resolve(sandbox, "tests/workplaces/cases/fresh-personal");
@@ -74,7 +79,7 @@ describe("immutable qualification runs", () => {
       expect(drift).toContain("case sources changed");
       await writeFile(expectedPath, pinnedExpected);
       await rm(resolve(first.mount, "workplace/sources/members/alexis/desk/WELCOME.md"), { recursive: false, force: false });
-      await writeFile(trajectory, `${JSON.stringify({ kind: "QualificationTrajectory", version: 1, reads: ["/tmp/outside/MEMORY.md"], skills: ["impeccable"], effects: [{ actor: "main", root: "site", kind: "write" }, { actor: "main", root: "mount", kind: "write", path: "/tmp/.codex/memories/MEMORY.md" }] }, null, 2)}\n`);
+      await writeFile(trajectory, `${JSON.stringify({ kind: "QualificationTrajectory", version: 1, reads: [join(tmpdir(), "outside/MEMORY.md")], skills: ["impeccable"], effects: [{ actor: "main", root: "site", kind: "write" }, { actor: "main", root: "mount", kind: "write", path: join(tmpdir(), ".codex/memories/MEMORY.md") }] }, null, 2)}\n`);
       const secondSnapshot = await snapshotQualificationRun({ repository: sandbox, runId: first.id, task: "task-fixture", trajectoryPath: trajectory, now: new Date("2026-08-25T14:02:00Z") });
       expect(firstSnapshot.path).not.toBe(secondSnapshot.path);
       expect(await readFile(firstSnapshot.path, "utf8")).toContain('"status": "valid"');

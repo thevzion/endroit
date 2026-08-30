@@ -23,7 +23,6 @@ function command(argv: string[], cwd: string): string {
 
 async function verifyArchive(path: string, root: string) {
   // Frozen archives are evidence stores only. Endroit never extracts them.
-  command(["gzip", "-t", path], root);
   const members = command(["tar", "-tzf", path], root).split("\n").filter(Boolean);
   validateArchiveMembers(members);
   const bytes = await readFile(path);

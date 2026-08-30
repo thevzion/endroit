@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { lstat, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import {
   CheckpointStoreError,
@@ -59,7 +60,7 @@ async function files(root: string, current = root): Promise<string[]> {
 }
 
 async function fixture() {
-  const root = resolve("/tmp", `endroit-continuity-store-${crypto.randomUUID()}`);
+  const root = resolve(tmpdir(), `endroit-continuity-store-${crypto.randomUUID()}`);
   const sourceRoot = join(root, "source");
   const worktree = join(sourceRoot, "product/main");
   const requests = join(root, "requests");

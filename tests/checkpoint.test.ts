@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import { cp, mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { cp, mkdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import { captureCheckpoint, checkpointRestorePlan, restoreCheckpoint, verifyCheckpoint } from "../src/checkpoint.ts";
+import { assertCheckpointRestoreCapabilities, captureCheckpoint, checkpointRestorePlan, restoreCheckpoint, verifyCheckpoint } from "../src/checkpoint.ts";
 import { fetchCheckpoint, publishCheckpoint, restoreCheckpointFromRemote } from "../src/checkpoint-remote.ts";
 import { checkpointFixture, cli, evidence, git, repository, run } from "./helpers/checkpoint-fixture.ts";
 
@@ -28,7 +28,7 @@ describe("Git State Portability", () => {
       const targets = new Map([["shared-main", join(restoredPath, "roots/shared/main")], ["shared-detached", join(restoredPath, "roots/shared/detached")], ["desk-main", join(restoredPath, "roots/desk/main")], ["site-main", join(restoredPath, "roots/site/main")]]);
       for (const [id, path] of targets) expect(evidence(path)).toBe(before.get(id));
       expect(await Bun.file(join(restoredPath, "roots/desk/main/cache.bin")).exists()).toBe(false);
-      expect(await readlinkText(join(restoredPath, "roots/desk/main/untracked-link"))).toBe("work.txt");
+      if (state.includesSymlink) expect(await readlinkText(join(restoredPath, "roots/desk/main/untracked-link"))).toBe("work.txt");
       expect(await realpath(resolve(join(restoredPath, "roots/shared/main"), textCommon(join(restoredPath, "roots/shared/main"))))).toBe(await realpath(resolve(join(restoredPath, "roots/shared/detached"), textCommon(join(restoredPath, "roots/shared/detached")))));
       for (const [id, path] of [["shared-main", state.shared], ["shared-detached", state.detached], ["desk-main", state.desk], ["site-main", state.site]] as const) expect(evidence(path)).toBe(before.get(id));
 
@@ -79,6 +79,24 @@ describe("Git State Portability", () => {
       const toolchain = JSON.parse(await readFile(join(repository, "schemas/checkpoint/TOOLCHAIN.json"), "utf8"));
       const packageDocument = JSON.parse(await readFile(join(repository, "package.json"), "utf8"));
       expect(toolchain.toolchain.version).toBe(packageDocument.version);
+    } finally {
+      await rm(state.root, { recursive: true, force: true });
+    }
+  });
+
+  test("fails a required file-symlink capability before restore mutation", async () => {
+    const state = await checkpointFixture({ platformNeutral: true });
+    try {
+      const captured = await captureCheckpoint(state.request);
+      const manifest = (await verifyCheckpoint(captured.path)).manifest;
+      manifest.worktrees[0]!.untracked.push({ path: "link", kind: "symlink", mode: "120000", sha256: "a".repeat(64), size: 6, payload: `payloads/${"a".repeat(64)}` });
+      let message = "";
+      let observedParent = "";
+      try { await assertCheckpointRestoreCapabilities(manifest, state.root, async (parent) => { observedParent = parent; throw Object.assign(new Error("operation not permitted"), { code: "EPERM" }); }); }
+      catch (error) { message = error instanceof Error ? error.message : String(error); }
+      expect(observedParent).toBe(state.root);
+      expect(message).toContain("file symlinks");
+      expect(message).toContain("EPERM");
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }
@@ -181,7 +199,7 @@ describe("Git State Portability", () => {
 });
 
 async function readlinkText(path: string): Promise<string> {
-  return run(repository, ["readlink", path]);
+  return readlink(path);
 }
 
 function textCommon(path: string): string {

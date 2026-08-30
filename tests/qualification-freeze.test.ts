@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { freezeQualificationRun, validateArchiveMembers } from "../src/qualification/case-freeze.ts";
 import { createQualificationRun } from "../src/qualification/runs.ts";
@@ -8,7 +9,7 @@ const repository = resolve(import.meta.dir, "..");
 
 describe("qualification run freeze", () => {
   test("freezes once, resumes interrupted cleanup and preserves unsafe runs", async () => {
-    const sandbox = resolve("/tmp", `endroit-freeze-${crypto.randomUUID()}`);
+    const sandbox = resolve(tmpdir(), `endroit-freeze-${crypto.randomUUID()}`);
     try {
       const caseRoot = resolve(sandbox, "tests/workplaces/cases/fresh-personal");
       await mkdir(caseRoot, { recursive: true });

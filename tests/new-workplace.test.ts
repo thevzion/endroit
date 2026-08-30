@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { tmpdir } from "node:os";
+import { dirname, resolve } from "node:path";
 import { PassThrough } from "node:stream";
 import { checkStaticWorkplace, checkWorkplaceMount, readyWorkplace } from "../src/compiler/index.ts";
 import {
@@ -42,29 +43,39 @@ function git(root: string, args: string[]): string {
   return new TextDecoder().decode(result.stdout).trim();
 }
 
+function filesystemRoot(path: string): string {
+  let root = resolve(path);
+  while (dirname(root) !== root) root = dirname(root);
+  return root;
+}
+
 describe("endroit new", () => {
   test("plans identical bytes and invalidates a changed Request", async () => {
     const profile = await loadStandardProfile(profilePath);
-    const first = planNewWorkplace(request("/tmp/endroit-new-preview"), { profile, cliCommand });
-    const second = planNewWorkplace(request("/tmp/endroit-new-preview"), { profile, cliCommand });
+    const previewTarget = resolve(tmpdir(), "endroit-new-preview");
+    const first = planNewWorkplace(request(previewTarget), { profile, cliCommand });
+    const second = planNewWorkplace(request(previewTarget), { profile, cliCommand });
     expect(first.revision).toBe(second.revision);
     expect(first.files).toEqual(second.files);
     expect(first.files.some((file) => file.path === "AGENTS.md")).toBe(true);
     expect(first.files.some((file) => file.path === "CLAUDE.md")).toBe(false);
     expect(first.gitGuards.hooks).toHaveLength(2);
     expect(first.gitGuards.hooks.some((hook) => hook.rootPath.includes("sites"))).toBe(false);
-    const neutralOnly = planNewWorkplace(request("/tmp/endroit-new-neutral", []), { profile, cliCommand });
+    const neutralOnly = planNewWorkplace(request(resolve(tmpdir(), "endroit-new-neutral"), []), { profile, cliCommand });
     expect(neutralOnly.files.some((file) => file.path === "FRONTDOOR.md")).toBe(true);
     expect(neutralOnly.files.some((file) => file.path === "AGENTS.md" || file.path === "CLAUDE.md")).toBe(false);
-    const changed = request("/tmp/endroit-new-preview");
+    const changed = request(previewTarget);
     changed.desk.welcome.humor = "Dry humor.";
     expect(planNewWorkplace(changed, { profile, cliCommand }).revision).not.toBe(first.revision);
-    expect(() => planNewWorkplace({ ...request("/tmp/endroit-new-preview"), unknown: true }, { profile, cliCommand })).toThrow("unknown fields");
-    expect(() => planNewWorkplace(request("/tmp/endroit-new-preview", ["codex", "codex"]), { profile, cliCommand })).toThrow("duplicates");
+    expect(() => planNewWorkplace({ ...request(previewTarget), unknown: true }, { profile, cliCommand })).toThrow("unknown fields");
+    expect(() => planNewWorkplace(request(previewTarget, ["codex", "codex"]), { profile, cliCommand })).toThrow("duplicates");
+    expect(() => planNewWorkplace(request(filesystemRoot(tmpdir())), { profile, cliCommand })).toThrow("filesystem root");
+    const crlf = { ...profile, defaults: Object.fromEntries(Object.entries(profile.defaults).map(([id, value]) => [id, value.replaceAll("\n", "\r\n")])) };
+    expect(Object.values(planNewWorkplace(request(previewTarget), { profile: crlf, cliCommand }).contents).every((content) => !content.includes("\r"))).toBe(true);
   });
 
   test("creates a bound Workplace with one Git Root and one situated Desk subtree", async () => {
-    const target = resolve("/tmp", `endroit-new-test-${crypto.randomUUID()}`);
+    const target = resolve(tmpdir(), `endroit-new-test-${crypto.randomUUID()}`);
     await rm(target, { recursive: true, force: true });
     try {
       const profile = await loadStandardProfile(profilePath);
@@ -76,6 +87,8 @@ describe("endroit new", () => {
       expect(git(result.roots.shared, ["rev-list", "--count", "HEAD"])).toBe("2");
       expect(git(result.roots.shared, ["remote"])).toBe("");
       expect(git(result.roots.shared, ["status", "--porcelain"])).toBe("");
+      expect(await readFile(resolve(result.roots.shared, ".gitattributes"), "utf8")).toContain("*.md text eol=lf");
+      expect(git(result.roots.shared, ["check-attr", "eol", "--", "WORKPLACE.md"])).toContain("eol: lf");
       expect(git(result.roots.shared, ["log", "-2", "--format=%B"])).toContain("Authority: human-invoked");
       expect(git(result.roots.shared, ["log", "-1", "--format=%B"])).toContain("Authority: projection");
 
@@ -152,14 +165,14 @@ describe("endroit new", () => {
   });
 
   test("refuses wrong consent, existing targets and symlinks without effects", async () => {
-    const parent = resolve("/tmp", `endroit-new-guard-${crypto.randomUUID()}`);
+    const parent = resolve(tmpdir(), `endroit-new-guard-${crypto.randomUUID()}`);
     const existing = resolve(parent, "existing");
     const linked = resolve(parent, "linked");
     const absent = resolve(parent, "absent");
     await rm(parent, { recursive: true, force: true });
     await mkdir(existing, { recursive: true });
     await writeFile(resolve(existing, "keep.txt"), "keep\n");
-    await symlink(existing, linked);
+    await (symlink as unknown as (target: string, path: string, type: "dir" | "junction") => Promise<void>)(existing, linked, process.platform === "win32" ? "junction" : "dir");
     try {
       const profile = await loadStandardProfile(profilePath);
       const absentPlan = planNewWorkplace(request(absent), { profile, cliCommand });
@@ -180,8 +193,8 @@ describe("endroit new", () => {
   });
 
   test("keeps the Mount readable and names the exact unavailable recompilation command", async () => {
-    const target = resolve("/tmp", `endroit-new-degraded-${crypto.randomUUID()}`);
-    const executable = resolve("/tmp", `endroit-new-executable-${crypto.randomUUID()}`);
+    const target = resolve(tmpdir(), `endroit-new-degraded-${crypto.randomUUID()}`);
+    const executable = resolve(tmpdir(), `endroit-new-executable-${crypto.randomUUID()}`);
     await rm(target, { recursive: true, force: true });
     await writeFile(executable, "fixture\n");
     try {
@@ -201,7 +214,7 @@ describe("endroit new", () => {
   });
 
   test("invalidates local projections when a ProviderBinding changes", async () => {
-    const target = resolve("/tmp", `endroit-new-binding-${crypto.randomUUID()}`);
+    const target = resolve(tmpdir(), `endroit-new-binding-${crypto.randomUUID()}`);
     await rm(target, { recursive: true, force: true });
     try {
       const profile = await loadStandardProfile(profilePath);
@@ -221,7 +234,7 @@ describe("endroit new", () => {
   });
 
   test("marks the build stale when the owned CoordinationPolicy changes", async () => {
-    const target = resolve("/tmp", `endroit-new-coordination-${crypto.randomUUID()}`);
+    const target = resolve(tmpdir(), `endroit-new-coordination-${crypto.randomUUID()}`);
     await rm(target, { recursive: true, force: true });
     try {
       const profile = await loadStandardProfile(profilePath);
@@ -241,7 +254,7 @@ describe("endroit new", () => {
   });
 
   test("keeps projections readable and requests the exact pinned Profile Package", async () => {
-    const target = resolve("/tmp", `endroit-new-profile-${crypto.randomUUID()}`);
+    const target = resolve(tmpdir(), `endroit-new-profile-${crypto.randomUUID()}`);
     await rm(target, { recursive: true, force: true });
     try {
       const profile = await loadStandardProfile(profilePath);
@@ -268,7 +281,7 @@ describe("endroit new", () => {
   });
 
   test("fails non-interactive creation with the exact Request action and stable JSON", () => {
-    const result = Bun.spawnSync([Bun.argv[0]!, resolve(repository, "src/cli.ts"), "new", "/tmp/endroit-new-noninteractive", "--json"], { cwd: repository, stdout: "pipe", stderr: "pipe" });
+    const result = Bun.spawnSync([Bun.argv[0]!, resolve(repository, "src/cli.ts"), "new", resolve(tmpdir(), "endroit-new-noninteractive"), "--json"], { cwd: repository, stdout: "pipe", stderr: "pipe" });
     const stdout = new TextDecoder().decode(result.stdout);
     const stderr = new TextDecoder().decode(result.stderr);
     expect(result.exitCode).toBe(2);
@@ -279,7 +292,7 @@ describe("endroit new", () => {
   });
 
   test("cancels a simulated interactive stream with code-path zero writes", async () => {
-    const target = resolve("/tmp", `endroit-new-cancel-${crypto.randomUUID()}`);
+    const target = resolve(tmpdir(), `endroit-new-cancel-${crypto.randomUUID()}`);
     await rm(target, { recursive: true, force: true });
     const input = new PassThrough() as PassThrough & { isTTY: boolean; setRawMode(value: boolean): void; emit(event: string, value: string, key: object): void; listenerCount(event: string): number };
     const output = new PassThrough() as PassThrough & { isTTY: boolean; columns: number };
@@ -296,7 +309,7 @@ describe("endroit new", () => {
   });
 
   test("drives the interactive Clack stream through Preview before declining Apply", async () => {
-    const target = resolve("/tmp", `endroit-new-interactive-${crypto.randomUUID()}`);
+    const target = resolve(tmpdir(), `endroit-new-interactive-${crypto.randomUUID()}`);
     await rm(target, { recursive: true, force: true });
     const input = new PassThrough() as PassThrough & { isTTY: boolean; setRawMode(value: boolean): void; emit(event: string, value: string, key: object): void; listenerCount(event: string): number };
     const output = new PassThrough() as PassThrough & { isTTY: boolean; columns: number };

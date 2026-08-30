@@ -1,4 +1,5 @@
 import { chmod, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { CheckpointCaptureRequest } from "../../src/checkpoint.ts";
 
@@ -23,7 +24,8 @@ async function init(path: string): Promise<void> {
 }
 
 export async function checkpointFixture(options: { root?: string; source?: string; siteLayout?: boolean; platformNeutral?: boolean } = {}) {
-  const root = options.root ? resolve(options.root) : resolve("/tmp", `endroit-checkpoint-test-${crypto.randomUUID()}`);
+  const root = options.root ? resolve(options.root) : resolve(tmpdir(), `endroit-checkpoint-test-${crypto.randomUUID()}`);
+  const platformNeutral = options.platformNeutral ?? process.platform === "win32";
   const source = resolve(options.source ?? join(root, "source"));
   const shared = join(source, options.siteLayout ? "product/main" : "shared-main");
   const detached = join(source, options.siteLayout ? "product/detached" : "shared-detached");
@@ -47,7 +49,7 @@ export async function checkpointFixture(options: { root?: string; source?: strin
   await writeFile(join(desk, "assume.txt"), "assume\n");
   await writeFile(join(desk, "skip.txt"), "skip\n");
   await writeFile(join(desk, "tool.sh"), "#!/bin/sh\necho fixture\n");
-  if (!options.platformNeutral) await chmod(join(desk, "tool.sh"), 0o755);
+  if (!platformNeutral) await chmod(join(desk, "tool.sh"), 0o755);
   git(desk, ["add", "."]); git(desk, ["commit", "-qm", "desk base"]);
   git(desk, ["update-index", "--assume-unchanged", "assume.txt"]);
   git(desk, ["update-index", "--skip-worktree", "skip.txt"]);
@@ -56,7 +58,7 @@ export async function checkpointFixture(options: { root?: string; source?: strin
   await writeFile(join(desk, "untracked.txt"), "untracked\n");
   await writeFile(join(desk, "intent.txt"), "intent\n"); git(desk, ["add", "-N", "intent.txt"]);
   await writeFile(join(desk, "cache.bin"), "ignored selected\n");
-  if (!options.platformNeutral) await symlink("work.txt", join(desk, "untracked-link"));
+  if (!platformNeutral) await (symlink as unknown as (target: string, path: string, type: "file") => Promise<void>)("work.txt", join(desk, "untracked-link"), "file");
 
   await init(site);
   await writeFile(join(site, "conflict.txt"), "base\n");
@@ -80,7 +82,7 @@ export async function checkpointFixture(options: { root?: string; source?: strin
     ],
     policy: { includeUntracked: true },
   };
-  return { root, source, shared, detached, desk, site, request };
+  return { root, source, shared, detached, desk, site, request, includesSymlink: !platformNeutral };
 }
 
 export function evidence(path: string): string {

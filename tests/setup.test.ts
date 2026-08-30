@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { applyNewWorkplace, loadStandardProfile, planNewWorkplace, type NewWorkplaceRequest } from "../src/compiler/new-workplace.ts";
 import { enterWorkplace } from "../src/federation.ts";
@@ -51,7 +52,7 @@ function target(workplace: string, mode: "managed" | "external", path: string, e
 }
 
 async function fixture() {
-  const root = resolve("/tmp", `endroit-setup-test-${crypto.randomUUID()}`);
+  const root = resolve(tmpdir(), `endroit-setup-test-${crypto.randomUUID()}`);
   await rm(root, { recursive: true, force: true });
   const anchor = await createWorkplace(join(root, "anchor"), "anchor");
   const peer = await createWorkplace(join(root, "peer-source"), "peer");

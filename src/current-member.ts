@@ -134,15 +134,18 @@ export async function resolveCurrentMember(input: { anchorMount: string; anchor:
   return remembered ? { status: "resolved", source: "local", ...remembered } : { status: "pending-member", source: "none", workplace };
 }
 
-export async function rememberCurrentMember(input: { anchorMount: string; anchor: string; workplace: string; member: string; desk: string }): Promise<{ path: string; changed: boolean; binding: CurrentMemberBinding }> {
+export async function rememberCurrentMembers(input: { anchorMount: string; anchor: string; members: Array<{ workplace: string; member: string; desk: string }> }): Promise<{ path: string; changed: boolean; binding: CurrentMemberBinding }> {
   const anchor = ref(input.anchor, "anchor");
-  const current = memberEntry({ workplace: input.workplace, member: input.member, desk: input.desk }, "Current Member request");
+  if (input.members.length === 0) fail("invalid-current-member-binding", "Current Member request must contain at least one Member");
+  const requested = input.members.map((entry, index) => memberEntry(entry, `Current Member request[${index}]`));
+  if (new Set(requested.map((entry) => entry.workplace)).size !== requested.length) fail("invalid-current-member-binding", "Current Member request repeats a Workplace");
   const path = bindingPath(input.anchorMount);
   await assertLocalStatePath(input.anchorMount, path);
   const previous = await readBinding(input.anchorMount, anchor);
+  const replaced = new Set(requested.map((entry) => entry.workplace));
   const binding: CurrentMemberBinding = {
     kind: "CurrentMemberBindings", version: 1, anchor,
-    members: [...(previous?.members.filter((entry) => entry.workplace !== current.workplace) ?? []), current].sort((a, b) => a.workplace.localeCompare(b.workplace)),
+    members: [...(previous?.members.filter((entry) => !replaced.has(entry.workplace)) ?? []), ...requested].sort((a, b) => a.workplace.localeCompare(b.workplace)),
   };
   if (previous && stable(previous) === stable(binding)) return { path, changed: false, binding };
   await mkdir(dirname(path), { recursive: true });
@@ -150,4 +153,8 @@ export async function rememberCurrentMember(input: { anchorMount: string; anchor
   await writeFile(temporary, stable(binding), { flag: "wx" });
   await rename(temporary, path);
   return { path, changed: true, binding };
+}
+
+export async function rememberCurrentMember(input: { anchorMount: string; anchor: string; workplace: string; member: string; desk: string }): Promise<{ path: string; changed: boolean; binding: CurrentMemberBinding }> {
+  return rememberCurrentMembers({ anchorMount: input.anchorMount, anchor: input.anchor, members: [{ workplace: input.workplace, member: input.member, desk: input.desk }] });
 }

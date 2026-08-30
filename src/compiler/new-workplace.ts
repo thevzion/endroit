@@ -77,6 +77,10 @@ function fail(message: string): never {
   throw new Error(message);
 }
 
+function canonicalText(value: string): string {
+  return value.replace(/\r\n?/g, "\n");
+}
+
 function object(value: unknown, subject: string): Record<string, unknown> {
   if (value === null || Array.isArray(value) || typeof value !== "object") fail(`${subject} must be an object`);
   const prototype = Object.getPrototypeOf(value);
@@ -125,7 +129,7 @@ export function validateNewWorkplaceRequest(value: unknown): NewWorkplaceRequest
   exact(author, AUTHOR_KEYS, "git.author");
 
   const target = resolve(text(request.target, "target", 4096));
-  if (target === "/") fail("target cannot be the filesystem root");
+  if (target === dirname(target)) fail("target cannot be the filesystem root");
   const language = text(member.language, "member.language", 35);
   if (!LANGUAGE.test(language)) fail("member.language must be a BCP 47 language tag");
   if (!Array.isArray(request.providers)) fail("providers must be an array");
@@ -231,10 +235,18 @@ export function planNewWorkplace(value: unknown, options: { profile: LoadedProfi
   const desk = `${base}/desk/${request.member.id}`;
   const material = (id: string) => `${base}/material/${id}`;
   const contents: Record<string, string> = {};
-  const put = (path: string, content: string) => { contents[path] = content; };
+  const put = (path: string, content: string) => { contents[path] = canonicalText(content); };
 
   const providerTargets = request.providers.flatMap((provider) => providerBinding(provider, options.cliCommand, request.target, options.profile).targets);
   put(".gitignore", ["/.endroit/", "/.agents/", "/FRONTDOOR.md", "/AGENTS.md", "/CLAUDE.md", "/MEMORY.md", "/rooms/", "/work/", "/sites/", "/desks/", "/scopes/", "/methods/", "/agents/", ".DS_Store", "**/.DS_Store", ""].join("\n"));
+  put("workplace/.gitattributes", [
+    ".gitattributes text eol=lf",
+    ".gitignore text eol=lf",
+    "**/.workplaceignore text eol=lf",
+    "*.json text eol=lf",
+    "*.md text eol=lf",
+    "",
+  ].join("\n"));
   put("workplace/profile.json", stable({ kind: "ProfileSelection", version: 1, ref: options.profile.manifest.ref, digest: options.profile.digest }));
   put("workplace/composition.json", stable({ kind: "Composition", ref: `${base}/composition`, equipment: options.profile.compositionTemplate.equipment }));
   put("workplace/coordination.json", stable(instantiateCoordinationPolicy(options.profile, base)));

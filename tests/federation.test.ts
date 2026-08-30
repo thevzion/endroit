@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { cp, mkdir, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { checkWorkplaceMount, readyWorkplace } from "../src/compiler/index.ts";
 import {
@@ -15,7 +16,7 @@ const fixtures = resolve(repository, "examples/federation");
 const profilePath = resolve(repository, "profiles/standard/profile.json");
 
 async function temporary(): Promise<string> {
-  const root = resolve("/tmp", `endroit-federation-test-${crypto.randomUUID()}`);
+  const root = resolve(tmpdir(), `endroit-federation-test-${crypto.randomUUID()}`);
   await rm(root, { recursive: true, force: true });
   return root;
 }

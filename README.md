@@ -12,6 +12,8 @@ It currently provides:
 - a private-package Bun + TypeScript CLI installed from source;
 - a consent-first `endroit new` wizard for a fresh personal Workplace;
 - a digest-bound `workplace setup` command for cloning or attaching declared peer Workplaces;
+- a root `setup` facade that adopts an official `<Mount>/workplace` clone,
+  resolves an explicit Member, and may add one exact Git Bootstrap Ref;
 - Git-state checkpoints that round-trip dirty, detached and conflicted declared Roots locally or through explicit Git-native internal refs;
 - a pinned Workplace Profile Package whose Grammar, Lexicon, defaults,
   affordances and policies are inspectable data;
@@ -34,7 +36,7 @@ It currently provides:
 bun install --frozen-lockfile
 bun run typecheck
 bun run test
-bun src/cli.ts new /tmp/endroit-fresh
+bun src/cli.ts new ./endroit-fresh
 ```
 
 The wizard previews every file, adapter, Git guard and commit before consent. It creates one

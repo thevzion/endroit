@@ -74,7 +74,7 @@ function lineName(value: unknown, subject: string): string {
   if (!LINE.test(result)) fail("invalid-continuity-descriptor", `${subject} must be a portable line name`);
   return result;
 }
-function parseDescriptor(value: unknown, requestDirectory: string): ContinuityDescriptor {
+export function parseContinuityDescriptor(value: unknown, requestDirectory: string): ContinuityDescriptor {
   const source = object(value, "ContinuityDescriptor");
   exact(source, ["kind", "version", "anchor", "workplace", "capture", "store", "restoreTarget", "line", "policy", "binding"], "ContinuityDescriptor", ["kind", "version", "anchor", "workplace", "capture", "store", "restoreTarget", "line", "policy"]);
   if (source.kind !== "ContinuityDescriptor" || source.version !== 1) fail("invalid-continuity-descriptor", "Unsupported ContinuityDescriptor");
@@ -140,7 +140,7 @@ export async function loadContinuityDescriptor(mountPath: string): Promise<Resol
   const local = join(mount, ".endroit/continuity.json");
   const portable = join(mount, "workplace/.workplace/continuity.json");
   const path = await exists(local) ? local : await exists(portable) ? portable : fail("continuity-unavailable", `${mount} has no ContinuityDescriptor`);
-  const descriptor = parseDescriptor(await readJson(path, "ContinuityDescriptor"), dirname(path));
+  const descriptor = parseContinuityDescriptor(await readJson(path, "ContinuityDescriptor"), dirname(path));
   if (path === portable && descriptor.binding) fail("invalid-continuity-descriptor", "A portable ContinuityDescriptor must not contain a machine-local ContinuityBinding");
   const base = dirname(path); const store = resolve(base, descriptor.store); const restoreTarget = resolve(base, descriptor.restoreTarget); const localRoot = resolve(mount, ".endroit");
   if (store === localRoot || !inside(localRoot, store)) fail("continuity-collision", `${store} must be below ${localRoot}`);

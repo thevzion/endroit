@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { readFile, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { foldOutcome, parseScenario, qualifyScenario, type Scenario, type Trajectory } from "../src/qualification/index.ts";
 import { compileStaticWorkplace, loadCompileInput } from "../src/compiler/index.ts";
@@ -70,7 +71,7 @@ describe("static Workplace Outcome qualification", () => {
 
   test("pins expected reads to the compiled frozen source Revisions", async () => {
     const repository = resolve(import.meta.dir, "..");
-    const root = resolve("/tmp", `endroit-qualification-test-${crypto.randomUUID()}`);
+    const root = resolve(tmpdir(), `endroit-qualification-test-${crypto.randomUUID()}`);
     await rm(root, { recursive: true, force: true });
     try {
       const input = await loadCompileInput({

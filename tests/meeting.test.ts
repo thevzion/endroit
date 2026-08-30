@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import {
   compileStaticWorkplace,
@@ -15,7 +16,7 @@ const repository = resolve(import.meta.dir, "..");
 const profilePath = resolve(repository, "profiles/standard/profile.json");
 
 async function temporary(label: string): Promise<string> {
-  const path = resolve("/tmp", `${label}-${crypto.randomUUID()}`);
+  const path = resolve(tmpdir(), `${label}-${crypto.randomUUID()}`);
   await rm(path, { recursive: true, force: true });
   return path;
 }

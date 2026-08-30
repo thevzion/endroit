@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { CurrentMemberError, rememberCurrentMember, resolveCurrentMember } from "../src/current-member.ts";
 
 async function fixture() {
-  const root = resolve("/tmp", `endroit-current-member-${crypto.randomUUID()}`);
+  const root = resolve(tmpdir(), `endroit-current-member-${crypto.randomUUID()}`);
   const mount = join(root, "anchor");
   await mkdir(mount, { recursive: true });
   return { root, mount };

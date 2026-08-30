@@ -1,14 +1,14 @@
-import { chmod, mkdir, mkdtemp, readFile, rm, stat, symlink, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, readFile, rm, stat, writeFile } from "node:fs/promises";
 import { homedir, tmpdir } from "node:os";
-import { dirname, join, relative, resolve } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 import { hash, stable } from "../compiler/index.ts";
 import { findQualificationRun, snapshotQualificationRun } from "./runs.ts";
 
 type Json = Record<string, unknown>;
 
 const DISABLED = ["memories", "plugins", "apps", "remote_plugin", "recommended_plugins", "skill_search"];
-const PATH = /(?:^|[\s"'=])((?:\/|\.\.?\/)[^\s"';|&)]+|[A-Za-z0-9_.-]+(?:\/[A-Za-z0-9_.-]+)+|[A-Za-z0-9_.-]+\.(?:md|json|ts|tsx|js|mjs|css|html))/g;
-const ABSOLUTE_MARKDOWN = /(?:^|[\s"'])((?:\/[^/\s"'()\]}]+)+\.md)/g;
+const PATH = /(?:^|[\s"'=])((?:(?:[A-Za-z]:[\\/]|\\\\|\/|\.\.?[\\/])[^\s"';|&)]+)|[A-Za-z0-9_.-]+(?:[\\/][A-Za-z0-9_.-]+)+|[A-Za-z0-9_.-]+\.(?:md|json|ts|tsx|js|mjs|css|html))/g;
+const ABSOLUTE_MARKDOWN = /(?:^|[\s"'])((?:(?:[A-Za-z]:[\\/]|\\\\|\/)[^\s"'()\]}]+)\.md)/g;
 
 function fail(message: string): never { throw new Error(message); }
 
@@ -24,15 +24,28 @@ function pathsFromCommand(command: string): string[] {
     .filter((path) => !path.startsWith("--") && path !== executable);
 }
 
+function isAbsolutePath(path: string): boolean {
+  return path.startsWith("/") || path.startsWith(sep) || /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("\\\\");
+}
+
 function skillId(path: string): string | undefined {
-  return /(?:^|\/)(?:skills|plugins)\/([^/]+)(?:\/[^/]+)*\/SKILL\.md$/i.exec(path)?.[1];
+  return /(?:^|[\\/])(?:skills|plugins)[\\/]([^\\/]+)(?:[\\/][^\\/]+)*[\\/]SKILL\.md$/i.exec(path)?.[1];
+}
+
+function inside(parent: string, child: string): boolean {
+  const path = relative(parent, child);
+  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolutePath(path));
+}
+
+function absolutePath(root: string, path: string): string {
+  return resolve(isAbsolutePath(path) ? path : resolve(root, path));
 }
 
 function rootFor(mount: string, path: string): "shared" | "desk" | "site" | "mount" {
-  const absolute = path.startsWith("/") ? resolve(path) : resolve(mount, path);
-  if (absolute.startsWith(`${resolve(mount, "workplace")}/`)) return "shared";
-  if (absolute.startsWith(`${resolve(mount, "checkouts/desks")}/`)) return "desk";
-  if (absolute.startsWith(`${resolve(mount, "checkouts/sites")}/`)) return "site";
+  const absolute = absolutePath(mount, path);
+  if (inside(resolve(mount, "workplace"), absolute)) return "shared";
+  if (inside(resolve(mount, "checkouts/desks"), absolute)) return "desk";
+  if (inside(resolve(mount, "checkouts/sites"), absolute)) return "site";
   return "mount";
 }
 
@@ -140,16 +153,16 @@ async function initialHeads(mount: string): Promise<Record<string, string>> {
 }
 
 async function exposedSkills(prompt: string, mount: string) {
-  const paths = [...prompt.matchAll(/(\/[^\s)\]]+\/SKILL\.md)/g)].map((match) => match[1]!);
+  const paths = [...prompt.matchAll(/((?:[A-Za-z]:[\\/]|\\\\|\/)[^\s)\]]+[\\/]SKILL\.md)/g)].map((match) => match[1]!);
   const resolved = [];
-  for (const path of [...new Set(paths)].sort()) if (await exists(path)) resolved.push({ path, scope: path.startsWith(`${resolve(mount)}/`) ? "mount" : "global" });
+  for (const path of [...new Set(paths)].sort()) if (await exists(path)) resolved.push({ path, scope: inside(resolve(mount), resolve(path)) ? "mount" : "global" });
   return resolved;
 }
 
 export function outsideInstructionPaths(prompt: string, mount: string): string[] {
   const root = resolve(mount);
   return [...new Set([...prompt.matchAll(ABSOLUTE_MARKDOWN)].map((match) => resolve(match[1]!)))]
-    .filter((path) => !path.endsWith("/SKILL.md") && path !== root && !path.startsWith(`${root}/`))
+    .filter((path) => !/[\\/]SKILL\.md$/i.test(path) && !inside(root, path))
     .sort();
 }
 
@@ -158,7 +171,11 @@ async function isolatedCodexHome(): Promise<{ path: string; env: Record<string, 
   await chmod(path, 0o700);
   const source = join(resolve(process.env.CODEX_HOME ?? join(homedir(), ".codex")), "auth.json");
   const auth = await stat(source).catch(() => null);
-  if (auth?.isFile()) await symlink(source, join(path, "auth.json"));
+  if (auth?.isFile()) {
+    const target = join(path, "auth.json");
+    await writeFile(target, await readFile(source), { flag: "wx" });
+    await chmod(target, 0o600);
+  }
   else if (!process.env.CODEX_ACCESS_TOKEN && !process.env.OPENAI_API_KEY) {
     await rm(path, { recursive: true, force: true });
     fail("Codex authentication is unavailable for an isolated qualification run");
@@ -184,9 +201,9 @@ export async function runQualificationCase(options: { repository: string; runId:
   const requestPath = join(root, "evidence", "request.json");
   await bootstrap(repository, requestPath, mount);
 
-  const lookup = Bun.spawnSync(["which", "codex"], { cwd: repository, stdout: "pipe", stderr: "pipe" });
-  const codex = lookup.exitCode === 0 ? new TextDecoder().decode(lookup.stdout).trim() : fail("Codex CLI is unavailable");
+  const codex = "codex";
   const cliVersion = Bun.spawnSync([codex, "--version"], { cwd: repository, stdout: "pipe", stderr: "pipe" });
+  if (cliVersion.exitCode !== 0) fail("Codex CLI is unavailable");
   const isolated = await isolatedCodexHome();
   try {
   const disables = DISABLED.flatMap((feature) => ["--disable", feature]);

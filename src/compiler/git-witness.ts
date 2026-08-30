@@ -116,12 +116,16 @@ export async function checkGitGuards(mount: string): Promise<GitWitnessResult> {
       const bytes = await readFile(target, "utf8");
       const mode = (await stat(target)).mode;
       if (!bytes.includes(MARKER) || hash(bytes) !== hook.digest) diagnostics.push({ severity: "warning", code: "git-guard-altered", subject: target, message: "Endroit Git guard differs from its consented Preview." });
-      if ((mode & 0o111) === 0) diagnostics.push({ severity: "warning", code: "git-guard-not-executable", subject: target, message: "Endroit Git guard is not executable." });
+      if (!gitGuardExecutable(mode)) diagnostics.push({ severity: "warning", code: "git-guard-not-executable", subject: target, message: "Endroit Git guard is not executable." });
     } catch (error) {
       diagnostics.push({ severity: "warning", code: "git-guard-missing", subject: target, message: error instanceof Error ? error.message : String(error) });
     }
   }
   return { status: diagnostics.length > 0 ? "degraded" : "valid", diagnostics };
+}
+
+export function gitGuardExecutable(mode: number, platform = process.platform): boolean {
+  return platform === "win32" || (mode & 0o111) !== 0;
 }
 
 export async function repairGitGuards(mount: string): Promise<boolean> {

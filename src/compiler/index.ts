@@ -351,8 +351,9 @@ export function parseCoordinationPolicy(bytes: string, workplace: string): Coord
 }
 
 export function parseSourceEnvelope(bytes: string, relativePath = "source.md"): SourceRecord {
-  if (new TextEncoder().encode(bytes).byteLength > 256 * 1024) fail(`${relativePath} exceeds the absolute source budget`);
-  const match = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/.exec(bytes);
+  const canonical = bytes.replace(/\r\n?/g, "\n");
+  if (new TextEncoder().encode(canonical).byteLength > 256 * 1024) fail(`${relativePath} exceeds the absolute source budget`);
+  const match = /^---\n([\s\S]*?)\n---\n([\s\S]*)$/.exec(canonical);
   if (!match?.[1] || match[2] === undefined) fail(`${relativePath} must begin with one strict YAML frontmatter document`);
   if (new TextEncoder().encode(match[1]).byteLength > 16 * 1024) fail(`${relativePath} frontmatter exceeds 16 KiB`);
   if (/^%/m.test(match[1])) fail(`${relativePath} YAML directives are forbidden`);
@@ -445,8 +446,8 @@ export function parseSourceEnvelope(bytes: string, relativePath = "source.md"): 
     relativePath,
     envelope,
     body: match[2],
-    bytes,
-    revision: hash(bytes),
+    bytes: canonical,
+    revision: hash(canonical),
   };
 }
 
@@ -760,10 +761,10 @@ export async function loadCompileInput(options: {
   const selectedEquipment = new Set(composition.equipment);
 
   const ignorePath = join(root, ".workplaceignore");
-  const ignoreBytes = await readFile(ignorePath, "utf8").catch((error) => {
+  const ignoreBytes = (await readFile(ignorePath, "utf8").catch((error) => {
     if (error instanceof Error && error.message.includes("ENOENT")) return "";
     throw error;
-  });
+  })).replace(/\r\n?/g, "\n");
   const ignoreRules = parseWorkplaceIgnore(ignoreBytes);
   const embeddedRoot = workplace.roots.find((id) => profile.roots[id]?.physical === "embedded") ?? fail("Workplace needs one embedded shared Root");
   const sourceRoot = join(root, "sources");

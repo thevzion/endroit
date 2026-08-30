@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { cp, lstat, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import {
   KERNEL_PRIMITIVES,
@@ -32,7 +33,7 @@ async function json<T>(path: string): Promise<T> {
 }
 
 async function temporary(): Promise<string> {
-  const path = resolve("/tmp", `endroit-static-test-${crypto.randomUUID()}`);
+  const path = resolve(tmpdir(), `endroit-static-test-${crypto.randomUUID()}`);
   await rm(path, { recursive: true, force: true });
   return path;
 }
@@ -270,6 +271,13 @@ relations: {}
       expect(() => parseSourceEnvelope(`---\n${metadata}---\n\n# Member\n`)).toThrow();
     }
     expect(() => parseSourceEnvelope(`---\n${prefix}---\n---\n# second document\n`)).toThrow("multiple YAML documents");
+  });
+
+  test("gives semantic text one LF revision while preserving its canonical bytes", () => {
+    const lf = `---\nref: workplace://demo/member/operator\nentity: member\nowner: workplace://demo/member/operator\nscope: workplace://demo\nsummary: Human owner\nwhen: [Ownership matters]\nrelations: {}\n---\n# Member\n`;
+    const crlf = lf.replaceAll("\n", "\r\n");
+    expect(parseSourceEnvelope(crlf).revision).toBe(parseSourceEnvelope(lf).revision);
+    expect(parseSourceEnvelope(crlf).bytes).toBe(lf);
   });
 
   test("rejects a WELCOME body above the resident context budget", async () => {

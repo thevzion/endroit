@@ -68,6 +68,10 @@ function hash(bytes: string | Uint8Array): Revision {
   return `sha256:${new Bun.CryptoHasher("sha256").update(bytes).digest("hex")}`;
 }
 
+function canonicalText(bytes: string): string {
+  return bytes.replaceAll("\r\n", "\n").replaceAll("\r", "\n");
+}
+
 function safePath(root: string, path: unknown, subject: string): string {
   if (typeof path !== "string" || !path || path.startsWith("/") || path.split(/[\\/]/).includes("..")) fail(`${subject} must be a safe relative path`);
   const target = resolve(root, path);
@@ -79,7 +83,7 @@ function safePath(root: string, path: unknown, subject: string): string {
 async function readDeclared(root: string, path: unknown, subject: string, files: Map<string, string>): Promise<string> {
   const target = safePath(root, path, subject);
   let bytes: string;
-  try { bytes = await readFile(target, "utf8"); }
+  try { bytes = canonicalText(await readFile(target, "utf8")); }
   catch (error) { fail(`${subject} is unavailable at ${target}: ${error instanceof Error ? error.message : String(error)}`); }
   files.set(relative(root, target).split(sep).join("/"), bytes);
   return bytes;
@@ -118,7 +122,7 @@ export async function loadProfilePackage(manifestPath: string): Promise<LoadedPr
   const path = resolve(manifestPath.endsWith(".json") ? manifestPath : resolve(manifestPath, "profile.json"));
   const root = dirname(path);
   const files = new Map<string, string>();
-  const manifestBytes = await readFile(path, "utf8").catch((error) => fail(`Profile Package manifest is unavailable at ${path}: ${error instanceof Error ? error.message : String(error)}`));
+  const manifestBytes = await readFile(path, "utf8").then(canonicalText).catch((error) => fail(`Profile Package manifest is unavailable at ${path}: ${error instanceof Error ? error.message : String(error)}`));
   files.set("profile.json", manifestBytes);
   const manifest = object(parseJson(manifestBytes, "Profile Package manifest"), "Profile Package manifest");
   exact(manifest, MANIFEST_KEYS, "Profile Package manifest");

@@ -25,7 +25,7 @@ bun src/cli.ts workplace list /path/to/anchor --json
 bun src/cli.ts workplace enter workplace://example/peer \
   --anchor /path/to/anchor --json
 bun src/cli.ts preview examples/brownfield/source \
-  --out /tmp/endroit-brownfield-preview --json
+  --out ./endroit-brownfield-preview --json
 ```
 
 `new` is the interactive entry for a fresh personal Workplace. It previews the
@@ -89,6 +89,57 @@ the separate Git State Portability checkpoint contract.
 
 The first Git State Portability vertical is local and request-driven:
 
+From an official clone at `<Mount>/workplace`, the root facade can create its
+local EntryBinding and Current Member state, consume the portable recovery
+declaration, and materialize its declared peers:
+
+```sh
+cd /path/to/mount
+bun /path/to/endroit/src/cli.ts setup --as operator --json
+bun /path/to/endroit/src/cli.ts status --json
+```
+
+When the current Workplace intentionally carries no private peer locator, pass
+one closed Bootstrap Ref. It contains a credential-free Git HTTPS locator, a
+full ref and an exact relative Recovery Request path. Git owns authentication.
+
+```sh
+bun /path/to/endroit/src/cli.ts setup \
+  --with 'git+https://example.test/private-workplace.git#refs/heads/develop:.workplace/recovery.json' \
+  --as operator --json
+```
+
+`setup` resolves cwd ancestors only. It never scans the host, guesses
+`origin`, accepts `HEAD`/`latest`, embeds credentials, captures state or pushes
+a ref. It extracts only the Recovery Request's declared file closure from the
+fetched commit, records a digest over that closure, and retains those files
+only in ignored local state for replay.
+
+The local-first root checkpoint surface is:
+
+```sh
+bun /path/to/endroit/src/cli.ts checkpoint --json
+bun /path/to/endroit/src/cli.ts checkpoint push checkpoint:sha256:<digest> --json
+bun /path/to/endroit/src/cli.ts checkpoint fetch checkpoint:sha256:<digest> --json
+bun /path/to/endroit/src/cli.ts checkpoint restore checkpoint:sha256:<digest> --json
+```
+
+Local capture never pushes. Only explicit `checkpoint push` can publish the
+selected immutable Member-line checkpoint. Root `setup` may fetch one exact
+checkpoint selected by its closed Recovery Request through a declared
+ContinuityBinding, verify it, then reuse the same Recovery Apply engine. It
+never pushes. `remote:none` makes no remote contact; optional absence degrades
+only its Position and required absence blocks only its Position.
+
+For a not-yet-materialized peer, the local or private Bootstrap Recovery
+Request may declare `continuity: [{ workplace, descriptor }]`. Each path names
+one complete local `ContinuityDescriptor/1`; Setup verifies it, installs it at
+that peer's `.endroit/continuity.json` inside the Recovery transaction and
+receipts `created|unchanged` before the bounded fetch/replan pass. Portable
+public Requests do not carry private ContinuityBinding locators.
+
+The advanced request-driven surfaces remain available:
+
 ```sh
 bun src/cli.ts checkpoint capture --from /path/to/capture-request.json --json
 bun src/cli.ts checkpoint verify /path/to/checkpoint --json
@@ -103,12 +154,18 @@ Capture resolves only explicitly declared Roots and worktrees. The immutable
 package includes static recovery documents and closed schemas under
 `schemas/checkpoint/`. Restore reconstructs into an adjacent temporary target,
 proves the same portable fingerprint, then renames atomically. It never invokes
-`check`, `compile` or `ready`. The synthetic remote vertical uses an explicit
-Git remote and the installed `age` CLI; identities stay in local Request paths
-and never enter the checkpoint or remote control. Publish advances `latest`
-only when its explicit `baseCheckpoint` still matches; divergence preserves all
-immutable checkpoint refs. Network credential policy and cross-OS
-qualification are not implemented yet.
+`check`, `compile` or `ready`. Git-native checkpoint refs are scoped by owner
+Member and line; no global `latest` exists. Private product repositories may
+declare an explicit dual role, while public product repositories require a
+separate private continuity repository. Endroit stores no credential and
+imposes no application encryption layer. Divergence preserves every immutable
+checkpoint and never auto-merges dirty states.
+
+Generated semantic Markdown/JSON uses canonical LF. Checkpoint payload bytes
+remain byte-exact. Windows directory links use junctions, while a checkpoint
+requiring a true file symlink fails capability preflight before target
+mutation. The local cross-platform suite covers these contracts, but actual
+Windows fresh-machine qualification remains a separate acceptance gate.
 
 ## Try the demonstrations
 

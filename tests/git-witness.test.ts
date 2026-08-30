@@ -1,8 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { checkWorkplaceMount, materializeMeeting, readyWorkplace } from "../src/compiler/index.ts";
-import { checkGitHistory, checkGitStaged } from "../src/compiler/git-witness.ts";
+import { checkGitHistory, checkGitStaged, gitGuardExecutable } from "../src/compiler/git-witness.ts";
 import { applyNewWorkplace, loadStandardProfile, planNewWorkplace, type NewWorkplaceRequest } from "../src/compiler/new-workplace.ts";
 
 const repository = resolve(import.meta.dir, "..");
@@ -26,8 +27,14 @@ function request(target: string): NewWorkplaceRequest {
 }
 
 describe("Git witness", () => {
+  test("treats Windows Git hooks as executable without POSIX mode bits", () => {
+    expect(gitGuardExecutable(0o644, "win32")).toBe(true);
+    expect(gitGuardExecutable(0o644, "linux")).toBe(false);
+    expect(gitGuardExecutable(0o755, "linux")).toBe(true);
+  });
+
   test("guards staged bytes and finds a bypassed dangling Meeting in history", async () => {
-    const target = resolve("/tmp", `endroit-git-witness-${crypto.randomUUID()}`);
+    const target = resolve(tmpdir(), `endroit-git-witness-${crypto.randomUUID()}`);
     await rm(target, { recursive: true, force: true });
     try {
       const profile = await loadStandardProfile(resolve(repository, "profiles/standard/profile.json"));

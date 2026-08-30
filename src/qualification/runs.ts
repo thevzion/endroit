@@ -1,5 +1,5 @@
 import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
-import { basename, join, relative, resolve } from "node:path";
+import { basename, join, relative, resolve, sep } from "node:path";
 import { checkWorkplaceMount, hash, stable } from "../compiler/index.ts";
 import { checkGitHistory } from "../compiler/git-witness.ts";
 
@@ -19,6 +19,15 @@ const EVIDENCE = new Set(["check-ready", "roots-clean", "history-valid", "manage
 const PRESERVES = new Set(["no-provider-memory", "no-remote", "no-delivery", "site-sovereignty"]);
 
 function fail(message: string): never { throw new Error(message); }
+
+function isAbsolutePath(path: string): boolean {
+  return path.startsWith("/") || path.startsWith(sep) || /^[A-Za-z]:[\\/]/.test(path) || path.startsWith("\\\\");
+}
+
+function inside(parent: string, child: string): boolean {
+  const path = relative(parent, child);
+  return path === "" || (path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolutePath(path));
+}
 
 export function qualificationRunId(caseId: string, requestDigest: string, now: Date): string {
   if (!CASE.test(caseId)) fail("Qualification case id is invalid");
@@ -243,8 +252,8 @@ function qualifyTrajectory(mount: string, trajectory: Record<string, unknown>, d
   for (const value of reads) {
     const path = typeof value === "string" ? value : value && typeof value === "object" && "path" in value ? String((value as { path: unknown }).path) : "";
     if (!path) { diagnostics.push({ code: "trajectory-read-invalid", subject: String(value), message: "Read evidence needs one path." }); continue; }
-    const absolute = path.startsWith("/") ? resolve(path) : resolve(mount, path);
-    const relation = absolute === mount ? "" : absolute.startsWith(`${mount}/`) ? absolute.slice(mount.length + 1) : "..";
+    const absolute = resolve(isAbsolutePath(path) ? path : resolve(mount, path));
+    const relation = inside(mount, absolute) ? relative(mount, absolute) : "..";
     if (relation === "..") diagnostics.push({ code: "context-outside-mount", subject: path, message: "The trajectory read outside the Workplace Mount." });
     if (/[/\\](?:\.codex|\.claude)[/\\](?:memories|memory)/i.test(path)) diagnostics.push({ code: "provider-memory-read", subject: path, message: "Provider memory influenced the trajectory." });
     if (/[/\\](?:skills|plugins)[/\\]/i.test(path) && relation === "..") diagnostics.push({ code: "global-skill-read", subject: path, message: "An unselected global capability influenced the trajectory." });

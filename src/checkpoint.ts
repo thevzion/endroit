@@ -1,5 +1,6 @@
 import { chmod, lstat, mkdir, mkdtemp, readFile, readlink, readdir, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { hash, stable } from "./compiler/index.ts";
 
@@ -681,6 +682,27 @@ export async function verifyCheckpoint(path: string): Promise<{ path: string; re
   return { path: root, receipt: receipt("verify", "verified-local", manifest), manifest };
 }
 
+async function probeFileSymlink(parent: string): Promise<void> {
+  const root = await mkdtemp(join(parent, ".endroit-symlink-probe-"));
+  try {
+    await writeFile(join(root, "target"), "probe\n", { flag: "wx" });
+    await (symlink as unknown as (target: string, path: string, type: "file") => Promise<void>)("target", join(root, "link"), "file");
+    if (!(await lstat(join(root, "link"))).isSymbolicLink()) throw new Error("symlink probe did not create a symbolic link");
+  } finally {
+    await rm(root, { recursive: true, force: true });
+  }
+}
+
+export async function assertCheckpointRestoreCapabilities(manifest: CheckpointManifest, parent = tmpdir(), probe: (parent: string) => Promise<void> = probeFileSymlink): Promise<void> {
+  const requiresFileSymlinks = manifest.worktrees.some((worktree) => [...worktree.tracked, ...worktree.untracked].some((record) => record.kind === "symlink"));
+  if (!requiresFileSymlinks) return;
+  try { await probe(parent); }
+  catch (error) {
+    const code = error && typeof error === "object" && "code" in error ? String((error as { code: unknown }).code) : error instanceof Error ? error.message : String(error);
+    fail("checkpoint-symlink-unavailable", `Checkpoint requires file symlinks, but this runtime cannot create them: ${code}`);
+  }
+}
+
 export function checkpointRestorePlan(manifest: CheckpointManifest): CheckpointRestorePlan {
   return {
     schema: "workplace-checkpoint-restore-plan/1",
@@ -783,6 +805,14 @@ export async function restoreCheckpoint(checkpoint: string, targetPath: string):
   const verified = await verifyCheckpoint(checkpoint);
   const target = resolve(targetPath);
   if (await exists(target)) fail("checkpoint-target-exists", `${target} already exists`);
+  let capabilityParent = dirname(target);
+  while (!await exists(capabilityParent)) {
+    const parent = dirname(capabilityParent);
+    if (parent === capabilityParent) fail("checkpoint-unavailable", `${dirname(target)} has no existing parent`);
+    capabilityParent = parent;
+  }
+  capabilityParent = await realpath(capabilityParent);
+  await assertCheckpointRestoreCapabilities(verified.manifest, capabilityParent);
   await mkdir(dirname(target), { recursive: true });
   const parent = await realpath(dirname(target));
   const final = join(parent, basename(target));
