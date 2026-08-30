@@ -150,10 +150,90 @@ bun src/cli.ts checkpoint restore-remote checkpoint:sha256:<digest> --from /path
 node scripts/checkpoint-validate.mjs /path/to/checkpoint
 ```
 
+### Exact Workplace recovery
+
+To resume an entire captured Workplace, use a new, absent Mount. This does not
+overwrite the clone or session you start from. Its parent directory must exist.
+From an existing Mount (including a product clone with its declared continuity
+configuration), the exact ID uses the declared local store first, then its
+explicit ContinuityBinding:
+
+```sh
+bun /path/to/endroit/src/cli.ts setup \
+  --checkpoint checkpoint:sha256:<digest> --to /path/to/new-mount \
+  --as operator --json
+```
+
+On a cold machine without a Mount, use an already authored
+`CheckpointFetchRequest/1` at an exact Git ref and file path. This reuses the
+same closed request and normal Git authentication; no JSON must be invented on
+the destination machine. The package owner supplies the immutable checkpoint
+ID and this reference through an appropriately private channel:
+
+```sh
+bun /path/to/endroit/src/cli.ts setup \
+  --checkpoint checkpoint:sha256:<digest> --to /path/to/new-mount \
+  --checkpoint-from 'git+https://example.test/private-bootstrap.git#refs/heads/develop:fetch.json' \
+  --as operator --json
+```
+
+`--checkpoint-from` also accepts a local Fetch Request file. With an already
+verified local package, use `--checkpoint /path/to/package` and omit it. No
+command above captures or pushes. Fetch extracts only the declared file from
+the selected Git commit, records URL/ref/OID/path/digest provenance, and verifies
+the immutable package before installation.
+
+The checkpoint declares exactly one shared Root worktree at `workplace`, plus
+Site worktrees at `checkouts/sites/<site>/<route>`. The captured portable
+`.workplace/recovery.json` supplies setup and peer declarations; advanced
+`--from <recovery.json>` remains available. Checkpoint-covered Site Routes are
+not cloned again or reset to a Product Remote branch. Other declared Routes
+and managed peers use the existing setup engines. External peer attachments
+and a second checkpoint overlay are rejected before installation.
+
+Restore verifies the portable fingerprint in staging, preflights identity,
+Member and declarations, then installs the new Mount. It creates local
+Entry/Current Member/Route Bindings and compiles local Front Doors only. It
+never repairs the captured Root's hooks, compiles its portable files or changes captured source bytes,
+index stages, branches, refs, detached HEADs or conflicts. The Receipt at
+`.endroit/checkpoint-setup.json` separates `restored-equivalent` from semantic
+readiness. Valid sources have a local `FRONTDOOR.md`, including the local Route
+Binding index with exact checkout paths; stale portable projections still
+report `degraded`/`compile-required`. `workplace enter <workplace-ref> --anchor
+<restored-mount>` admits `entryMode: preserved-local` only after verifying all
+local projection bytes against the current sources, Member, Provider and
+adjacency with the normal renderer, plus a non-invalid Git witness. This is
+usable local entry, not a claim that portable projections or Git guards are
+ready. The same command can enter the Anchor itself. Invalid sources or
+altered local Front Doors/Bindings are refused. Clean peers use ordinary setup
+and their own ready gate. Without `--as` or
+an explicitly remembered Member from the source context, physical restoration
+is `pending-member` rather than inferred identity.
+
+Include `--as` on the first recovery command when you want an operational
+entry. This slice does not upgrade a `pending-member` Receipt in place. The
+safe route is the same checkpoint into another absent Mount with `--as`:
+
+```sh
+bun /path/to/endroit/src/cli.ts setup --checkpoint /path/to/package \
+  --to /path/to/another-new-mount --as operator --json
+```
+
+The earlier pending restoration stays untouched. For an ID, retain the same
+`--checkpoint-from` or declared source context. Do not use ordinary `setup` or
+`ready` to personalize an exact dirty restoration: those are not byte-preserving
+recovery operations.
+
+Rerun the same command against its own exact restored target to verify an
+`unchanged` replay. Other existing targets, changed recovery declarations or
+divergent restored Git state are refused; neither source nor existing target
+is overwritten. Resolving stale source/projection work remains an explicit
+later action, not a side effect hidden inside recovery.
+
 Capture resolves only explicitly declared Roots and worktrees. The immutable
 package includes static recovery documents and closed schemas under
 `schemas/checkpoint/`. Restore reconstructs into an adjacent temporary target,
-proves the same portable fingerprint, then renames atomically. It never invokes
+proves the same portable fingerprint, then renames atomically. Raw restore never invokes
 `check`, `compile` or `ready`. Git-native checkpoint refs are scoped by owner
 Member and line; no global `latest` exists. Private product repositories may
 declare an explicit dual role, while public product repositories require a

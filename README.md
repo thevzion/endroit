@@ -15,6 +15,8 @@ It currently provides:
 - a root `setup` facade that adopts an official `<Mount>/workplace` clone,
   resolves an explicit Member, and may add one exact Git Bootstrap Ref;
 - Git-state checkpoints that round-trip dirty, detached and conflicted declared Roots locally or through explicit Git-native internal refs;
+- `setup --checkpoint <id|package> --to <absent-mount>` for exact Workplace
+  Root + Site-worktree recovery, then local-only Member/Front Door setup;
 - a pinned Workplace Profile Package whose Grammar, Lexicon, defaults,
   affordances and policies are inspectable data;
 - a provider-opened Mount separated from portable and sovereign Git Roots;
@@ -49,6 +51,11 @@ ergonomic guards, while `check --history` detects bypassed invalid commits. Cros
 access remains explicit through local Bindings; it never merges Git ownership or authority.
 Fresh and Flappy manual trials are in [examples/fresh/TRY.md](examples/fresh/TRY.md) and
 [examples/flappy/TRY.md](examples/flappy/TRY.md).
+
+Plain `setup` adopts committed clones. Exact checkpoint setup restores into a
+new Mount instead of overwriting a clone; it preserves dirty portable sources,
+projections and Git state. A verified restoration can therefore remain
+`degraded` or `pending-member`, not `ready`. See [the recovery commands](INSTALL.md#exact-workplace-recovery).
 
 ## Read by responsibility
 

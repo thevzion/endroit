@@ -274,7 +274,7 @@ function classify(root: string, mount: string, path: string): "source" | "declar
   return "foreign";
 }
 
-async function checkPortableDeclarations(root: string, indexed = false): Promise<Diagnostic[]> {
+export async function checkPortableDeclarations(root: string, indexed = false): Promise<Diagnostic[]> {
   const diagnostics: Diagnostic[] = [];
   const read = async (file: string) => {
     if (indexed) {

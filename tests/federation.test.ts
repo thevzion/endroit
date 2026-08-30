@@ -133,6 +133,9 @@ describe("owner-scoped Workplace federation", () => {
     ]);
 
     const bytes = (await Promise.all((await filesBelow(fixtures)).map((path) => readFile(path, "utf8")))).join("\n").toLowerCase();
-    for (const forbidden of ["private-company-sentinel", "private-user-sentinel", "/users/"]) expect(bytes).not.toContain(forbidden);
+    const identities = [...bytes.matchAll(/workplace:\/\/[a-z0-9/_-]+/g)].map(([ref]) => ref);
+    expect(identities.length > 0).toBe(true);
+    expect(identities.filter((ref) => !/^workplace:\/\/(?:fixture\/(?:anchor|peer|restricted)(?:\/|$)|endroit\/equipment\/core$|profiles\/endroit-standard$)/.test(ref))).toEqual([]);
+    for (const forbidden of ["/users/", "/home/", "customer-secret.example", "private-account.example"]) expect(bytes).not.toContain(forbidden);
   });
 });

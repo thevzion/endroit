@@ -1,4 +1,4 @@
-import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { isAlias, isNode, parseDocument, visit } from "yaml";
 import type {
@@ -1360,8 +1360,19 @@ async function providerPathsFor(mount: string, provider?: string): Promise<strin
   return candidates.map((candidate) => join(mount, ".endroit/providers", candidate));
 }
 
-export async function compileWorkplaceMount(options: { mount: string; entryPath?: string; provider?: string; profilePath?: string }): Promise<CompileResult> {
+export async function compileWorkplaceMount(options: { mount: string; entryPath?: string; provider?: string; profilePath?: string; preservePortable?: boolean; verifyLocal?: boolean }): Promise<CompileResult> {
+  if (options.verifyLocal && !options.preservePortable) fail("Local verification requires portable preservation");
   const root = resolve(options.mount);
+  const assertLocalPath = async (path: string): Promise<void> => {
+    if (path.startsWith("/") || path.includes("\\") || path.includes(":") || path.split("/").some((part) => !part || part === "." || part === "..") || (!isLocalProjection(path) && !path.startsWith(".endroit/"))) fail(`Unsafe local projection path: ${path}`);
+    let cursor = root;
+    for (const part of path.split("/")) {
+      cursor = join(cursor, part);
+      const info = await lstat(cursor).catch((error) => error instanceof Error && error.message.includes("ENOENT") ? undefined : Promise.reject(error));
+      if (info?.isSymbolicLink()) fail(`Local projection path is linked: ${cursor}`);
+    }
+  };
+  if (options.preservePortable) await assertLocalPath(".endroit/projection-manifest.json");
   await requireIgnoreContract(root);
   const conventionalEntry = join(root, ".endroit/entry.json");
   const entryPath = options.entryPath ? resolve(root, options.entryPath) : await exists(conventionalEntry) ? conventionalEntry : undefined;
@@ -1372,6 +1383,9 @@ export async function compileWorkplaceMount(options: { mount: string; entryPath?
     ...(entryPath ? { entryPath } : {}),
     ...(providerPaths.length > 0 ? { providerPaths } : {}),
   });
+  if (options.verifyLocal) for (const tool of input.provider?.tools ?? []) {
+    if (tool.command && !await exists(tool.command[0]!)) fail(`Bound tool command is unavailable: ${tool.trait}`);
+  }
   const temp = join(dirname(root), `.${basename(root)}.compile-${process.pid}-${crypto.randomUUID()}`);
   const compiled = await compileStaticWorkplace(input, { outDir: temp, ownedSourcePrefix: "sources" });
   try {
@@ -1384,6 +1398,8 @@ export async function compileWorkplaceMount(options: { mount: string; entryPath?
       selected.set(path, await readFile(join(temp, path), "utf8"));
     }
     for (const [path, content] of selected) {
+      if (options.preservePortable && path.startsWith("workplace/")) continue;
+      if (options.preservePortable) await assertLocalPath(path);
       if (!await exists(join(root, path))) continue;
       const existing = await readFile(join(root, path), "utf8");
       if (path === "workplace/WORKPLACE.md" && !existing.includes("endroit-projection: portable")) {
@@ -1404,6 +1420,13 @@ export async function compileWorkplaceMount(options: { mount: string; entryPath?
       if (adjacent) for (const path of ["FRONTDOOR.md", "AGENTS.md", "CLAUDE.md"]) {
         const content = selected.get(path);
         if (content) selected.set(path, `${content.trimEnd()}\n\n${adjacent}`);
+      }
+    }
+
+    if (await exists(join(root, ".endroit/site-route-bindings.json"))) {
+      for (const path of ["FRONTDOOR.md", "AGENTS.md", "CLAUDE.md"]) {
+        const content = selected.get(path);
+        if (content) selected.set(path, `${content.trimEnd()}\n\n## Local Site Routes\n\n[Route Bindings](.endroit/site-route-bindings.json) give each Site/Route's exact local Mount, realpath and Git directory. A Binding is an address, not readiness or authority.\n`);
       }
     }
 
@@ -1432,12 +1455,24 @@ export async function compileWorkplaceMount(options: { mount: string; entryPath?
       .map(([path, content]) => ({ path, digest: hash(content) }));
     selected.set(localManifestPath, stable(localManifest));
 
+    if (options.preservePortable) {
+      for (const path of selected.keys()) if (path.startsWith("workplace/")) selected.delete(path);
+      for (const path of [...selected.keys(), ...previousLocal.files.map((item) => item.path)]) {
+        if (path.startsWith("workplace/")) continue;
+        await assertLocalPath(path);
+      }
+    }
+    const current = new Set(localManifest.files.map((item) => item.path));
+    if (options.verifyLocal) {
+      for (const [path, content] of selected) if (await readFile(join(root, path), "utf8") !== content) fail(`Current local projection differs: ${path}`);
+      for (const item of previousLocal.files) if (!current.has(item.path) && !item.path.startsWith("workplace/")) fail(`Obsolete local projection: ${item.path}`);
+      return { ...compiled, root, files: [...selected.keys()].sort() };
+    }
     for (const [path, content] of [...selected.entries()].sort(([a], [b]) => a.localeCompare(b))) {
       await atomicWrite(root, path, content);
     }
-    const current = new Set(localManifest.files.map((item) => item.path));
     for (const item of previousLocal.files) {
-      if (!current.has(item.path)) await rm(join(root, item.path), { force: true, recursive: false });
+      if (!current.has(item.path) && !(options.preservePortable && item.path.startsWith("workplace/"))) await rm(join(root, item.path), { force: true, recursive: false });
     }
     return { ...compiled, root, files: [...selected.keys()].sort() };
   } finally {

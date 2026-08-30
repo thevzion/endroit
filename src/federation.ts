@@ -1,4 +1,4 @@
-import { mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, rename, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 
 const REF = /^workplace:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
@@ -249,10 +249,28 @@ export async function resolveWorkplaceMount(anchorMount: string, target: string,
 
 export async function enterWorkplace(options: { anchorMount: string; target: string; localPath?: string; provider?: string; profilePath?: string }) {
   const registry = await deriveWorkplaceRegistry(options.anchorMount, options.localPath);
-  const resolved = await resolveWorkplaceMount(options.anchorMount, options.target, options.localPath);
+  const resolved = options.target === registry.anchor
+    ? { mount: resolve(options.anchorMount), realpath: await realpath(options.anchorMount) }
+    : await resolveWorkplaceMount(options.anchorMount, options.target, options.localPath);
   const compiler = await import("./compiler/index.ts");
   const check = await compiler.checkWorkplaceMount({ mount: resolved.realpath, ...(options.provider ? { provider: options.provider } : {}), ...(options.profilePath ? { profilePath: options.profilePath } : {}) });
-  if (check.compileStatus !== "valid" || check.operationStatus !== "ready") throw new FederationError("compile-required", `${options.target} is not ready; run endroit ready ${resolved.mount}`);
+  let entryMode: "ready" | "preserved-local" = "ready";
+  if (check.compileStatus !== "valid" || check.operationStatus !== "ready") {
+    try {
+      const receiptPath = join(resolved.realpath, ".endroit/checkpoint-setup.json");
+      const info = await lstat(receiptPath);
+      if (!info.isFile() || info.isSymbolicLink()) throw new Error("Recovery Receipt must be physical");
+      const receipt = object(await optionalJson(receiptPath), "Checkpoint setup Receipt");
+      const checkpoint = object(receipt.checkpoint, "Checkpoint Receipt");
+      if (receipt.kind !== "WorkplaceCheckpointSetupReceipt" || receipt.version !== 1 || receipt.mount !== resolved.realpath || !receipt.member || checkpoint.status !== "restored-equivalent") throw new Error("No bound preserved restoration");
+      const git = await (await import("./compiler/git-witness.ts")).checkMountGit(resolved.realpath);
+      if (git.status === "invalid") throw new Error("Git witness is invalid");
+      await compiler.compileWorkplaceMount({ mount: resolved.realpath, preservePortable: true, verifyLocal: true, ...(options.provider ? { provider: options.provider } : {}), ...(options.profilePath ? { profilePath: options.profilePath } : {}) });
+      entryMode = "preserved-local";
+    } catch (error) {
+      throw new FederationError("compile-required", `${options.target} has no verified current local entry: ${error instanceof Error ? error.message : String(error)}`);
+    }
+  }
   const entryPath = join(resolved.realpath, ".endroit/entry.json");
   const entry = object(await optionalJson(entryPath), "EntryBinding");
   const member = semanticRef(entry.member, "EntryBinding.member");
@@ -260,6 +278,7 @@ export async function enterWorkplace(options: { anchorMount: string; target: str
   return {
     kind: "EnteredWorkplace" as const,
     status: "entered" as const,
+    entryMode,
     anchor: registry.anchor,
     workplace: options.target,
     mount: resolved.mount,

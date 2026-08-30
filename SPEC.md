@@ -251,6 +251,35 @@ missing. Missing/altered hooks are `degraded`; `ready` repairs only marked or
 manifest-owned hooks and never masks invalid history. Hooks are bypassable Git
 ergonomics, not a security boundary.
 
+### Exact checkpoint setup and local entry
+
+`setup --checkpoint <immutable-id|package> --to <absent-mount> --as <member>`
+composes the existing fetch/restore and Recovery engines. Context selects only
+its declared ContinuityDescriptor; cold `--checkpoint-from` resolves one closed
+Fetch Request from a local file or exact Git ref/path. No scan, implicit origin,
+mutable latest, capture or push. The shared Root has logical path `workplace`;
+Site worktrees retain `checkouts/sites/<site>/<route>`. Identity, portable
+operational declarations, Member and Recovery closure are checked in staging
+before installation. Checkpoint-covered Routes are not recloned or reset.
+
+After restore, only local Bindings and projections are created for the captured
+Root. The compiler uses its normal renderer with portable writes and cleanup
+disabled; no hook repair or implicit `ready` may change its captured Git state.
+Clean managed peers use normal setup. The portable fingerprint is verified
+after local setup. Receipt replay rechecks the exact checkpoint, declaration
+closure and peer readiness without mutation; foreign targets or divergence are
+refused. Cleanup owns only a newly created destination.
+
+Physical `restored-equivalent`, semantic readiness and entry admissibility are
+separate observations. `workplace enter` supports the Anchor itself or a bound
+peer. A recovered Root can enter with `entryMode: preserved-local` despite stale
+portable projections only when its bound Receipt, non-invalid Git witness and
+every current local renderer output verify. It rechecks source, Member,
+Provider and adjacency dependencies without writing the Mount; changed local
+outputs or invalid sources fail closed. This mode leaves `check` degraded or
+compile-required and does not grant missing authority or claim repaired Git
+guards. Ordinary targets retain `entryMode: ready`.
+
 ## Settle
 
 Settle inventories consequential Meeting Matters and deterministically routes

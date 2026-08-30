@@ -1,16 +1,16 @@
-import { cp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
-import { resolve } from "node:path";
+import { cp, mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join, resolve } from "node:path";
 import { readyWorkplace, resolveMeeting, stable, writeMeetingPresence } from "../../src/compiler/index.ts";
 import { loadProfilePackage } from "../../src/compiler/profile-package.ts";
 
 const fixture = resolve(import.meta.dir, "world");
 const profile = resolve(import.meta.dir, "../../profiles/standard/profile.json");
-const mount = resolve("/tmp/endroit-flappy-manual");
+const mount = await mkdtemp(join(tmpdir(), "endroit-flappy-manual-"));
 const sharedRoot = resolve(mount, "workplace");
 const desk = resolve(mount, "checkouts/desks/alexis");
 const site = resolve(mount, "checkouts/sites/flappy-bird");
 
-await rm(mount, { recursive: true, force: true });
 await cp(fixture, mount, { recursive: true });
 await rm(resolve(mount, ".endroit"), { recursive: true, force: true });
 await rm(resolve(mount, ".agents"), { recursive: true, force: true });

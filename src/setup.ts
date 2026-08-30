@@ -1,6 +1,6 @@
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
-import { hash, readyWorkplace, stable, type EntryBinding, type ProviderBinding } from "./compiler/index.ts";
+import { checkWorkplaceMount, compileWorkplaceMount, hash, readyWorkplace, stable, type CheckResult, type EntryBinding, type ProviderBinding } from "./compiler/index.ts";
 import {
   readWorkplaceFederationState,
   resolveDeclaredWorkplaceMount,
@@ -47,8 +47,9 @@ export type WorkplaceSetupReceipt = {
   version: 1;
   plan: string;
   anchor: string;
-  status: "ready" | "partial";
-  targets: Array<{ workplace: string; relation: "link" | "attachment"; required: boolean; status: "cloned" | "adopted" | "unchanged" | "unavailable" }>;
+  status: "ready" | "partial" | "degraded";
+  check?: CheckResult;
+  targets: Array<{ workplace: string; relation: "link" | "attachment"; required: boolean; status: "cloned" | "adopted" | "unchanged" | "unavailable"; check?: CheckResult }>;
 };
 
 export class SetupError extends Error {
@@ -259,6 +260,19 @@ async function ensureExact(path: string, value: unknown): Promise<boolean> {
   return true;
 }
 
+export async function ensureSetupIgnore(mount: string): Promise<boolean> {
+  return ensureExact(join(mount, ".gitignore"), IGNORE);
+}
+
+export async function reconcilePreservedMount(mount: string): Promise<CheckResult> {
+  try { await compileWorkplaceMount({ mount, preservePortable: true }); }
+  catch (error) {
+    const check = await checkWorkplaceMount({ mount });
+    return { ...check, operationStatus: "degraded", diagnostics: [...check.diagnostics, { severity: "error", code: "local-projection-unavailable", subject: mount, message: error instanceof Error ? error.message : String(error) }] };
+  }
+  return checkWorkplaceMount({ mount });
+}
+
 async function bindAndReady(target: WorkplaceSetupPlan["targets"][number], mount: string): Promise<string[]> {
   if (await targetIdentity(mount) !== target.workplace) fail("setup-unavailable", `${target.workplace} Binding resolves to another Workplace`);
   if (git(join(mount, "workplace"), ["status", "--porcelain"])) fail("setup-unavailable", `${target.workplace} Workplace Root is dirty; checkpoint it before setup`);
@@ -302,7 +316,7 @@ async function cloneTarget(target: WorkplaceSetupPlan["targets"][number]): Promi
   }
 }
 
-export async function applyWorkplaceSetup(plan: WorkplaceSetupPlan, expectedRevision: string, options: { afterApply?: (receipt: WorkplaceSetupReceipt) => Promise<void> } = {}): Promise<WorkplaceSetupReceipt> {
+export async function applyWorkplaceSetup(plan: WorkplaceSetupPlan, expectedRevision: string, options: { afterApply?: (receipt: WorkplaceSetupReceipt) => Promise<void>; preservePortable?: boolean } = {}): Promise<WorkplaceSetupReceipt> {
   if (expectedRevision !== plan.revision) fail("setup-digest-mismatch", `Preview digest mismatch: expected current ${plan.revision}`);
   const state = await readWorkplaceFederationState(plan.anchorMount, plan.localPath);
   if (state.anchor !== plan.anchor) fail("invalid-setup-request", `Plan Anchor ${plan.anchor} no longer matches ${state.anchor}`);
@@ -327,6 +341,7 @@ export async function applyWorkplaceSetup(plan: WorkplaceSetupPlan, expectedRevi
           touchedExisting.push({ target, created });
           results.push({ workplace: target.workplace, relation: target.relation, required: target.required, status: target.action === "adopt" ? "adopted" : created.length > 0 ? "adopted" : "unchanged" });
         }
+        if (options.preservePortable) results.at(-1)!.check = await checkWorkplaceMount({ mount: target.resolvedMount });
         successful.push(target);
       } catch (error) {
         if (target.required) throw error;
@@ -340,21 +355,21 @@ export async function applyWorkplaceSetup(plan: WorkplaceSetupPlan, expectedRevi
       await writeWorkplaceLocalBindings(plan.anchorMount, local, plan.localPath);
       localWritten = true;
     }
-    const ready = await readyWorkplace({ start: plan.anchorMount });
-    if (ready.check.operationStatus !== "ready") fail("setup-unavailable", `Anchor is not ready: ${ready.check.requiredAction ?? "unknown reason"}`);
-    const receipt: WorkplaceSetupReceipt = { kind: "WorkplaceSetupReceipt", version: 1, plan: plan.revision, anchor: plan.anchor, status: results.some((target) => target.status === "unavailable") ? "partial" : "ready", targets: results.sort((a, b) => a.workplace.localeCompare(b.workplace)) };
+    const check = options.preservePortable ? await reconcilePreservedMount(plan.anchorMount) : (await readyWorkplace({ start: plan.anchorMount })).check;
+    if (!options.preservePortable && check.operationStatus !== "ready") fail("setup-unavailable", `Anchor is not ready: ${check.requiredAction ?? "unknown reason"}`);
+    const receipt: WorkplaceSetupReceipt = { kind: "WorkplaceSetupReceipt", version: 1, plan: plan.revision, anchor: plan.anchor, status: results.some((target) => target.status === "unavailable") ? "partial" : check.operationStatus === "ready" && results.every((target) => !target.check || target.check.operationStatus === "ready") ? "ready" : "degraded", ...(options.preservePortable ? { check } : {}), targets: results.sort((a, b) => a.workplace.localeCompare(b.workplace)) };
     await options.afterApply?.(receipt);
     return receipt;
   } catch (error) {
     if (localWritten) {
       if (previousLocal === undefined) await rm(state.localPath, { recursive: false, force: true });
       else await writeFile(state.localPath, previousLocal);
-      await readyWorkplace({ start: plan.anchorMount }).catch(() => undefined);
+      if (!options.preservePortable) await readyWorkplace({ start: plan.anchorMount }).catch(() => undefined);
     }
     for (const path of createdMounts.reverse()) await rm(path, { recursive: true, force: true });
     for (const touched of touchedExisting.reverse()) {
       for (const path of touched.created.reverse()) await rm(path, { recursive: false, force: true });
-      await readyWorkplace({ start: touched.target.resolvedMount }).catch(() => undefined);
+      if (!options.preservePortable) await readyWorkplace({ start: touched.target.resolvedMount }).catch(() => undefined);
     }
     throw error;
   }

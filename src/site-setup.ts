@@ -354,6 +354,30 @@ async function writeSiteRouteBindingRegistry(workplaceMount: string, registry: S
   }
 }
 
+// A verified checkpoint, not a Product Remote, owns these possibly dirty revisions.
+export async function bindRestoredSiteRoutes(workplaceMount: string, routes: Array<{ site: string; route: string }>): Promise<SiteRouteBindingRegistry> {
+  const mount = await realpath(workplaceMount);
+  const workplace = await workplaceIdentity(mount);
+  const registry = await loadSiteRouteBindingRegistry(mount, workplace);
+  const bindings = new Map(registry.bindings.map((entry) => [bindingKey(entry.site, entry.route), entry]));
+  for (const route of routes) {
+    const site = id(route.site, "Restored Site"); const routeId = id(route.route, "Restored Route");
+    const path = join(mount, "checkouts/sites", site, routeId);
+    await assertFamily(mount, join(mount, "checkouts/sites"), [{ id: site, routes: [{ id: routeId }] }]);
+    const pointer = await lstat(join(path, ".git"));
+    if (!pointer.isFile() || pointer.isSymbolicLink()) fail("site-route-collision", `${path} must be a restored Git worktree`);
+    const commonGitDir = await realpath(resolve(path, git(path, ["rev-parse", "--git-common-dir"])));
+    if (!inside(join(mount, ".git-repositories"), commonGitDir)) fail("site-route-collision", `${path} points outside restored repositories`);
+    const binding: SiteRouteBinding = { mount: path, realpath: await realpath(path), commonGitDir, kind: "worktree" };
+    const key = bindingKey(site, routeId); const previous = bindings.get(key);
+    if (previous && stable(previous.binding) !== stable(binding)) fail("site-route-collision", `${key} already has another Binding`);
+    bindings.set(key, { site, route: routeId, binding });
+  }
+  const result = { ...registry, bindings: [...bindings.values()] };
+  await writeSiteRouteBindingRegistry(mount, result);
+  return result;
+}
+
 export async function removeSiteRouteBinding(workplaceMount: string, siteValue: string, routeValue: string, expected?: SiteRouteBinding): Promise<SiteRouteBinding> {
   const workplace = await workplaceIdentity(resolve(workplaceMount)); const site = id(siteValue, "site"); const route = id(routeValue, "route");
   const registry = await loadSiteRouteBindingRegistry(workplaceMount, workplace); const key = bindingKey(site, route);

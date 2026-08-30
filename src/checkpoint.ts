@@ -801,7 +801,7 @@ export async function verifyRestoredCheckpoint(checkpoint: string, targetPath: s
   return { path: target, receipt: receipt("restore", "restored-equivalent", verified.manifest) };
 }
 
-export async function restoreCheckpoint(checkpoint: string, targetPath: string): Promise<{ path: string; receipt: CheckpointReceipt }> {
+export async function restoreCheckpoint(checkpoint: string, targetPath: string, options: { beforeInstall?: (staging: string) => Promise<void> } = {}): Promise<{ path: string; receipt: CheckpointReceipt }> {
   const verified = await verifyCheckpoint(checkpoint);
   const target = resolve(targetPath);
   if (await exists(target)) fail("checkpoint-target-exists", `${target} already exists`);
@@ -854,6 +854,8 @@ export async function restoreCheckpoint(checkpoint: string, targetPath: string):
       }
     }
     await assertRestoredEquivalent(verified.manifest, temporary);
+    await options.beforeInstall?.(temporary);
+    if (await exists(final)) fail("checkpoint-target-exists", `${final} appeared before installation`);
     await rebaseWorktreePointers(verified.manifest, temporary, final);
     await rename(temporary, final);
     try {

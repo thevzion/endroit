@@ -331,31 +331,34 @@ function requiredMissing(status: RootContinuityStatus, workplace: string): strin
   return status.missing.filter((item) => item.requirement === "required" && item.workplace === workplace).map((item) => item.checkpointId);
 }
 
-export async function planRootSetup(options: { start?: string; from?: string; with?: string; as?: string; fetchContinuity?: boolean } = {}): Promise<{ mount: string; recovery: RecoverySource; plan: WorkplaceRecoveryPlan; remember: boolean; continuity: RootContinuityStatus }> {
+export async function planRootSetup(options: { start?: string; from?: string; with?: string; as?: string; fetchContinuity?: boolean; preservePortable?: true; restoredRoutes?: string[] } = {}): Promise<{ mount: string; recovery: RecoverySource; plan: WorkplaceRecoveryPlan; remember: boolean; continuity: RootContinuityStatus }> {
   if (options.from && options.with) fail("invalid-bootstrap-ref", "setup accepts either --from or --with, not both");
   const mount = await resolveWorkplaceRoot(options.start);
   const recovery = await selectRecoveryRequest(mount, options.with ?? options.from);
   const selected = options.as ? requestedPosition(recovery.request.anchor, options.as) : { position: recovery.request.position };
   const request = { ...recovery.request, position: selected.position };
   if (options.with) await assertLocalOverlay(mount, join(mount, ".endroit/recovery.json"));
-  const topology = await planWorkplaceRecovery({ ...request, checkpoints: [] }, { anchorMount: mount, requestDirectory: dirname(recovery.path) });
+  const preservation = { ...(options.preservePortable ? { preservePortable: true as const } : {}), ...(options.restoredRoutes ? { restoredRoutes: options.restoredRoutes } : {}) };
+  const topology = await planWorkplaceRecovery({ ...request, checkpoints: [] }, { anchorMount: mount, requestDirectory: dirname(recovery.path), ...preservation });
   const continuity = await prepareContinuity(topology, request, { fetch: options.fetchContinuity, ...(selected.slug ? { memberSlug: selected.slug } : {}) });
   const initial = await planWorkplaceRecovery(continuity.request, {
     anchorMount: mount,
     requestDirectory: dirname(recovery.path),
+    ...preservation,
     ...(continuity.status.status === "blocked" ? { positionBlock: { reason: "required-continuity" as const, checkpoints: requiredMissing(continuity.status, request.position.workplace) } } : {}),
   });
   const adoption = await adoptionOptions(mount, initial, selected.slug);
   const plan = adoption.anchorAdoption || adoption.members ? await planWorkplaceRecovery(continuity.request, {
     anchorMount: mount,
     requestDirectory: dirname(recovery.path),
+    ...preservation,
     ...(continuity.status.status === "blocked" ? { positionBlock: { reason: "required-continuity" as const, checkpoints: requiredMissing(continuity.status, request.position.workplace) } } : {}),
     ...adoption,
   }) : initial;
   return { mount, recovery: { ...recovery, request }, plan, remember: Boolean(options.with), continuity: continuity.status };
 }
 
-export async function setupFromRoot(options: { start?: string; from?: string; with?: string; as?: string } = {}): Promise<RootSetupResult> {
+export async function setupFromRoot(options: { start?: string; from?: string; with?: string; as?: string; preservePortable?: true; restoredRoutes?: string[] } = {}): Promise<RootSetupResult> {
   let bootstrap: Awaited<ReturnType<typeof resolveBootstrapRef>> | undefined;
   let staged: StagedBootstrapPackage | undefined;
   try {

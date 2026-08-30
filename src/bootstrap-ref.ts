@@ -112,10 +112,10 @@ function treeEntries(repository: string, oid: string, path: string): Array<{ pat
   return records.length ? records : undefined;
 }
 
-async function extractClosure(repository: string, oid: string, recoveryPath: string, root: string): Promise<void> {
+async function extractClosure(repository: string, oid: string, recoveryPath: string, root: string, singleFile = false): Promise<void> {
   const recovery = runRaw(["-C", repository, "show", `${oid}:${recoveryPath}`], dirname(repository), true);
   if (recovery.status !== 0) fail("bootstrap-ref-unavailable", `${recoveryPath} is unavailable in the fetched commit`);
-  const declared = declaredClosure(recoveryPath, recovery.stdout);
+  const declared = singleFile ? [{ path: recoveryPath, required: true }] : declaredClosure(recoveryPath, recovery.stdout);
   const files = new Map<string, Uint8Array>();
   for (const item of declared) {
     const entries = treeEntries(repository, oid, item.path);
@@ -135,7 +135,7 @@ async function extractClosure(repository: string, oid: string, recoveryPath: str
   }
 }
 
-export async function resolveBootstrapRef(value: string): Promise<ResolvedBootstrapRef> {
+export async function resolveBootstrapRef(value: string, options: { singleFile?: boolean } = {}): Promise<ResolvedBootstrapRef> {
   const source = parse(value);
   const temporary = await mkdtemp(join(tmpdir(), "endroit-bootstrap-ref-"));
   const repository = join(temporary, "repository");
@@ -145,7 +145,7 @@ export async function resolveBootstrapRef(value: string): Promise<ResolvedBootst
     run(["-C", repository, "fetch", "-q", "--depth=1", "--no-tags", source.locator, source.ref], temporary);
     const oid = run(["-C", repository, "rev-parse", "--verify", "FETCH_HEAD^{commit}"], temporary);
     await mkdir(checkout, { recursive: false });
-    await extractClosure(repository, oid, source.path, checkout);
+    await extractClosure(repository, oid, source.path, checkout, options.singleFile);
     const canonicalCheckout = await realpath(checkout);
     const recoveryPath = resolve(canonicalCheckout, source.path);
     const info = await lstat(recoveryPath).catch(() => fail("bootstrap-ref-unavailable", `${source.path} is unavailable at ${source.ref}`));

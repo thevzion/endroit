@@ -2,8 +2,9 @@
 
 Status: **historical run changes-needed; v7 awaiting a new human verdict**
 
-This guide creates a disposable Workplace and sovereign Site under
-`/tmp/endroit-flappy-manual`. It runs no provider automatically and performs
+This guide creates a disposable Workplace and sovereign Site in a unique native
+temporary directory. Use the exact `mount` printed by the command below wherever
+this guide says `<mount>`; an earlier run is never overwritten. It runs no provider automatically and performs
 no publication or delivery.
 
 ## 0. Verify the checkout
@@ -26,9 +27,9 @@ bun run example:reset
 
 The reset:
 
-- copies the frozen Mount to `/tmp/endroit-flappy-manual`;
-- keeps the shared Root at `/tmp/endroit-flappy-manual/workplace` and the
-  product Site at `/tmp/endroit-flappy-manual/checkouts/sites/flappy-bird`;
+- copies the frozen Mount to a new `<mount>`;
+- keeps the shared Root at `<mount>/workplace` and the
+  product Site at `<mount>/checkouts/sites/flappy-bird`;
 - binds Alexis and the Demo Desk locally;
 - runs `ready`;
 - commits owned Workplace sources, portable projections and the Site seed in
@@ -42,9 +43,9 @@ evidence.
 Confirm:
 
 ```sh
-bun src/cli.ts check --mount /tmp/endroit-flappy-manual --provider codex --json
-git -C /tmp/endroit-flappy-manual/workplace status --short
-git -C /tmp/endroit-flappy-manual/checkouts/sites/flappy-bird status --short
+bun src/cli.ts check --mount <mount> --provider codex --json
+git -C <mount>/workplace status --short
+git -C <mount>/checkouts/sites/flappy-bird status --short
 ```
 
 Inspect, in order:
@@ -63,7 +64,7 @@ Study must appear only after entering the Product Room.
 
 ## 2. Requalify the profile-routing defect first
 
-Start one fresh Codex task in `/tmp/endroit-flappy-manual`. Give only:
+Start one fresh Codex task in `<mount>`. Give only:
 
 > Modifie mon profil pour que nos échanges soient en français et avec de
 > l’humour.
@@ -116,7 +117,7 @@ changes-needed`, then reset again.
 
 ## 4. Give one fresh Agent the Flappy intent
 
-Start the Agent in `/tmp/endroit-flappy-manual`. Do not attach or
+Start the Agent in `<mount>`. Do not attach or
 mention this repository’s `qualification/` directory. Give only:
 
 > Crée un Flappy Bird jouable avec un twist, minimal mais poli. Prends en

@@ -4,7 +4,7 @@ import { hash, stable } from "./compiler/index.ts";
 import { inspectCheckpoint, restoreCheckpoint, verifyCheckpoint, verifyRestoredCheckpoint, type CheckpointManifest } from "./checkpoint.ts";
 import { parseContinuityDescriptor, type ContinuityPolicy } from "./checkpoint-store.ts";
 import { rememberCurrentMembers, resolveCurrentMember, verifyCurrentMemberSources, type CurrentMemberResolution } from "./current-member.ts";
-import { applySiteRouteSetup, planSiteRouteSetup, removeSiteRouteBinding, type SiteRouteSetupPlan, type SiteRouteSetupReceipt } from "./site-setup.ts";
+import { applySiteRouteSetup, parseSiteRouteSetupRequest, planSiteRouteSetup, removeSiteRouteBinding, type SiteRouteSetupPlan, type SiteRouteSetupReceipt } from "./site-setup.ts";
 import { applyWorkplaceSetup, planWorkplaceSetup, type WorkplaceSetupPlan, type WorkplaceSetupReceipt } from "./setup.ts";
 
 const REF = /^workplace:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
@@ -58,6 +58,8 @@ export type WorkplaceRecoveryPlan = {
   positionBlock?: { reason: "required-continuity"; checkpoints: string[] };
   anchorAdoption?: { action: "create"; entry: AnchorEntry };
   members?: RecoveryMember[];
+  preservePortable?: true;
+  restoredRoutes?: string[];
 };
 
 export type WorkplaceRecoveryReceipt = {
@@ -65,7 +67,7 @@ export type WorkplaceRecoveryReceipt = {
   version: 1;
   plan: string;
   anchor: string;
-  status: "ready" | "pending-member" | "blocked-continuity";
+  status: "ready" | "pending-member" | "blocked-continuity" | "degraded";
   setup: WorkplaceSetupReceipt;
   sites: SiteRouteSetupReceipt[];
   continuity?: Array<{ workplace: string; target: string; status: "created" | "unchanged" }>;
@@ -298,7 +300,7 @@ function recoveryMount(plan: WorkplaceRecoveryPlan, workplace: string): string {
     : plan.setup.plan.targets.find((target) => target.workplace === workplace)?.resolvedMount ?? fail("recovery-unavailable", `${workplace} has no Mount`);
 }
 
-export async function planWorkplaceRecovery(value: unknown, options: { anchorMount: string; requestDirectory?: string; localPath?: string; positionBlock?: { reason: "required-continuity"; checkpoints: string[] }; anchorAdoption?: { action: "create"; entry: AnchorEntry }; members?: RecoveryMember[] }): Promise<WorkplaceRecoveryPlan> {
+export async function planWorkplaceRecovery(value: unknown, options: { anchorMount: string; requestDirectory?: string; localPath?: string; positionBlock?: { reason: "required-continuity"; checkpoints: string[] }; anchorAdoption?: { action: "create"; entry: AnchorEntry }; members?: RecoveryMember[]; preservePortable?: true; restoredRoutes?: string[] }): Promise<WorkplaceRecoveryPlan> {
   const requestDirectory = resolve(options.requestDirectory ?? process.cwd());
   const request = normalizeWorkplaceRecoveryRequest(value, requestDirectory);
   const setupSource = JSON.parse(await readFile(request.setup, "utf8")) as unknown;
@@ -310,8 +312,15 @@ export async function planWorkplaceRecovery(value: unknown, options: { anchorMou
     const workplaceMount = mounts.get(site.workplace);
     const setupTarget = setupPlan.targets.find((target) => target.workplace === site.workplace);
     if (!workplaceMount || setupTarget && !setupTarget.required) fail("invalid-recovery-request", `${site.workplace} must be the Anchor or a required setup target`);
-    const source = JSON.parse(await readFile(site.request, "utf8")) as unknown;
-    const plan = await planSiteRouteSetup(source, { workplaceMount, requestDirectory: dirname(site.request), allowAbsentMount: true });
+    const parsed = parseSiteRouteSetupRequest(JSON.parse(await readFile(site.request, "utf8")) as unknown, dirname(site.request));
+    let plan = await planSiteRouteSetup(parsed, { workplaceMount, requestDirectory: dirname(site.request), allowAbsentMount: true });
+    if (options.restoredRoutes?.length) {
+      const { revision: _revision, ...preview } = plan;
+      const remaining = plan.sites.map((product) => ({ ...product, routes: product.routes.filter((route) => !options.restoredRoutes!.includes(`${site.workplace}/${product.id}/${route.id}`)) })).filter((product) => product.routes.length > 0);
+      for (const product of remaining) for (const route of product.routes) if (route.physical.kind === "worktree" && options.restoredRoutes.includes(`${site.workplace}/${product.id}/${route.physical.sourceRoute}`)) fail("invalid-recovery-request", "A new worktree must not mutate a checkpoint-covered repository");
+      const filtered = { ...preview, sites: remaining };
+      plan = { ...filtered, revision: hash(stable(filtered)) };
+    }
     if (plan.workplace !== site.workplace) fail("invalid-recovery-request", `${site.request} does not target ${site.workplace}`);
     return { workplace: site.workplace, path: site.request, plan };
   }));
@@ -372,6 +381,8 @@ export async function planWorkplaceRecovery(value: unknown, options: { anchorMou
     ...(options.positionBlock ? { positionBlock: { reason: options.positionBlock.reason, checkpoints: [...options.positionBlock.checkpoints].sort() } } : {}),
     ...(options.anchorAdoption ? { anchorAdoption: options.anchorAdoption } : {}),
     ...(options.members?.length ? { members: [...options.members].sort((a, b) => a.workplace.localeCompare(b.workplace)) } : {}),
+    ...(options.preservePortable ? { preservePortable: true as const } : {}),
+    ...(options.restoredRoutes?.length ? { restoredRoutes: [...options.restoredRoutes].sort() } : {}),
   };
   return { ...preview, revision: hash(stable(preview)) };
 }
@@ -447,8 +458,9 @@ export async function applyWorkplaceRecovery(plan: WorkplaceRecoveryPlan, expect
     const continuityCreated: string[] = [];
     let position: WorkplaceRecoveryReceipt["position"] | undefined;
     const setup = await applyWorkplaceSetup(plan.setup.plan, plan.setup.plan.revision, {
+    preservePortable: plan.preservePortable,
     afterApply: async (setupReceipt) => {
-      if (setupReceipt.status !== "ready") fail("recovery-unavailable", "Workplace setup did not reach ready");
+      if (setupReceipt.status !== "ready" && !plan.preservePortable) fail("recovery-unavailable", "Workplace setup did not reach ready");
       try {
         for (const descriptor of plan.continuity ?? []) {
           if (await exists(descriptor.target)) {
@@ -480,6 +492,7 @@ export async function applyWorkplaceRecovery(plan: WorkplaceRecoveryPlan, expect
         } else if (currentPosition.status === "resolved") {
           position = await verifyPosition(plan, currentPosition);
           const requested = [...(plan.members ?? []), ...(currentPosition.source === "request" ? [{ workplace: currentPosition.workplace, member: currentPosition.member, desk: currentPosition.desk }] : [])]
+            .filter((entry) => !plan.preservePortable || !setupReceipt.targets.some((target) => target.workplace === entry.workplace && target.status === "unavailable"))
             .filter((entry, index, entries) => entries.findIndex((candidate) => candidate.workplace === entry.workplace) === index);
           for (const entry of requested) await verifyCurrentMemberSources({ workplaceMount: recoveryMount(plan, entry.workplace), ...entry }).catch((error) => fail("recovery-position-mismatch", error instanceof Error ? error.message : String(error)));
           if (requested.length) await rememberCurrentMembers({ anchorMount: plan.anchorMount, anchor: plan.anchor, members: requested });
@@ -494,7 +507,7 @@ export async function applyWorkplaceRecovery(plan: WorkplaceRecoveryPlan, expect
     },
   });
     if (!position) fail("recovery-position-mismatch", "Position was not evaluated");
-    const status = position.status === "resolved" ? "ready" : position.status;
+    const status = position.status === "resolved" ? setup.status !== "ready" ? "degraded" : "ready" : position.status;
     return { kind: "WorkplaceRecoveryReceipt", version: 1, plan: plan.revision, anchor: plan.anchor, status, setup, sites: siteReceipts, ...(continuityReceipts.length ? { continuity: continuityReceipts } : {}), checkpoints: checkpointReceipts, position };
   } catch (error) {
     if (anchorAdopted) await rm(join(plan.anchorMount, ".endroit"), { recursive: true, force: true });

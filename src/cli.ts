@@ -25,6 +25,7 @@ import { CurrentMemberError } from "./current-member.ts";
 import { detachExternalSiteRoute, SiteRouteSetupError } from "./site-setup.ts";
 import { CheckpointStoreError, createLocalCheckpoint, fetchContinuityCheckpoint, loadContinuityDescriptor, pushContinuityCheckpoint, restoreContinuityCheckpoint } from "./checkpoint-store.ts";
 import { RootFacadeError, resolveWorkplaceRoot, setupFromRoot, statusFromRoot } from "./root-facade.ts";
+import { setupFromCheckpoint, type WorkplaceCheckpointSetupReceipt } from "./checkpoint-setup.ts";
 
 type Parsed = {
   values: Record<string, string>;
@@ -53,13 +54,17 @@ function parse(values: string[]): Parsed {
 
 function print(value: unknown, json: boolean): void {
   if (json) console.log(JSON.stringify(value, null, 2));
+  else if (typeof value === "object" && value && "kind" in value && value.kind === "WorkplaceCheckpointSetupReceipt") {
+    const receipt = value as WorkplaceCheckpointSetupReceipt;
+    console.log([`${receipt.status} · ${receipt.action}`, receipt.mount, receipt.checkpoint.checkpointId, receipt.checkpoint.status, ...(receipt.frontDoor ? [receipt.frontDoor] : []), ...(receipt.check.requiredAction ? [receipt.check.requiredAction] : [])].join("\n"));
+  }
   else if (typeof value === "object" && value && "kind" in value && value.kind === "WorkplaceRegistry") {
     const registry = value as unknown as { anchor: string; entries: Array<{ workplace: string; provenance: string[]; availability: string; state: string }> };
     console.log([registry.anchor, ...registry.entries.map((entry) => `${entry.workplace} · ${entry.provenance.join("+")} · ${entry.availability} · ${entry.state}`)].join("\n"));
   }
   else if (typeof value === "object" && value && "kind" in value && value.kind === "EnteredWorkplace") {
-    const entered = value as unknown as { workplace: string; member: string; desk: string; frontDoor: string };
-    console.log(`${entered.workplace} · entered\n${entered.member}\n${entered.desk}\n${entered.frontDoor}`);
+    const entered = value as unknown as { workplace: string; member: string; desk: string; frontDoor: string; entryMode: string };
+    console.log(`${entered.workplace} · entered · ${entered.entryMode}\n${entered.member}\n${entered.desk}\n${entered.frontDoor}`);
   }
   else if (typeof value === "object" && value && "kind" in value && value.kind === "NewWorkplaceResult") {
     const created = value as unknown as { mount: string; revision: string; check: { operationStatus: string } };
@@ -119,7 +124,14 @@ const options = parse(rest);
 
 try {
   if (command === "setup") {
-    print(await setupFromRoot({ start: process.cwd(), ...(options.values.from ? { from: options.values.from } : {}), ...(options.values.with ? { with: options.values.with } : {}), ...(options.values.as ? { as: options.values.as } : {}) }), options.flags.has("json"));
+    if (options.values.checkpoint) {
+      if (options.positionals.length || Object.keys(options.values).some((key) => !["checkpoint", "to", "as", "checkpoint-from", "from"].includes(key)) || [...options.flags].some((key) => key !== "json")) throw new Error("Unknown or incomplete checkpoint setup option");
+      if (!options.values.to || options.values.with) throw new Error("usage: endroit setup --checkpoint <id|package> --to <absent-mount> [--as <member>] [--checkpoint-from <fetch-request|git-ref>] [--from <recovery.json>] [--json]");
+      print(await setupFromCheckpoint({ checkpoint: options.values.checkpoint, to: options.values.to, start: process.cwd(), ...(options.values["checkpoint-from"] ? { checkpointFrom: options.values["checkpoint-from"] } : {}), ...(options.values.from ? { from: options.values.from } : {}), ...(options.values.as ? { as: options.values.as } : {}) }), options.flags.has("json"));
+    } else {
+      if (options.values.to || options.flags.has("checkpoint") || options.values["checkpoint-from"]) throw new Error("setup --to and --checkpoint-from require --checkpoint <id|package>");
+      print(await setupFromRoot({ start: process.cwd(), ...(options.values.from ? { from: options.values.from } : {}), ...(options.values.with ? { with: options.values.with } : {}), ...(options.values.as ? { as: options.values.as } : {}) }), options.flags.has("json"));
+    }
   } else if (command === "status") {
     print(await statusFromRoot(options.positionals[0] ?? process.cwd()), options.flags.has("json"));
   } else if (command === "site") {
