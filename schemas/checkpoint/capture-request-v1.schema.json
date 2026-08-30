@@ -3,12 +3,15 @@
   "$id": "https://endroit.org/schema/workplace-checkpoint-capture-request/1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "version", "workplace", "workplaceRevision", "sourceRoot", "output", "roots", "policy"],
+  "required": ["kind", "version", "workplace", "workplaceRevision", "ownerMember", "sourceRoot", "output", "roots", "policy"],
   "properties": {
     "kind": { "const": "CheckpointCaptureRequest" },
     "version": { "const": 1 },
     "workplace": { "type": "string", "pattern": "^workplace://" },
     "workplaceRevision": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
+    "ownerMember": { "type": "string", "pattern": "^workplace://.+/member/" },
+    "line": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$", "default": "main" },
+    "parentCheckpoint": { "type": ["string", "null"], "pattern": "^checkpoint:sha256:[a-f0-9]{64}$", "default": null },
     "sourceRoot": { "type": "string", "minLength": 1 },
     "output": { "type": "string", "minLength": 1 },
     "roots": {
@@ -40,21 +43,9 @@
     "policy": {
       "type": "object",
       "additionalProperties": false,
-      "required": ["includeUntracked", "ignoredPaths"],
+      "required": ["includeUntracked"],
       "properties": {
-        "includeUntracked": { "type": "boolean" },
-        "ignoredPaths": {
-          "type": "array",
-          "items": {
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["worktree", "path"],
-            "properties": {
-              "worktree": { "type": "string" },
-              "path": { "type": "string", "minLength": 1 }
-            }
-          }
-        }
+        "includeUntracked": { "type": "boolean" }
       }
     }
   }

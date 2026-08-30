@@ -3,6 +3,8 @@ import { lstat, mkdir, readFile, realpath, rename, rm, symlink, writeFile } from
 import { dirname, join, relative, resolve } from "node:path";
 import { applySiteRouteSetup, planSiteRouteSetup, SiteRouteSetupError, type SiteRouteSetupRequest } from "../src/site-setup.ts";
 
+const cli = [Bun.argv[0]!, resolve(import.meta.dir, "../src/cli.ts")];
+
 function run(cwd: string, args: string[], expected = 0): string {
   const result = Bun.spawnSync(args, { cwd, stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== expected) throw new Error(`${args.join(" ")} exited ${result.exitCode}: ${new TextDecoder().decode(result.stderr)}`);
@@ -71,7 +73,7 @@ describe("portable Site and Route setup", () => {
       let preview;
       try { preview = await planSiteRouteSetup(state.request, { workplaceMount: state.workplaceMount, requestDirectory: state.requestDirectory }); }
       finally { process.env.PATH = previousPath; }
-      expect(preview.sites[0]?.routes.map((route) => route.action)).toEqual(["clone", "clone"]);
+      expect(preview.sites[0]?.routes.map((route) => route.action)).toEqual(["materialize", "materialize"]);
       expect(await exists(family)).toBe(false);
 
       expect(await errorCode(() => applySiteRouteSetup(preview, `sha256:${"0".repeat(64)}`))).toBe("site-route-digest-mismatch");
@@ -101,6 +103,63 @@ describe("portable Site and Route setup", () => {
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }
+  });
+
+  test("materializes direct, linked worktree and external-link at stable Route addresses", async () => {
+    const state = await fixture();
+    try {
+      const external = join(state.root, "external-checkout");
+      git(state.root, ["clone", "-q", "--branch", "develop", "--", state.remote, external]);
+      const site = state.request.sites[0]!;
+      const request: SiteRouteSetupRequest = {
+        ...state.request,
+        sites: [{ ...site, routes: [
+          { id: "base", revision: { kind: "branch", name: "develop" }, physical: { kind: "direct" } },
+          { id: "linked", revision: { kind: "commit", sha: state.commit }, physical: { kind: "worktree", sourceRoute: "base" } },
+          { id: "external", revision: { kind: "branch", name: "develop" }, physical: { kind: "external-link", target: relative(state.requestDirectory, external) } },
+        ] }],
+      };
+      const plan = await planSiteRouteSetup(request, { workplaceMount: state.workplaceMount, requestDirectory: state.requestDirectory });
+      const receipt = await applySiteRouteSetup(plan, plan.revision);
+      const routes = new Map(receipt.sites[0]!.routes.map((route) => [route.id, route]));
+      expect(routes.get("base")?.binding.kind).toBe("managed");
+      expect(routes.get("linked")?.binding.kind).toBe("worktree");
+      expect(routes.get("external")?.binding.kind).toBe("external-link");
+      expect(routes.get("linked")?.binding.commonGitDir).toBe(routes.get("base")?.binding.commonGitDir);
+      expect(routes.get("external")?.binding.realpath).toBe(await realpath(external));
+      expect(routes.get("external")?.path).toBe(join(state.workplaceMount, "checkouts/sites/product/external"));
+      expect((await lstat(routes.get("external")!.path)).isSymbolicLink()).toBe(true);
+      const registry = JSON.parse(await readFile(join(state.workplaceMount, ".endroit/site-route-bindings.json"), "utf8")) as { bindings: Array<{ site: string; route: string; binding: { kind: string } }> };
+      expect(registry.bindings.map((record) => `${record.site}/${record.route}:${record.binding.kind}`)).toEqual(["product/base:managed", "product/external:external-link", "product/linked:worktree"]);
+      const replay = await planSiteRouteSetup(request, { workplaceMount: state.workplaceMount, requestDirectory: state.requestDirectory });
+      expect((await applySiteRouteSetup(replay, replay.revision)).sites[0]?.routes.every((route) => route.status === "unchanged")).toBe(true);
+      const detached = JSON.parse(run(state.workplaceMount, [...cli, "site", "route", "detach", "product", "external", "--json"])) as { status: string; binding: { kind: string } };
+      expect(detached.status).toBe("detached");
+      expect(detached.binding.kind).toBe("external-link");
+      expect(await exists(routes.get("external")!.path)).toBe(false);
+      expect(await readFile(join(external, "product.txt"), "utf8")).toBe("clean product\n");
+      const afterDetach = JSON.parse(await readFile(join(state.workplaceMount, ".endroit/site-route-bindings.json"), "utf8")) as { bindings: Array<{ route: string }> };
+      expect(afterDetach.bindings.some((record) => record.route === "external")).toBe(false);
+    } finally { await rm(state.root, { recursive: true, force: true }); }
+
+    const failed = await fixture();
+    try {
+      const external = join(failed.root, "external-checkout");
+      git(failed.root, ["clone", "-q", "--branch", "develop", "--", failed.remote, external]);
+      const site = failed.request.sites[0]!;
+      const request: SiteRouteSetupRequest = {
+        ...failed.request,
+        sites: [{ ...site, routes: [
+          { id: "base", revision: { kind: "branch", name: "develop" }, physical: { kind: "direct" } },
+          { id: "external", revision: { kind: "branch", name: "develop" }, physical: { kind: "external-link", target: relative(failed.requestDirectory, external) } },
+          { id: "z-missing", revision: { kind: "commit", sha: "f".repeat(40) }, physical: { kind: "direct" } },
+        ] }],
+      };
+      const plan = await planSiteRouteSetup(request, { workplaceMount: failed.workplaceMount, requestDirectory: failed.requestDirectory });
+      expect(await errorCode(() => applySiteRouteSetup(plan, plan.revision))).toBe("site-route-unavailable");
+      expect(await exists(join(failed.workplaceMount, "checkouts/sites/product/external"))).toBe(false);
+      expect(await readFile(join(external, "product.txt"), "utf8")).toBe("clean product\n");
+    } finally { await rm(failed.root, { recursive: true, force: true }); }
   });
 
   test("rejects ContinuityRemote, embedded credentials, unknown fields and reserved ids", async () => {
@@ -180,7 +239,7 @@ describe("portable Site and Route setup", () => {
       const futureMount = join(state.root, "future-workplace");
       expect(await errorCode(() => planSiteRouteSetup(state.request, { workplaceMount: futureMount, requestDirectory: state.requestDirectory }))).toBe("site-route-unavailable");
       const preview = await planSiteRouteSetup(state.request, { workplaceMount: futureMount, requestDirectory: state.requestDirectory, allowAbsentMount: true });
-      expect(preview.sites[0]?.routes.every((route) => route.action === "clone")).toBe(true);
+      expect(preview.sites[0]?.routes.every((route) => route.action === "materialize")).toBe(true);
       expect(await exists(futureMount)).toBe(false);
 
       await mkdir(join(futureMount, "workplace"), { recursive: true });

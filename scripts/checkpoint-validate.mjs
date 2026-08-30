@@ -30,11 +30,11 @@ function filesBelow(current = root) {
 function parse(path) { const content = readFileSync(join(root, path), "utf8"); const value = JSON.parse(content); if (content !== stable(value)) throw new Error(`${path} is not canonical`); return value; }
 
 const manifest = parse("MANIFEST.json");
-exact(manifest, ["schema", "checkpointId", "workplaceRef", "workplaceRevision", "fidelityPolicy", "repositories", "worktrees", "payloads", "compatibility", "portableFingerprint"], "MANIFEST.json");
+exact(manifest, ["schema", "checkpointId", "workplaceRef", "workplaceRevision", "ownerMember", "line", "parentCheckpoint", "fidelityPolicy", "repositories", "worktrees", "payloads", "compatibility", "portableFingerprint"], "MANIFEST.json");
 if (manifest.schema !== "workplace-checkpoint-manifest/1" || !/^checkpoint:sha256:[a-f0-9]{64}$/.test(manifest.checkpointId) || !Array.isArray(manifest.repositories) || !Array.isArray(manifest.worktrees) || !Array.isArray(manifest.payloads)) throw new Error("Unsupported checkpoint manifest");
-exact(manifest.fidelityPolicy, ["includeUntracked", "ignoredPaths"], "fidelityPolicy");
-if (typeof manifest.fidelityPolicy.includeUntracked !== "boolean" || !Array.isArray(manifest.fidelityPolicy.ignoredPaths)) throw new Error("Invalid fidelity policy");
-for (const ignored of manifest.fidelityPolicy.ignoredPaths) { exact(ignored, ["worktree", "path"], "ignored path"); portable(ignored.path, "ignored path"); }
+if (typeof manifest.ownerMember !== "string" || !manifest.ownerMember.startsWith(`${manifest.workplaceRef}/member/`) || !/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(manifest.line) || manifest.parentCheckpoint !== null && !/^checkpoint:sha256:[a-f0-9]{64}$/.test(manifest.parentCheckpoint)) throw new Error("Invalid checkpoint line");
+exact(manifest.fidelityPolicy, ["includeUntracked"], "fidelityPolicy");
+if (typeof manifest.fidelityPolicy.includeUntracked !== "boolean") throw new Error("Invalid fidelity policy");
 exact(manifest.compatibility, ["platform", "objectFormats", "symlinks"], "compatibility");
 const expected = new Set(["CHECKPOINT.md", "MANIFEST.json", "RECEIPT.json", "RESTORE.md"]);
 for (const payload of manifest.payloads) {
@@ -60,12 +60,12 @@ for (const repository of manifest.repositories) {
   expected.add(sidecar); expected.add(repository.bundle.path);
 }
 for (const worktree of manifest.worktrees) {
-  exact(worktree, ["schema", "worktreeId", "repositoryId", "logicalPath", "head", "branchRef", "index", "tracked", "untracked", "ignored", "operation"], "worktree");
+  exact(worktree, ["schema", "worktreeId", "repositoryId", "logicalPath", "head", "branchRef", "index", "tracked", "untracked", "operation"], "worktree");
   if (!/^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/.test(worktree.worktreeId)) throw new Error("Invalid worktree identity");
   portable(worktree.logicalPath, "worktree.logicalPath");
   exact(worktree.index, ["schema", "entries", "unsupportedExtensions"], "index");
   for (const entry of worktree.index.entries) { exact(entry, ["path", "stage", "mode", "oid", "assumeUnchanged", "skipWorktree", "intentToAdd"], "index entry"); portable(entry.path, "index path"); }
-  for (const record of [...worktree.tracked, ...worktree.untracked, ...worktree.ignored]) { exact(record, ["path", "kind", "mode", "sha256", "size", "payload"], "content record", ["path", "kind", "mode"]); portable(record.path, "content path"); if (record.payload) portable(record.payload, "content payload"); }
+  for (const record of [...worktree.tracked, ...worktree.untracked]) { exact(record, ["path", "kind", "mode", "sha256", "size", "payload"], "content record", ["path", "kind", "mode"]); portable(record.path, "content path"); if (record.payload) portable(record.payload, "content payload"); }
   for (const record of worktree.operation) { exact(record, ["path", "sha256", "size", "payload"], "operation record"); portable(record.path, "operation path"); portable(record.payload, "operation payload"); }
   const sidecar = `worktrees/${worktree.worktreeId}.json`;
   if (stable(worktree) !== readFileSync(join(root, sidecar), "utf8")) throw new Error(`${worktree.worktreeId} changed`);
@@ -77,7 +77,7 @@ const semanticRepositories = manifest.repositories.map(({ bundle: _bundle, ...re
 if (revision(stable({ fidelityPolicy: manifest.fidelityPolicy, repositories: semanticRepositories, worktrees: manifest.worktrees })) !== manifest.portableFingerprint) throw new Error("Portable fingerprint changed");
 const expectedReceipt = {
   schema: "workplace-checkpoint-receipt/1", operation: "capture", checkpointId, workplaceRef: manifest.workplaceRef, portableFingerprint: manifest.portableFingerprint, status: "captured",
-  coverage: { repositories: manifest.repositories.length, worktrees: manifest.worktrees.length, untracked: manifest.worktrees.reduce((count, worktree) => count + worktree.untracked.length, 0), ignored: manifest.worktrees.reduce((count, worktree) => count + worktree.ignored.length, 0), exclusions: ["filesystem-metadata", "special-files", "ignored-files-not-selected", "provider-state", "credentials"] },
+  coverage: { repositories: manifest.repositories.length, worktrees: manifest.worktrees.length, untracked: manifest.worktrees.reduce((count, worktree) => count + worktree.untracked.length, 0), exclusions: ["filesystem-metadata", "special-files", "ignored-files", "provider-state", "credentials"] },
 };
 if (readFileSync(join(root, "RECEIPT.json"), "utf8") !== stable(expectedReceipt)) throw new Error("RECEIPT.json changed");
 if (readFileSync(join(root, "CHECKPOINT.md"), "utf8") !== `# Workplace Checkpoint\n\n- ID: \`${checkpointId}\`\n- Workplace: \`${manifest.workplaceRef}\`\n- Repositories: ${manifest.repositories.length}\n- Worktrees: ${manifest.worktrees.length}\n- Status: captured and locally verifiable\n`) throw new Error("CHECKPOINT.md changed");
@@ -88,6 +88,6 @@ const plan = {
   schema: "workplace-checkpoint-restore-plan/1",
   checkpointId: manifest.checkpointId,
   repositories: manifest.repositories.map((repository) => ({ repositoryId: repository.repositoryId, rootRef: repository.rootRef, objectFormat: repository.objectFormat, bundle: repository.bundle.path, refs: repository.refs.length, worktrees: repository.worktrees })),
-  worktrees: manifest.worktrees.map((worktree) => ({ worktreeId: worktree.worktreeId, repositoryId: worktree.repositoryId, logicalPath: worktree.logicalPath, head: worktree.head, branchRef: worktree.branchRef, indexEntries: worktree.index.entries.length, tracked: worktree.tracked.length, untracked: worktree.untracked.length, ignored: worktree.ignored.length, operation: worktree.operation.length })),
+  worktrees: manifest.worktrees.map((worktree) => ({ worktreeId: worktree.worktreeId, repositoryId: worktree.repositoryId, logicalPath: worktree.logicalPath, head: worktree.head, branchRef: worktree.branchRef, indexEntries: worktree.index.entries.length, tracked: worktree.tracked.length, untracked: worktree.untracked.length, operation: worktree.operation.length })),
 };
 process.stdout.write(stable({ status: "verified-static", plan }));

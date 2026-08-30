@@ -4,13 +4,13 @@
   "title": "CheckpointPublishRequest v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["kind", "version", "remote", "recipients", "identities", "baseCheckpoint"],
+  "required": ["kind", "version", "binding", "ownerMember", "line", "parentCheckpoint"],
   "properties": {
     "kind": { "const": "CheckpointPublishRequest" },
     "version": { "const": 1 },
-    "remote": { "type": "string", "minLength": 1 },
-    "recipients": { "type": "array", "minItems": 1, "items": { "type": "object", "additionalProperties": false, "required": ["ref", "value"], "properties": { "ref": { "type": "string", "pattern": "^recipient://" }, "value": { "type": "string", "pattern": "^age1[a-z0-9]+$" } } } },
-    "identities": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
-    "baseCheckpoint": { "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^checkpoint:sha256:[a-f0-9]{64}$" }] }
+    "binding": { "$ref": "continuity-binding-v1.schema.json" },
+    "ownerMember": { "type": "string", "pattern": "^workplace://.+/member/[a-z0-9-]+$" },
+    "line": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$" },
+    "parentCheckpoint": { "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^checkpoint:sha256:[a-f0-9]{64}$" }] }
   }
 }

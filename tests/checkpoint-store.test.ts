@@ -75,16 +75,21 @@ async function fixture() {
   await writeFile(join(worktree, "untracked.txt"), "selected\n");
   await mkdir(join(mount, "workplace/.workplace"), { recursive: true });
   await writeFile(join(mount, "workplace/workplace.json"), `${JSON.stringify({ kind: "WorkplaceBuildContract", version: 2, workplace: "workplace://fixture" }, null, 2)}\n`);
+  await mkdir(join(mount, ".endroit"), { recursive: true });
+  await writeFile(join(mount, ".endroit/current-member.json"), `${JSON.stringify({ kind: "CurrentMemberBindings", version: 1, anchor: "workplace://fixture", members: [{ workplace: "workplace://fixture", member: "workplace://fixture/member/operator", desk: "workplace://fixture/desk/operator" }] }, null, 2)}\n`);
   await mkdir(requests, { recursive: true });
   const capture: CheckpointCaptureRequest = {
     kind: "CheckpointCaptureRequest",
     version: 1,
     workplace: "workplace://fixture",
     workplaceRevision: `sha256:${"1".repeat(64)}`,
+    ownerMember: "workplace://fixture/member/operator",
+    line: "main",
+    parentCheckpoint: null,
     sourceRoot,
     output: join(root, "ignored-by-store"),
     roots: [{ ref: "workplace://fixture/root/product", worktrees: [{ id: "product-main", path: worktree, logicalPath: "product/main" }] }],
-    policy: { includeUntracked: true, ignoredPaths: [] },
+    policy: { includeUntracked: true },
   };
   const capturePath = join(requests, "capture.json");
   await writeFile(capturePath, `${JSON.stringify(capture, null, 2)}\n`);
@@ -95,12 +100,24 @@ function descriptorAt(path: string, state: Awaited<ReturnType<typeof fixture>>, 
   return {
     kind: "ContinuityDescriptor",
     version: 1,
+    anchor: "workplace://fixture",
+    workplace: "workplace://fixture",
     capture: relative(dirname(path), state.capturePath),
     store: relative(dirname(path), join(state.mount, ".endroit/checkpoints")),
     restoreTarget: relative(dirname(path), join(state.mount, "restored")),
-    setupContinuity: "optional",
+    line: "main",
+    policy: { remote: "none", requirement: "optional" },
     ...overrides,
   };
+}
+
+async function rememberOperator(mount: string): Promise<void> {
+  await mkdir(join(mount, ".endroit"), { recursive: true });
+  await writeFile(join(mount, ".endroit/current-member.json"), `${JSON.stringify({ kind: "CurrentMemberBindings", version: 1, anchor: "workplace://fixture", members: [{ workplace: "workplace://fixture", member: "workplace://fixture/member/operator", desk: "workplace://fixture/desk/operator" }] }, null, 2)}\n`);
+}
+
+function separateBinding(remote: string, product: string) {
+  return { kind: "ContinuityBinding" as const, version: 1 as const, workplace: "workplace://fixture", role: "separate" as const, locator: remote, productLocator: product, productVisibility: "public" as const, continuityVisibility: "private" as const, credentialBinding: "git:fixture" };
 }
 
 async function writeDescriptor(path: string, value: ContinuityDescriptor | Record<string, unknown>): Promise<void> {
@@ -121,8 +138,8 @@ describe("root-driven checkpoint store", () => {
       await symlink(dirname(outsidePath), join(state.mount, "linked-path"));
       run(state.mount, [...cli, "checkpoint", "linked-path/child", "--json"], 2);
       expect(await exists(join(state.mount, ".endroit/checkpoints"))).toBe(false);
-      const absentRemote = JSON.parse(run(state.mount, [...cli, "checkpoint", "push", "--json"])) as { receipt: { status: string; selector: string } };
-      expect(absentRemote.receipt).toEqual({ kind: "ContinuityRemoteReceipt", version: 1, operation: "push", status: "no-continuity-remote", selector: "latest" });
+      const absentRemote = JSON.parse(run(state.mount, [...cli, "checkpoint", "push", "--json"])) as { receipt: { status: string; checkpointId: string | null } };
+      expect(absentRemote.receipt).toEqual({ kind: "ContinuityRemoteReceipt", version: 1, operation: "push", status: "no-continuity-remote", checkpointId: null });
       expect(await exists(join(state.mount, ".endroit/checkpoints"))).toBe(false);
       const created = JSON.parse(run(state.mount, [...cli, "checkpoint", "--json"])) as ContinuityStoreReceipt;
       expect(created.status).toBe("installed");
@@ -133,31 +150,28 @@ describe("root-driven checkpoint store", () => {
 
       const remote = join(state.root, "continuity.git");
       git(state.root, ["init", "-q", "--bare", remote]);
-      const identity = join(state.root, "identity.txt");
-      run(state.root, ["age-keygen", "-o", identity]);
-      const recipient = run(state.root, ["age-keygen", "-y", identity]);
-      const publishPath = join(state.requests, "publish.json");
-      const fetchPath = join(state.requests, "fetch.json");
-      await writeFile(publishPath, `${JSON.stringify({ kind: "CheckpointPublishRequest", version: 1, remote, recipients: [{ ref: "recipient://fixture/operator", value: recipient }], identities: [identity], baseCheckpoint: null }, null, 2)}\n`);
-      await writeFile(fetchPath, `${JSON.stringify({ kind: "CheckpointFetchRequest", version: 1, remote, identities: [identity] }, null, 2)}\n`);
-      await writeDescriptor(descriptorPath, descriptorAt(descriptorPath, state, { remote: { publish: relative(dirname(descriptorPath), publishPath), fetch: relative(dirname(descriptorPath), fetchPath) } }));
-      expect(git(state.root, ["ls-remote", remote, "refs/endroit/checkpoints/latest"])).toBe("");
-      const pushed = JSON.parse(run(state.mount, [...cli, "checkpoint", "push", "latest", "--json"])) as { receipt: { status: string } };
+      const product = join(state.root, "product.git");
+      git(state.root, ["init", "-q", "--bare", product]);
+      await writeDescriptor(descriptorPath, descriptorAt(descriptorPath, state, { policy: { remote: "separate", requirement: "optional" }, binding: separateBinding(remote, product) }));
+      expect(git(state.root, ["ls-remote", remote, "refs/endroit/checkpoints/*"])).toBe("");
+      const pushed = JSON.parse(run(state.mount, [...cli, "checkpoint", "push", "--json"])) as { receipt: { status: string } };
       expect(pushed.receipt.status).toBe("verified-remote");
-      expect(git(state.root, ["ls-remote", remote, "refs/endroit/checkpoints/latest"])).not.toBe("");
+      expect(git(state.root, ["ls-remote", remote, "refs/endroit/checkpoints/*"])).not.toBe("");
+      expect(git(state.root, ["--git-dir", product, "show-ref"], 1)).toBe("");
 
       const secondMount = join(state.root, "second-mount");
       await mkdir(join(secondMount, "workplace"), { recursive: true });
       await writeFile(join(secondMount, "workplace/workplace.json"), `${JSON.stringify({ kind: "WorkplaceBuildContract", version: 2, workplace: "workplace://fixture" }, null, 2)}\n`);
+      await rememberOperator(secondMount);
       const secondPath = join(secondMount, ".endroit/continuity.json");
       await writeDescriptor(secondPath, {
         ...descriptorAt(secondPath, state), store: "checkpoints", restoreTarget: "../restored",
-        remote: { publish: relative(dirname(secondPath), publishPath), fetch: relative(dirname(secondPath), fetchPath) },
+        policy: { remote: "separate", requirement: "optional" }, binding: separateBinding(remote, product),
       });
-      const fetched = JSON.parse(run(secondMount, [...cli, "checkpoint", "fetch", "latest", "--json"])) as { store: { checkpointId: string } };
+      const fetched = JSON.parse(run(secondMount, [...cli, "checkpoint", "fetch", "--json"])) as { store: { checkpointId: string } };
       expect(fetched.store.checkpointId).toBe(created.checkpointId);
       expect(await exists(join(secondMount, "restored"))).toBe(false);
-      const restored = JSON.parse(run(secondMount, [...cli, "checkpoint", "restore", "latest", "--json"])) as { receipt: { status: string } };
+      const restored = JSON.parse(run(secondMount, [...cli, "checkpoint", "restore", "--json"])) as { receipt: { status: string } };
       expect(restored.receipt.status).toBe("restored-equivalent");
       expect(await exists(join(secondMount, "restored/product/main"))).toBe(true);
       expect(await exists(join(secondMount, "FRONTDOOR.md"))).toBe(false);
@@ -175,9 +189,9 @@ describe("root-driven checkpoint store", () => {
       expect((await loadContinuityDescriptor(state.mount)).path).toBe(portablePath);
 
       const localPath = join(state.mount, ".endroit/continuity.json");
-      await writeDescriptor(localPath, descriptorAt(localPath, state, { setupContinuity: "required" }));
+      await writeDescriptor(localPath, descriptorAt(localPath, state, { policy: { remote: "none", requirement: "required" } }));
       expect((await loadContinuityDescriptor(state.mount)).path).toBe(localPath);
-      expect((await loadContinuityDescriptor(state.mount)).setupContinuity).toBe("required");
+      expect((await loadContinuityDescriptor(state.mount)).policy.requirement).toBe("required");
 
       await writeDescriptor(localPath, { ...descriptorAt(localPath, state), unexpected: true });
       expect(await errorCode(() => loadContinuityDescriptor(state.mount))).toBe("invalid-continuity-descriptor");
@@ -189,14 +203,18 @@ describe("root-driven checkpoint store", () => {
     }
   });
 
-  test("installs by checkpoint ID, selects latest, replays unchanged and restores without ready", async () => {
+  test("installs by checkpoint ID, selects the Current Member line, replays unchanged and restores without ready", async () => {
     const state = await fixture();
     try {
       const descriptorPath = join(state.mount, ".endroit/continuity.json");
       await writeDescriptor(descriptorPath, descriptorAt(descriptorPath, state));
       const descriptor = await loadContinuityDescriptor(state.mount);
+      await rm(join(state.mount, ".endroit/current-member.json"), { recursive: false, force: true });
+      expect(await errorCode(() => createLocalCheckpoint(descriptor))).toBe("continuity-unavailable");
+      await rememberOperator(state.mount);
       const created = await createLocalCheckpoint(descriptor);
       expect(created.status).toBe("installed");
+      expect(created.ownerMember).toBe("workplace://fixture/member/operator");
       expect(created.path).toBe(join(descriptor.store, created.checkpointId.slice("checkpoint:sha256:".length)));
       expect((await selectLocalCheckpoint(descriptor)).receipt.checkpointId).toBe(created.checkpointId);
       expect((await selectLocalCheckpoint(descriptor, created.checkpointId)).path).toBe(created.path);
@@ -205,7 +223,7 @@ describe("root-driven checkpoint store", () => {
       expect(replay.status).toBe("unchanged");
       const beforePush = await files(descriptor.store);
       const skipped = await pushContinuityCheckpoint(descriptor);
-      expect(skipped.receipt).toEqual({ kind: "ContinuityRemoteReceipt", version: 1, operation: "push", status: "no-continuity-remote", selector: "latest" });
+      expect(skipped.receipt).toEqual({ kind: "ContinuityRemoteReceipt", version: 1, operation: "push", status: "no-continuity-remote", checkpointId: null });
       expect(await files(descriptor.store)).toEqual(beforePush);
 
       const restored = await restoreContinuityCheckpoint(descriptor);
@@ -221,44 +239,50 @@ describe("root-driven checkpoint store", () => {
     }
   });
 
-  test("fetches remote latest into a separate store without restoring it", async () => {
+  test("fetches the remote Current Member line into a separate store without restoring it", async () => {
     const state = await fixture();
     try {
       const remote = join(state.root, "continuity.git");
       git(state.root, ["init", "-q", "--bare", remote]);
-      const identity = join(state.root, "identity.txt");
-      run(state.root, ["age-keygen", "-o", identity]);
-      const recipient = run(state.root, ["age-keygen", "-y", identity]);
-      const publishPath = join(state.requests, "publish.json");
-      const fetchPath = join(state.requests, "fetch.json");
-      await writeFile(publishPath, `${JSON.stringify({ kind: "CheckpointPublishRequest", version: 1, remote, recipients: [{ ref: "recipient://fixture/operator", value: recipient }], identities: [identity], baseCheckpoint: null }, null, 2)}\n`);
-      await writeFile(fetchPath, `${JSON.stringify({ kind: "CheckpointFetchRequest", version: 1, remote, identities: [identity] }, null, 2)}\n`);
+      const product = join(state.root, "product.git");
+      git(state.root, ["init", "-q", "--bare", product]);
 
       const firstPath = join(state.mount, ".endroit/continuity.json");
-      await writeDescriptor(firstPath, descriptorAt(firstPath, state, { remote: { publish: relative(dirname(firstPath), publishPath), fetch: relative(dirname(firstPath), fetchPath) } }));
+      await writeDescriptor(firstPath, descriptorAt(firstPath, state, { policy: { remote: "separate", requirement: "optional" }, binding: separateBinding(remote, product) }));
       const first = await loadContinuityDescriptor(state.mount);
-      const local = await createLocalCheckpoint(first);
+      const firstLocal = await createLocalCheckpoint(first);
+      expect((await pushContinuityCheckpoint(first)).receipt.status).toBe("verified-remote");
+      await writeFile(join(state.worktree, "tracked.txt"), "dirty second generation\n");
+      const secondLocal = await createLocalCheckpoint(first);
+      expect(secondLocal.parentCheckpoint).toBe(firstLocal.checkpointId);
       expect((await pushContinuityCheckpoint(first)).receipt.status).toBe("verified-remote");
 
       const secondMount = join(state.root, "second-mount");
       await mkdir(join(secondMount, "workplace"), { recursive: true });
+      await writeFile(join(secondMount, "workplace/workplace.json"), `${JSON.stringify({ kind: "WorkplaceBuildContract", version: 2, workplace: "workplace://fixture" }, null, 2)}\n`);
+      await rememberOperator(secondMount);
       const secondPath = join(secondMount, ".endroit/continuity.json");
       const secondDescriptor: ContinuityDescriptor = {
         ...descriptorAt(secondPath, state),
         store: "checkpoints",
         restoreTarget: "../restored",
-        remote: { publish: relative(dirname(secondPath), publishPath), fetch: relative(dirname(secondPath), fetchPath) },
+        policy: { remote: "separate", requirement: "optional" }, binding: separateBinding(remote, product),
       };
       await writeDescriptor(secondPath, secondDescriptor);
       const second = await loadContinuityDescriptor(secondMount);
-      const fetched = await fetchContinuityCheckpoint(second, "latest");
-      expect(fetched.store.checkpointId).toBe(local.checkpointId);
+      const fetched = await fetchContinuityCheckpoint(second);
+      expect(fetched.store.checkpointId).toBe(secondLocal.checkpointId);
       expect(fetched.remote.status).toBe("fetched-verified");
       expect(await exists(second.restoreTarget)).toBe(false);
-      expect((await selectLocalCheckpoint(second, "latest")).receipt.checkpointId).toBe(local.checkpointId);
+      expect((await selectLocalCheckpoint(second)).receipt.checkpointId).toBe(secondLocal.checkpointId);
 
-      const restored = await restoreContinuityCheckpoint(second, "latest");
+      const historical = await fetchContinuityCheckpoint(second, firstLocal.checkpointId);
+      expect(historical.store.lineUpdate).toBe("not-selected");
+      expect((await selectLocalCheckpoint(second)).receipt.checkpointId).toBe(secondLocal.checkpointId);
+
+      const restored = await restoreContinuityCheckpoint(second);
       expect(restored.receipt.status).toBe("restored-equivalent");
+      expect(await readFile(join(restored.path, "product/main/tracked.txt"), "utf8")).toBe("dirty second generation\n");
       expect(await exists(join(secondMount, "FRONTDOOR.md"))).toBe(false);
     } finally {
       await rm(state.root, { recursive: true, force: true });
@@ -272,6 +296,7 @@ describe("root-driven checkpoint store", () => {
       await writeDescriptor(portablePath, descriptorAt(portablePath, state));
       const outside = join(state.root, "outside-local-state");
       await mkdir(outside, { recursive: true });
+      await rm(join(state.mount, ".endroit"), { recursive: true, force: true });
       await symlink(outside, join(state.mount, ".endroit"));
       expect(await errorCode(() => loadContinuityDescriptor(state.mount))).toBe("continuity-collision");
       expect(await readdir(outside, { withFileTypes: true })).toEqual([]);

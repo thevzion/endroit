@@ -6,20 +6,26 @@ surface. The Endroit CLI is one reference executor; `CHECKPOINT.md`,
 ordinary files.
 
 The current vertical implements local `capture`, `verify` and atomic `restore`,
-then encrypted `publish` and `fetch` through an explicit Git remote.
+then explicit Git-native `publish` and `fetch` through a local
+`ContinuityBinding`.
 It preserves declared repository refs and object closure, linked-worktree HEAD,
 branch/detached state, normalized index stages and flags, tracked working bytes,
-untracked files, selected ignored files and active Git-operation metadata.
+untracked non-ignored files and active Git-operation metadata. Ignored files are
+always excluded in v1.
 
-Remote payloads use `age/1`. Each ciphertext decrypts to one JSON header line
-conforming to `envelope-record-v1.schema.json`, followed by its exact raw file
-bytes. `CONTROL.json` exposes only the checkpoint ID, recipient Refs and opaque
-ciphertext digests/sizes; package paths and content remain encrypted.
+Remote checkpoints are ordinary immutable Git commits under internal
+`refs/endroit/checkpoints/owners/...` refs. A Member-owned line head advances by
+compare-and-swap; concurrent divergence preserves every immutable checkpoint
+and never merges dirty states. Core v1 adds no application encryption: readers
+of the selected Git repository can read published checkpoint bytes.
 
-Network credential policy, `latest`, cross-OS qualification and real Workplace
-dogfood are not part of this vertical. A successful Receipt means physical
+Git owns authentication. `ContinuityBinding` explicitly distinguishes a
+dual-role Product Remote from a separate Continuity Remote and never discovers
+`origin`. A successful Receipt means physical
 fidelity only; it never means accepted, valid, ready or delivered.
 
 `TOOLCHAIN.json` declares the exact formats and commands of this distribution.
 `node scripts/checkpoint-validate.mjs <checkpoint>` is a standalone Node + Git
 validator that does not import Endroit and emits the same closed restore plan.
+Omitting a checkpoint ID selects the Current Member's declared Checkpoint Line
+head. There is no global checkpoint selector or ref.

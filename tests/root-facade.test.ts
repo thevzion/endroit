@@ -141,7 +141,7 @@ describe("root-driven Workplace facade", () => {
       expect(optional.continuity.missing).toEqual([{ id: "anchor-sites", checkpointId: missing.checkpointId, action: `endroit checkpoint fetch ${missing.checkpointId} --json` }]);
 
       await writeFile(join(state.mount, ".endroit/continuity.json"), `${JSON.stringify({
-        kind: "ContinuityDescriptor", version: 1, capture: "capture.json", store: "checkpoints", restoreTarget: "../checkouts/sites", setupContinuity: "required",
+        kind: "ContinuityDescriptor", version: 1, anchor: "workplace://anchor", workplace: "workplace://anchor", capture: "capture.json", store: "checkpoints", restoreTarget: "../checkouts/sites", line: "main", policy: { remote: "none", requirement: "required" },
       }, null, 2)}\n`);
       const remembered = await readFile(join(state.mount, ".endroit/current-member.json"), "utf8");
       const required = await setupFromRoot({ start: state.mount, from: recoveryPath, as: member });
@@ -184,7 +184,7 @@ describe("root-driven Workplace facade", () => {
         }],
       }, null, 2)}\n`);
       await writeFile(join(state.mount, ".endroit/continuity.json"), `${JSON.stringify({
-        kind: "ContinuityDescriptor", version: 1, capture: "capture.json", store: "checkpoints", restoreTarget: "../checkouts/sites", setupContinuity: "required",
+        kind: "ContinuityDescriptor", version: 1, anchor: "workplace://anchor", workplace: "workplace://anchor", capture: "capture.json", store: "checkpoints", restoreTarget: "../checkouts/sites", line: "main", policy: { remote: "none", requirement: "required" },
       }, null, 2)}\n`);
       const result = await setupFromRoot({ start: state.mount, from: recoveryPath, as: member });
       expect(result.receipt.status).toBe("blocked-continuity");
@@ -227,7 +227,7 @@ describe("root-driven Workplace facade", () => {
       const capturePath = join(machineA.mount, ".endroit/capture.json");
       await writeFile(capturePath, `${JSON.stringify(capture, null, 2)}\n`);
       await writeFile(join(machineA.mount, ".endroit/continuity.json"), `${JSON.stringify({
-        kind: "ContinuityDescriptor", version: 1, capture: "capture.json", store: "checkpoints", restoreTarget: "../unused-restore", setupContinuity: "optional",
+        kind: "ContinuityDescriptor", version: 1, anchor: "workplace://anchor", workplace: "workplace://anchor", capture: "capture.json", store: "checkpoints", restoreTarget: "../unused-restore", line: "main", policy: { remote: "none", requirement: "optional" },
       }, null, 2)}\n`);
 
       expect(git(topology.detached, ["branch", "--show-current"])).toBe("");
@@ -237,11 +237,12 @@ describe("root-driven Workplace facade", () => {
         expect(relative(topology.source, worktree.path).replaceAll("\\", "/")).toBe(worktree.logicalPath);
       }
 
+      jsonCli(machineA.mount, ["setup", "--as", member, "--json"]);
       const created = jsonCli(join(machineA.mount, "workplace"), ["checkpoint", "--json"]) as ContinuityStoreReceipt;
       expect(created.operation).toBe("create");
       expect(created.verification.coverage).toEqual({
-        repositories: 3, worktrees: 4, untracked: 1, ignored: 1,
-        exclusions: ["filesystem-metadata", "special-files", "ignored-files-not-selected", "provider-state", "credentials"],
+        repositories: 3, worktrees: 4, untracked: 1,
+        exclusions: ["filesystem-metadata", "special-files", "ignored-files", "provider-state", "credentials"],
       });
       expect(git(join(machineA.mount, "workplace"), ["remote"])).toBe("");
       for (const worktree of capture.roots.flatMap((root) => root.worktrees)) expect(git(worktree.path, ["remote"])).toBe("");
@@ -250,9 +251,8 @@ describe("root-driven Workplace facade", () => {
       const targetPackage = join(targetStore, created.checkpointId.slice("checkpoint:sha256:".length));
       await mkdir(targetStore, { recursive: true });
       await cp(created.path, targetPackage, { recursive: true });
-      await writeFile(join(targetStore, "latest.json"), `${JSON.stringify({ kind: "ContinuityLatest", version: 1, checkpointId: created.checkpointId }, null, 2)}\n`);
       await writeFile(join(machineB.mount, ".endroit/continuity.json"), `${JSON.stringify({
-        kind: "ContinuityDescriptor", version: 1, capture: "unused.json", store: "checkpoints", restoreTarget: "../manual-restore", setupContinuity: "required",
+        kind: "ContinuityDescriptor", version: 1, anchor: "workplace://anchor", workplace: "workplace://anchor", capture: "unused.json", store: "checkpoints", restoreTarget: "../manual-restore", line: "main", policy: { remote: "none", requirement: "required" },
       }, null, 2)}\n`);
 
       const recoveryRoots = capture.roots.map((root) => ({
@@ -278,7 +278,7 @@ describe("root-driven Workplace facade", () => {
       const manualTarget = join(machineB.mount, "manual-restore");
       expect(await Bun.file(target).exists()).toBe(false);
       expect(await Bun.file(manualTarget).exists()).toBe(false);
-      const restored = jsonCli(machineB.mount, ["checkpoint", "restore", "latest", "--json"]) as { path: string; receipt: { status: string; checkpointId: string; portableFingerprint: string } };
+      const restored = jsonCli(machineB.mount, ["checkpoint", "restore", created.checkpointId, "--json"]) as { path: string; receipt: { status: string; checkpointId: string; portableFingerprint: string } };
       expect(restored.path).toBe(await realpath(manualTarget));
       expect(restored.receipt).toEqual({
         schema: "workplace-checkpoint-receipt/1", operation: "restore", checkpointId: created.checkpointId,

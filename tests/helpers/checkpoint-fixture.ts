@@ -71,13 +71,14 @@ export async function checkpointFixture(options: { root?: string; source?: strin
   const request: CheckpointCaptureRequest = {
     kind: "CheckpointCaptureRequest", version: 1,
     workplace: "workplace://fixture", workplaceRevision: `sha256:${"1".repeat(64)}`,
+    ownerMember: "workplace://fixture/member/operator", line: "main", parentCheckpoint: null,
     sourceRoot: source, output: join(root, "checkpoint"),
     roots: [
       { ref: "workplace://fixture/root/shared", worktrees: [{ id: "shared-main", path: shared, logicalPath: options.siteLayout ? "product/main" : "roots/shared/main" }, { id: "shared-detached", path: detached, logicalPath: options.siteLayout ? "product/detached" : "roots/shared/detached" }] },
       { ref: "workplace://fixture/root/desk", worktrees: [{ id: "desk-main", path: desk, logicalPath: options.siteLayout ? "desk/main" : "roots/desk/main" }] },
       { ref: "workplace://fixture/root/site", worktrees: [{ id: "site-main", path: site, logicalPath: options.siteLayout ? "service/main" : "roots/site/main" }] },
     ],
-    policy: { includeUntracked: true, ignoredPaths: [{ worktree: "desk-main", path: "cache.bin" }] },
+    policy: { includeUntracked: true },
   };
   return { root, source, shared, detached, desk, site, request };
 }

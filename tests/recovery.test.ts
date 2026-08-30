@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { lstat, mkdir, readFile, readdir, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { captureCheckpoint, restoreCheckpoint, verifyCheckpoint } from "../src/checkpoint.ts";
 import { applyNewWorkplace, loadStandardProfile, planNewWorkplace, type NewWorkplaceRequest } from "../src/compiler/new-workplace.ts";
@@ -56,6 +56,7 @@ async function recoveryFixture() {
   await writeFile(join(anchor.mount, "workplace/links.json"), `${JSON.stringify({ kind: "WorkplaceLinks", version: 1, workplace: "workplace://anchor", links: [{ target: "workplace://peer" }] }, null, 2)}\n`);
 
   state.request.workplace = "workplace://anchor";
+  state.request.ownerMember = "workplace://anchor/member/operator";
   state.request.roots = state.request.roots.map((root) => ({
     ...root,
     ref: root.ref.replace("workplace://fixture", "workplace://anchor"),
@@ -151,7 +152,7 @@ describe("fresh-machine Workplace recovery", () => {
       expect(noGitPreview.exitCode).toBe(0);
       const preview = JSON.parse(new TextDecoder().decode(noGitPreview.stdout)) as WorkplaceRecoveryPlan;
       expect(preview.checkpoints[0]?.action).toBe("restore");
-      expect(preview.sites[0]?.plan.sites[0]?.routes[0]?.action).toBe("clone");
+      expect(preview.sites[0]?.plan.sites[0]?.routes[0]?.action).toBe("materialize");
       expect(preview.checkpoints[0]?.roots.flatMap((root) => root.worktrees)).toHaveLength(4);
       expect(await exists(target)).toBe(false);
       expect(await exists(managedPeer)).toBe(false);
@@ -275,11 +276,15 @@ describe("fresh-machine Workplace recovery", () => {
     }
   });
 
-  test("rolls back a clean Route without deleting pre-existing empty families", async () => {
+  test("rolls back a newly persisted Binding without deleting its pre-existing clean Route", async () => {
     const state = await recoveryFixture();
     try {
       const family = join(state.anchor.mount, "checkouts/sites");
-      await mkdir(family, { recursive: true });
+      const preexistingRoute = join(family, "clean-product/develop");
+      await mkdir(dirname(preexistingRoute), { recursive: true });
+      git(state.root, ["clone", "--branch", "develop", "--", state.peerRemote, preexistingRoute]);
+      const bindingRegistry = join(state.anchor.mount, ".endroit/site-route-bindings.json");
+      expect(await exists(bindingRegistry)).toBe(false);
       const request = {
         ...state.request,
         checkpoints: [],
@@ -288,10 +293,13 @@ describe("fresh-machine Workplace recovery", () => {
       const requestPath = join(dirname(state.requestPath), "clean-position-mismatch.json");
       await writeFile(requestPath, `${JSON.stringify(request, null, 2)}\n`);
       const preview = jsonCli(["workplace", "recover", state.anchor.mount, "--from", requestPath, "--preview", "--json"]) as WorkplaceRecoveryPlan;
+      expect(preview.sites[0]?.plan.sites[0]?.routes[0]?.action).toBe("verify");
       const error = errorCli(["workplace", "recover", state.anchor.mount, "--from", requestPath, "--apply", preview.revision, "--json"], 1);
       expect(error.code).toBe("recovery-position-mismatch");
       expect(await exists(family)).toBe(true);
-      expect(await readdir(family, { withFileTypes: true })).toEqual([]);
+      expect(await exists(preexistingRoute)).toBe(true);
+      expect(git(preexistingRoute, ["status", "--porcelain"])).toBe("");
+      expect(await exists(bindingRegistry)).toBe(false);
       expect(await exists(join(state.anchor.mount, "checkouts/workplaces/peer"))).toBe(false);
     } finally {
       await rm(state.root, { recursive: true, force: true });

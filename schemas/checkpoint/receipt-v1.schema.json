@@ -11,6 +11,6 @@
     "workplaceRef": { "type": "string", "pattern": "^workplace://" },
     "portableFingerprint": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
     "status": { "enum": ["captured", "verified-local", "restored-equivalent"] },
-    "coverage": { "type": "object", "additionalProperties": false, "required": ["repositories", "worktrees", "untracked", "ignored", "exclusions"], "properties": { "repositories": { "type": "integer", "minimum": 0 }, "worktrees": { "type": "integer", "minimum": 0 }, "untracked": { "type": "integer", "minimum": 0 }, "ignored": { "type": "integer", "minimum": 0 }, "exclusions": { "type": "array", "items": { "type": "string" } } } }
+    "coverage": { "type": "object", "additionalProperties": false, "required": ["repositories", "worktrees", "untracked", "exclusions"], "properties": { "repositories": { "type": "integer", "minimum": 0 }, "worktrees": { "type": "integer", "minimum": 0 }, "untracked": { "type": "integer", "minimum": 0 }, "exclusions": { "type": "array", "items": { "type": "string" } } } }
   }
 }

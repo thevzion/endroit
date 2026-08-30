@@ -1,9 +1,9 @@
-import { lstat, mkdir, readFile, readdir, realpath, rename, rm } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, rm } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { hash, stable } from "./compiler/index.ts";
 import { inspectCheckpoint, restoreCheckpoint, verifyCheckpoint, verifyRestoredCheckpoint, type CheckpointManifest } from "./checkpoint.ts";
 import { rememberCurrentMember, resolveCurrentMember, verifyCurrentMemberSources, type CurrentMemberResolution } from "./current-member.ts";
-import { applySiteRouteSetup, planSiteRouteSetup, type SiteRouteSetupPlan, type SiteRouteSetupReceipt } from "./site-setup.ts";
+import { applySiteRouteSetup, planSiteRouteSetup, removeSiteRouteBinding, type SiteRouteSetupPlan, type SiteRouteSetupReceipt } from "./site-setup.ts";
 import { applyWorkplaceSetup, planWorkplaceSetup, type WorkplaceSetupPlan, type WorkplaceSetupReceipt } from "./setup.ts";
 
 const REF = /^workplace:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
@@ -348,31 +348,18 @@ async function removeIfEmpty(path: string): Promise<void> {
 
 async function rollbackSites(receipts: SiteRouteSetupReceipt[]): Promise<void> {
   for (const receipt of [...receipts].reverse()) {
+    const workplaceMount = dirname(dirname(receipt.family));
     for (const site of [...receipt.sites].reverse()) {
-      for (const route of [...site.routes].reverse()) if (route.status === "cloned") await rm(route.path, { recursive: true, force: true });
+      for (const route of [...site.routes].reverse()) {
+        if (route.status !== "unchanged") {
+          if (route.binding.kind === "worktree") Bun.spawnSync(["git", `--git-dir=${route.binding.commonGitDir}`, "worktree", "remove", "--force", route.path], { cwd: dirname(route.binding.commonGitDir), stdout: "pipe", stderr: "pipe" });
+          await rm(route.path, { recursive: route.binding.kind !== "external-link", force: true });
+        }
+        if (route.bindingStatus === "created") await removeSiteRouteBinding(workplaceMount, site.id, route.id, route.binding);
+      }
     }
     for (const path of [...receipt.createdDirectories].reverse()) await removeIfEmpty(path);
   }
-}
-
-async function promoteStagedSites(receipt: SiteRouteSetupReceipt, plan: SiteRouteSetupPlan): Promise<SiteRouteSetupReceipt> {
-  const finalFamily = resolve(plan.workplaceMount, "checkouts/sites");
-  const canonicalFamily = await realpath(finalFamily);
-  const routes = new Map(plan.sites.flatMap((site) => site.routes.map((route) => [`${site.id}/${route.id}`, route.path] as const)));
-  for (const site of receipt.sites) {
-    const siteTarget = join(finalFamily, site.id);
-    if (!await exists(siteTarget)) await mkdir(siteTarget, { recursive: false });
-    const info = await lstat(siteTarget);
-    if (info.isSymbolicLink() || !info.isDirectory() || await realpath(siteTarget) !== resolve(canonicalFamily, site.id)) fail("recovery-collision", `${siteTarget} must be a physical Site directory`);
-    for (const route of site.routes) {
-      const target = routes.get(`${site.id}/${route.id}`) ?? fail("recovery-unavailable", `${site.id}/${route.id} is absent from its Site plan`);
-      if (await exists(target)) fail("recovery-collision", `${target} appeared before Site promotion`);
-      await rename(route.path, target);
-      route.path = target;
-    }
-  }
-  await rm(dirname(receipt.family), { recursive: true, force: true });
-  return { ...receipt, family: finalFamily, createdDirectories: [] };
 }
 
 export async function applyWorkplaceRecovery(plan: WorkplaceRecoveryPlan, expectedRevision: string): Promise<WorkplaceRecoveryReceipt> {
@@ -394,7 +381,6 @@ export async function applyWorkplaceRecovery(plan: WorkplaceRecoveryPlan, expect
   });
   if (stable(currentPosition) !== stable(plan.position)) fail("recovery-position-mismatch", "Current Member changed after Preview");
   const restored: string[] = [];
-  const stagedRoots: string[] = [];
   const siteReceipts: SiteRouteSetupReceipt[] = [];
   const checkpointReceipts: WorkplaceRecoveryReceipt["checkpoints"] = [];
   let position: WorkplaceRecoveryReceipt["position"] | undefined;
@@ -402,15 +388,6 @@ export async function applyWorkplaceRecovery(plan: WorkplaceRecoveryPlan, expect
     afterApply: async (setupReceipt) => {
       if (setupReceipt.status !== "ready") fail("recovery-unavailable", "Workplace setup did not reach ready");
       try {
-        const staged = new Map<string, { receipt: SiteRouteSetupReceipt; plan: SiteRouteSetupPlan }>();
-        for (const site of plan.sites) {
-          const checkpoint = plan.checkpoints.find((item) => item.workplace === site.workplace && item.action === "restore");
-          if (checkpoint) {
-            const stage = join(recoveryMount(plan, site.workplace), ".endroit", `recovery-stage-${crypto.randomUUID()}`, "sites");
-            stagedRoots.push(dirname(stage));
-            staged.set(site.workplace, { receipt: await applySiteRouteSetup(site.plan, site.plan.revision, { targetFamily: stage }), plan: site.plan });
-          } else siteReceipts.push(await applySiteRouteSetup(site.plan, site.plan.revision));
-        }
         for (const checkpoint of plan.checkpoints) {
           await rejectFamilyCollision(recoveryMount(plan, checkpoint.workplace), checkpoint.resolvedTarget, checkpoint.worktrees);
           const result = checkpoint.action === "restore"
@@ -418,14 +395,8 @@ export async function applyWorkplaceRecovery(plan: WorkplaceRecoveryPlan, expect
             : await verifyRestoredCheckpoint(checkpoint.checkpoint, checkpoint.resolvedTarget);
           if (checkpoint.action === "restore") restored.push(result.path);
           checkpointReceipts.push({ id: checkpoint.id, workplace: checkpoint.workplace, target: result.path, action: checkpoint.action, status: "restored-equivalent", checkpointId: result.receipt.checkpointId, portableFingerprint: result.receipt.portableFingerprint });
-          const stagedSite = staged.get(checkpoint.workplace);
-          if (stagedSite) {
-            const promoted = await promoteStagedSites(stagedSite.receipt, stagedSite.plan);
-            siteReceipts.push(promoted);
-            staged.delete(checkpoint.workplace);
-          }
         }
-        for (const item of staged.values()) await rm(dirname(item.receipt.family), { recursive: true, force: true });
+        for (const site of plan.sites) siteReceipts.push(await applySiteRouteSetup(site.plan, site.plan.revision));
         if (plan.positionBlock) {
           const currentMember = currentPosition.status === "resolved" ? await verifyPosition(plan, currentPosition) : currentPosition;
           position = { status: "blocked-continuity", source: "continuity", workplace: currentPosition.workplace, currentMember };
@@ -434,9 +405,8 @@ export async function applyWorkplaceRecovery(plan: WorkplaceRecoveryPlan, expect
           if (currentPosition.source === "request") await rememberCurrentMember({ anchorMount: plan.anchorMount, anchor: plan.anchor, workplace: currentPosition.workplace, member: currentPosition.member, desk: currentPosition.desk });
         } else position = currentPosition;
       } catch (error) {
-        for (const target of restored.reverse()) await rm(target, { recursive: true, force: true });
-        for (const target of stagedRoots.reverse()) await rm(target, { recursive: true, force: true });
         await rollbackSites(siteReceipts);
+        for (const target of restored.reverse()) await rm(target, { recursive: true, force: true });
         throw error;
       }
     },

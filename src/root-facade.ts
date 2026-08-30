@@ -159,7 +159,7 @@ async function prepareContinuity(mount: string, request: WorkplaceRecoveryReques
     if (await exists(path)) checkpoints.push({ ...checkpoint, checkpoint: path });
     else missing.push({ id: checkpoint.id, checkpointId: checkpoint.checkpointId, action: `endroit checkpoint fetch ${checkpoint.checkpointId} --json` });
   }
-  const requirement = descriptor?.setupContinuity ?? "undeclared";
+  const requirement = descriptor?.policy.requirement ?? "undeclared";
   return {
     request: { ...request, checkpoints },
     status: { status: missing.length ? requirement === "required" ? "blocked" : "degraded" : "available", requirement, missing },

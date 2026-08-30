@@ -4,29 +4,34 @@
   "title": "Workplace checkpoint remote receipt v1",
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "operation", "checkpointId", "status", "controlRef", "controlCommit", "remoteIdentity", "algorithm", "recipientRefs", "objects", "latest"],
+  "required": ["schema", "operation", "checkpointId", "status", "checkpointRef", "checkpointCommit", "lineRef", "ownerMember", "line", "parentCheckpoint", "remoteIdentity", "files", "lineUpdate"],
   "properties": {
     "schema": { "const": "workplace-checkpoint-remote-receipt/1" },
     "operation": { "enum": ["publish", "fetch"] },
     "checkpointId": { "type": "string", "pattern": "^checkpoint:sha256:[a-f0-9]{64}$" },
     "status": { "enum": ["verified-remote", "fetched-verified", "diverged"] },
-    "controlRef": { "type": "string", "pattern": "^refs/endroit/checkpoints/[a-f0-9]{64}/control$" },
-    "controlCommit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+    "checkpointRef": { "type": "string", "pattern": "^refs/endroit/checkpoints/owners/[a-f0-9]{64}/lines/[a-z0-9-]+/checkpoints/[a-f0-9]{64}$" },
+    "checkpointCommit": { "type": "string", "pattern": "^[a-f0-9]{40,64}$" },
+    "lineRef": { "type": "string", "pattern": "^refs/endroit/checkpoints/owners/[a-f0-9]{64}/lines/[a-z0-9-]+/head$" },
+    "ownerMember": { "type": "string", "pattern": "^workplace://.+/member/[a-z0-9-]+$" },
+    "line": { "type": "string", "pattern": "^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$" },
+    "parentCheckpoint": { "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^checkpoint:sha256:[a-f0-9]{64}$" }] },
     "remoteIdentity": { "type": "string", "pattern": "^sha256:[a-f0-9]{64}$" },
-    "algorithm": { "const": "age/1" },
-    "recipientRefs": { "type": "array", "items": { "type": "string", "pattern": "^recipient://" } },
-    "objects": { "type": "integer", "minimum": 1 },
-    "latest": {
+    "files": { "type": "integer", "minimum": 1 },
+    "lineUpdate": {
       "anyOf": [
         { "type": "null" },
         {
           "type": "object",
           "additionalProperties": false,
-          "required": ["status", "baseCheckpoint", "observedCheckpoint"],
+          "required": ["status", "expectedParent", "observedCheckpoint", "expectedCommit", "observedCommit", "resultingCommit"],
           "properties": {
-            "status": { "enum": ["advanced", "diverged"] },
-            "baseCheckpoint": { "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^checkpoint:sha256:[a-f0-9]{64}$" }] },
-            "observedCheckpoint": { "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^checkpoint:sha256:[a-f0-9]{64}$" }] }
+            "status": { "enum": ["advanced", "unchanged", "diverged"] },
+            "expectedParent": { "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^checkpoint:sha256:[a-f0-9]{64}$" }] },
+            "observedCheckpoint": { "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^checkpoint:sha256:[a-f0-9]{64}$" }] },
+            "expectedCommit": { "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^[a-f0-9]{40,64}$" }] },
+            "observedCommit": { "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^[a-f0-9]{40,64}$" }] },
+            "resultingCommit": { "anyOf": [{ "type": "null" }, { "type": "string", "pattern": "^[a-f0-9]{40,64}$" }] }
           }
         }
       ]

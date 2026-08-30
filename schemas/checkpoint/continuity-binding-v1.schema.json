@@ -1,0 +1,19 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://endroit.org/schemas/checkpoint/continuity-binding-v1.schema.json",
+  "title": "ContinuityBinding v1",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["kind", "version", "workplace", "role", "locator", "productLocator", "productVisibility", "continuityVisibility", "credentialBinding"],
+  "properties": {
+    "kind": { "const": "ContinuityBinding" },
+    "version": { "const": 1 },
+    "workplace": { "type": "string", "pattern": "^workplace://" },
+    "role": { "enum": ["product", "separate"] },
+    "locator": { "type": "string", "minLength": 1 },
+    "productLocator": { "type": "string", "minLength": 1 },
+    "productVisibility": { "enum": ["public", "private"] },
+    "continuityVisibility": { "const": "private" },
+    "credentialBinding": { "type": "string", "minLength": 1 }
+  }
+}

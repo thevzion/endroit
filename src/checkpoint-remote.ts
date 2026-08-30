@@ -1,22 +1,67 @@
-import { lstat, mkdir, mkdtemp, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { cp, lstat, mkdir, mkdtemp, realpath, rename, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { CheckpointError, restoreCheckpoint, verifyCheckpoint, type CheckpointManifest, type CheckpointReceipt } from "./checkpoint.ts";
 import { hash, stable } from "./compiler/index.ts";
 
 const CHECKPOINT_ID = /^checkpoint:sha256:[a-f0-9]{64}$/;
-const REVISION = /^sha256:[a-f0-9]{64}$/;
-const RECIPIENT_REF = /^recipient:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
-const AGE_RECIPIENT = /^age1[a-z0-9]+$/;
-const CONTROL_SCHEMA = "workplace-checkpoint-remote-control/1" as const;
-const RECORD_SCHEMA = "workplace-checkpoint-envelope-record/1" as const;
+const MEMBER = /^workplace:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*\/member\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const LINE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
-export type CheckpointPublishRequest = { kind: "CheckpointPublishRequest"; version: 1; remote: string; recipients: Array<{ ref: string; value: string }>; identities: string[]; baseCheckpoint: string | null };
-export type CheckpointFetchRequest = { kind: "CheckpointFetchRequest"; version: 1; remote: string; identities: string[] };
-type RemoteObject = { sha256: string; size: number };
-type RemoteControl = { schema: typeof CONTROL_SCHEMA; checkpointId: string; algorithm: "age/1"; recipientRefs: string[]; objects: RemoteObject[] };
-type LatestResult = { status: "advanced" | "diverged"; baseCheckpoint: string | null; observedCheckpoint: string | null };
-export type CheckpointRemoteReceipt = { schema: "workplace-checkpoint-remote-receipt/1"; operation: "publish" | "fetch"; checkpointId: string; status: "verified-remote" | "fetched-verified" | "diverged"; controlRef: string; controlCommit: string; remoteIdentity: string; algorithm: "age/1"; recipientRefs: string[]; objects: number; latest: LatestResult | null };
+export type ContinuityBinding = {
+  kind: "ContinuityBinding";
+  version: 1;
+  workplace: string;
+  role: "product" | "separate";
+  locator: string;
+  productLocator: string;
+  productVisibility: "public" | "private";
+  continuityVisibility: "private";
+  credentialBinding: string;
+};
+
+export type CheckpointPublishRequest = {
+  kind: "CheckpointPublishRequest";
+  version: 1;
+  binding: ContinuityBinding;
+  ownerMember: string;
+  line: string;
+  parentCheckpoint: string | null;
+};
+
+export type CheckpointFetchRequest = {
+  kind: "CheckpointFetchRequest";
+  version: 1;
+  binding: ContinuityBinding;
+  ownerMember: string;
+  line: string;
+};
+
+export type LineUpdate = {
+  status: "advanced" | "unchanged" | "diverged";
+  expectedParent: string | null;
+  observedCheckpoint: string | null;
+  expectedCommit: string | null;
+  observedCommit: string | null;
+  resultingCommit: string | null;
+};
+
+export type CheckpointRemoteReceipt = {
+  schema: "workplace-checkpoint-remote-receipt/1";
+  operation: "publish" | "fetch";
+  checkpointId: string;
+  status: "verified-remote" | "fetched-verified" | "diverged";
+  checkpointRef: string;
+  checkpointCommit: string;
+  lineRef: string;
+  ownerMember: string;
+  line: string;
+  parentCheckpoint: string | null;
+  remoteIdentity: string;
+  files: number;
+  lineUpdate: LineUpdate | null;
+};
 
 function fail(code: string, message: string): never { throw new CheckpointError(code, message); }
 function object(value: unknown, subject: string): Record<string, unknown> {
@@ -32,208 +77,218 @@ function text(value: unknown, subject: string): string {
   if (typeof value !== "string" || !value.trim() || value.includes("\0")) fail("checkpoint-schema-invalid", `${subject} must be non-empty text`);
   return value.trim();
 }
-function portablePath(value: unknown, subject: string): string {
-  const path = text(value, subject).replaceAll("\\", "/");
-  if (path.startsWith("/") || /^[A-Za-z]:\//.test(path) || path.split("/").some((part) => !part || part === "." || part === "..")) fail("checkpoint-path-invalid", `${subject} must be a safe relative path`);
-  return path;
+function locator(value: unknown, requestDirectory: string, subject: string): string {
+  const raw = text(value, subject);
+  if (/^https?:\/\/[^/]*@/i.test(raw)) fail("checkpoint-credential-forbidden", `${subject} must not contain credentials`);
+  return /^(?:[a-z][a-z0-9+.-]*:\/\/|[^/]+@[^:]+:)/i.test(raw) ? raw : resolve(requestDirectory, raw);
 }
-function remoteValue(value: unknown, requestDirectory: string): string {
-  const remote = text(value, "remote");
-  if (/^https?:\/\/[^/]*@/i.test(remote)) fail("checkpoint-credential-forbidden", "remote must not contain credentials");
-  return /^(?:[a-z][a-z0-9+.-]*:\/\/|[^/]+@[^:]+:)/i.test(remote) ? remote : resolve(requestDirectory, remote);
+function normalizedLocator(value: string): string { return value.replace(/\/+$/, ""); }
+
+export function parseContinuityBinding(value: unknown, requestDirectory: string): ContinuityBinding {
+  const source = object(value, "ContinuityBinding");
+  exact(source, ["kind", "version", "workplace", "role", "locator", "productLocator", "productVisibility", "continuityVisibility", "credentialBinding"], "ContinuityBinding");
+  if (source.kind !== "ContinuityBinding" || source.version !== 1 || !["product", "separate"].includes(String(source.role)) || !["public", "private"].includes(String(source.productVisibility)) || source.continuityVisibility !== "private") fail("checkpoint-schema-invalid", "Unsupported ContinuityBinding");
+  const binding: ContinuityBinding = {
+    kind: "ContinuityBinding", version: 1,
+    workplace: text(source.workplace, "ContinuityBinding.workplace"),
+    role: source.role as ContinuityBinding["role"],
+    locator: locator(source.locator, requestDirectory, "ContinuityBinding.locator"),
+    productLocator: locator(source.productLocator, requestDirectory, "ContinuityBinding.productLocator"),
+    productVisibility: source.productVisibility as ContinuityBinding["productVisibility"],
+    continuityVisibility: "private",
+    credentialBinding: text(source.credentialBinding, "ContinuityBinding.credentialBinding"),
+  };
+  if (!/^workplace:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/.test(binding.workplace)) fail("checkpoint-schema-invalid", "ContinuityBinding.workplace must be a Workplace ref");
+  const same = normalizedLocator(binding.locator) === normalizedLocator(binding.productLocator);
+  if ((binding.role === "product") !== same) fail("checkpoint-remote-role-mismatch", binding.role === "product" ? "product continuity must use the declared Product Remote" : "separate continuity must not reuse the declared Product Remote");
+  if (binding.role === "product" && binding.productVisibility !== "private") fail("checkpoint-remote-role-mismatch", "a public Product Remote requires separate private continuity");
+  return binding;
 }
-function identities(value: unknown, requestDirectory: string): string[] {
-  if (!Array.isArray(value) || value.length === 0 || value.some((item) => typeof item !== "string" || !item.trim())) fail("checkpoint-schema-invalid", "identities must be a non-empty string array");
-  const paths = value.map((item) => resolve(requestDirectory, String(item)));
-  if (new Set(paths).size !== paths.length) fail("checkpoint-schema-invalid", "identities must be unique");
-  return paths;
+function member(value: unknown, subject: string): string {
+  const result = text(value, subject);
+  if (!MEMBER.test(result)) fail("checkpoint-schema-invalid", `${subject} must be a fully qualified Member ref`);
+  return result;
+}
+function line(value: unknown, subject: string): string {
+  const result = text(value, subject);
+  if (!LINE.test(result)) fail("checkpoint-schema-invalid", `${subject} must be a portable line name`);
+  return result;
+}
+function parent(value: unknown, subject: string): string | null {
+  if (value === null) return null;
+  if (typeof value !== "string" || !CHECKPOINT_ID.test(value)) fail("checkpoint-schema-invalid", `${subject} must be null or a checkpoint ID`);
+  return value;
 }
 
 export function parsePublishRequest(value: unknown, requestDirectory: string): CheckpointPublishRequest {
   const source = object(value, "CheckpointPublishRequest");
-  exact(source, ["kind", "version", "remote", "recipients", "identities", "baseCheckpoint"], "CheckpointPublishRequest");
-  if (source.kind !== "CheckpointPublishRequest" || source.version !== 1 || !Array.isArray(source.recipients) || source.recipients.length === 0) fail("checkpoint-schema-invalid", "Unsupported CheckpointPublishRequest");
-  if (source.baseCheckpoint !== null && (typeof source.baseCheckpoint !== "string" || !CHECKPOINT_ID.test(source.baseCheckpoint))) fail("checkpoint-schema-invalid", "baseCheckpoint must be null or a checkpoint ID");
-  const recipients = source.recipients.map((value, index) => {
-    const subject = `recipients[${index}]`; const item = object(value, subject); exact(item, ["ref", "value"], subject);
-    if (typeof item.ref !== "string" || !RECIPIENT_REF.test(item.ref) || typeof item.value !== "string" || !AGE_RECIPIENT.test(item.value)) fail("checkpoint-schema-invalid", `${subject} is invalid`);
-    return { ref: item.ref, value: item.value };
-  }).sort((a, b) => a.ref.localeCompare(b.ref));
-  if (new Set(recipients.map((item) => item.ref)).size !== recipients.length || new Set(recipients.map((item) => item.value)).size !== recipients.length) fail("checkpoint-schema-invalid", "recipients must be unique");
-  return { kind: "CheckpointPublishRequest", version: 1, remote: remoteValue(source.remote, requestDirectory), recipients, identities: identities(source.identities, requestDirectory), baseCheckpoint: source.baseCheckpoint as string | null };
+  exact(source, ["kind", "version", "binding", "ownerMember", "line", "parentCheckpoint"], "CheckpointPublishRequest");
+  if (source.kind !== "CheckpointPublishRequest" || source.version !== 1) fail("checkpoint-schema-invalid", "Unsupported CheckpointPublishRequest");
+  return { kind: "CheckpointPublishRequest", version: 1, binding: parseContinuityBinding(source.binding, requestDirectory), ownerMember: member(source.ownerMember, "CheckpointPublishRequest.ownerMember"), line: line(source.line, "CheckpointPublishRequest.line"), parentCheckpoint: parent(source.parentCheckpoint, "CheckpointPublishRequest.parentCheckpoint") };
 }
 
 export function parseFetchRequest(value: unknown, requestDirectory: string): CheckpointFetchRequest {
-  const source = object(value, "CheckpointFetchRequest"); exact(source, ["kind", "version", "remote", "identities"], "CheckpointFetchRequest");
+  const source = object(value, "CheckpointFetchRequest");
+  exact(source, ["kind", "version", "binding", "ownerMember", "line"], "CheckpointFetchRequest");
   if (source.kind !== "CheckpointFetchRequest" || source.version !== 1) fail("checkpoint-schema-invalid", "Unsupported CheckpointFetchRequest");
-  return { kind: "CheckpointFetchRequest", version: 1, remote: remoteValue(source.remote, requestDirectory), identities: identities(source.identities, requestDirectory) };
+  return { kind: "CheckpointFetchRequest", version: 1, binding: parseContinuityBinding(source.binding, requestDirectory), ownerMember: member(source.ownerMember, "CheckpointFetchRequest.ownerMember"), line: line(source.line, "CheckpointFetchRequest.line") };
 }
 
-function run(cwd: string, command: string, args: string[], input?: Uint8Array, code = "checkpoint-remote-failed"): Uint8Array {
-  const result = spawnSync(command, args, { cwd, ...(input ? { input } : {}), env: { ...process.env, LC_ALL: "C" }, maxBuffer: 1024 * 1024 * 1024 });
-  if (result.status !== 0) fail(code, `${command} ${args.slice(0, 3).join(" ")} failed: ${new TextDecoder().decode(result.stderr).trim()}`);
-  return result.stdout;
+function run(cwd: string, args: string[], options: { allowFailure?: boolean; env?: Record<string, string> } = {}): { status: number; stdout: string; stderr: string } {
+  const result = spawnSync("git", args, { cwd, env: { ...process.env, LC_ALL: "C", ...options.env }, maxBuffer: 1024 * 1024 * 1024 });
+  const value = { status: result.status ?? 1, stdout: new TextDecoder().decode(result.stdout).trim(), stderr: new TextDecoder().decode(result.stderr).trim() };
+  if (!options.allowFailure && value.status !== 0) fail("checkpoint-remote-git-failed", `git ${args.slice(0, 4).join(" ")} failed: ${value.stderr}`);
+  return value;
 }
-function git(cwd: string, args: string[], input?: Uint8Array): Uint8Array { return run(cwd, "git", args, input, "checkpoint-remote-git-failed"); }
-function output(bytes: Uint8Array): string { return new TextDecoder().decode(bytes).trim(); }
-function ageEncrypt(cwd: string, bytes: Uint8Array, recipients: CheckpointPublishRequest["recipients"]): Uint8Array { return run(cwd, "age", ["--encrypt", ...recipients.flatMap((recipient) => ["--recipient", recipient.value])], bytes, "checkpoint-encryption-failed"); }
-function ageDecrypt(cwd: string, bytes: Uint8Array, identityPaths: string[]): Uint8Array { return run(cwd, "age", ["--decrypt", ...identityPaths.flatMap((identity) => ["--identity", identity])], bytes, "checkpoint-decryption-failed"); }
-function concat(first: Uint8Array, second: Uint8Array): Uint8Array { const result = new Uint8Array(first.length + second.length); result.set(first); result.set(second, first.length); return result; }
-
-async function filesBelow(root: string, current = root): Promise<string[]> {
-  const files: string[] = [];
-  for (const entry of await readdir(current, { withFileTypes: true })) {
-    const path = join(current, entry.name);
-    if (entry.isDirectory()) files.push(...await filesBelow(root, path));
-    else if (entry.isFile()) files.push(relative(root, path).split(sep).join("/"));
-    else fail("checkpoint-file-unsupported", `${relative(root, path)} is not a regular package file`);
-  }
-  return files.sort();
-}
-function encodeRecord(path: string, bytes: Uint8Array): Uint8Array { return concat(new TextEncoder().encode(`${JSON.stringify({ schema: RECORD_SCHEMA, path, sha256: hash(bytes), size: bytes.length })}\n`), bytes); }
-function decodeRecord(bytes: Uint8Array): { path: string; bytes: Uint8Array } {
-  const newline = bytes.indexOf(10); if (newline < 0) fail("checkpoint-envelope-invalid", "Encrypted record has no header boundary");
-  let source: Record<string, unknown>;
-  try { source = object(JSON.parse(new TextDecoder().decode(bytes.slice(0, newline))), "EnvelopeRecord"); }
-  catch (error) { if (error instanceof CheckpointError) throw error; fail("checkpoint-envelope-invalid", `Encrypted record header is invalid: ${error instanceof Error ? error.message : String(error)}`); }
-  exact(source, ["schema", "path", "sha256", "size"], "EnvelopeRecord");
-  const path = portablePath(source.path, "EnvelopeRecord.path"); const payload = bytes.slice(newline + 1);
-  if (source.schema !== RECORD_SCHEMA || typeof source.sha256 !== "string" || !REVISION.test(source.sha256) || !Number.isSafeInteger(source.size) || source.size !== payload.length || source.sha256 !== hash(payload)) fail("checkpoint-envelope-invalid", `${path} envelope content is invalid`);
-  return { path, bytes: payload };
-}
-function controlRef(checkpointId: string): string {
+function git(cwd: string, args: string[], options?: { env?: Record<string, string> }): string { return run(cwd, args, options).stdout; }
+function memberKey(ownerMember: string): string { return hash(ownerMember).slice("sha256:".length); }
+function checkpointKey(checkpointId: string): string {
   if (!CHECKPOINT_ID.test(checkpointId)) fail("checkpoint-schema-invalid", "checkpointId is invalid");
-  return `refs/endroit/checkpoints/${checkpointId.slice("checkpoint:sha256:".length)}/control`;
+  return checkpointId.slice("checkpoint:sha256:".length);
 }
-function validateControl(value: unknown): RemoteControl {
-  const source = object(value, "CONTROL.json"); exact(source, ["schema", "checkpointId", "algorithm", "recipientRefs", "objects"], "CONTROL.json");
-  if (source.schema !== CONTROL_SCHEMA || typeof source.checkpointId !== "string" || !CHECKPOINT_ID.test(source.checkpointId) || source.algorithm !== "age/1" || !Array.isArray(source.recipientRefs) || source.recipientRefs.length === 0 || !Array.isArray(source.objects) || source.objects.length === 0) fail("checkpoint-schema-invalid", "CONTROL.json identity is invalid");
-  const recipientRefs = source.recipientRefs.map((value) => typeof value === "string" && RECIPIENT_REF.test(value) ? value : fail("checkpoint-schema-invalid", "CONTROL.json has an invalid recipient Ref"));
-  const objects = source.objects.map((value, index) => {
-    const item = object(value, `objects[${index}]`); exact(item, ["sha256", "size"], `objects[${index}]`);
-    if (typeof item.sha256 !== "string" || !REVISION.test(item.sha256) || !Number.isSafeInteger(item.size) || Number(item.size) <= 0) fail("checkpoint-schema-invalid", `objects[${index}] is invalid`);
-    return { sha256: item.sha256, size: Number(item.size) };
-  });
-  if (new Set(recipientRefs).size !== recipientRefs.length || new Set(objects.map((item) => item.sha256)).size !== objects.length || stable(recipientRefs) !== stable([...recipientRefs].sort()) || stable(objects) !== stable([...objects].sort((a, b) => a.sha256.localeCompare(b.sha256)))) fail("checkpoint-schema-invalid", "CONTROL.json contains duplicates or unsorted sets");
-  return { schema: CONTROL_SCHEMA, checkpointId: source.checkpointId, algorithm: "age/1", recipientRefs, objects };
+export function checkpointRef(ownerMember: string, lineName: string, checkpointId: string): string {
+  return `refs/endroit/checkpoints/owners/${memberKey(member(ownerMember, "ownerMember"))}/lines/${line(lineName, "line")}/checkpoints/${checkpointKey(checkpointId)}`;
 }
-async function readControl(checkout: string): Promise<RemoteControl> {
+export function checkpointLineRef(ownerMember: string, lineName: string): string {
+  return `refs/endroit/checkpoints/owners/${memberKey(member(ownerMember, "ownerMember"))}/lines/${line(lineName, "line")}/head`;
+}
+function listRemote(locatorValue: string, ref: string): string | null {
+  const result = run(process.cwd(), ["ls-remote", locatorValue, ref], { allowFailure: true });
+  if (result.status !== 0) fail("checkpoint-remote-git-failed", `git ls-remote failed: ${result.stderr}`);
+  return result.stdout.split(/\s+/)[0] || null;
+}
+async function fetchCommit(locatorValue: string, ref: string, destination: string): Promise<string> {
+  await mkdir(destination, { recursive: true });
+  git(destination, ["init", "-q"]);
+  git(destination, ["fetch", "-q", "--no-tags", locatorValue, ref]);
+  git(destination, ["checkout", "-q", "--detach", "FETCH_HEAD"]);
+  return git(destination, ["rev-parse", "HEAD"]);
+}
+async function readRemoteManifest(checkout: string): Promise<{ manifest: CheckpointManifest; files: number }> {
+  const verified = await verifyCheckpoint(join(checkout, "checkpoint"));
+  const tracked = git(checkout, ["ls-files", "-z"]).split("\0").filter(Boolean).sort();
+  if (tracked.some((path) => !path.startsWith("checkpoint/"))) fail("checkpoint-file-set-mismatch", "Remote checkpoint commit contains files outside checkpoint/");
+  return { manifest: verified.manifest, files: tracked.length };
+}
+async function remoteCheckpoint(locatorValue: string, ownerMember: string, lineName: string, checkpointId: string, temporaryRoot: string): Promise<{ commit: string; manifest: CheckpointManifest; files: number } | null> {
+  const ref = checkpointRef(ownerMember, lineName, checkpointId);
+  if (!listRemote(locatorValue, ref)) return null;
+  const checkout = await mkdtemp(join(temporaryRoot, ".checkpoint-remote-read-"));
   try {
-    if (!(await lstat(join(checkout, "CONTROL.json"))).isFile()) fail("checkpoint-file-set-mismatch", "CONTROL.json is not a regular file");
-    const content = await readFile(join(checkout, "CONTROL.json"), "utf8"); const control = validateControl(JSON.parse(content));
-    if (content !== stable(control)) fail("checkpoint-component-mismatch", "CONTROL.json is not canonical"); return control;
-  } catch (error) { if (error instanceof SyntaxError) fail("checkpoint-schema-invalid", `CONTROL.json is invalid JSON: ${error.message}`); throw error; }
+    const commit = await fetchCommit(locatorValue, ref, checkout);
+    return { commit, ...await readRemoteManifest(checkout) };
+  } finally { await rm(checkout, { recursive: true, force: true }); }
+}
+async function observedLine(locatorValue: string, ownerMember: string, lineName: string, temporaryRoot: string): Promise<{ commit: string; checkpointId: string } | null> {
+  const ref = checkpointLineRef(ownerMember, lineName);
+  if (!listRemote(locatorValue, ref)) return null;
+  const checkout = await mkdtemp(join(temporaryRoot, ".checkpoint-line-read-"));
+  try {
+    const commit = await fetchCommit(locatorValue, ref, checkout);
+    const { manifest } = await readRemoteManifest(checkout);
+    if (manifest.ownerMember !== ownerMember || manifest.line !== lineName) fail("checkpoint-remote-mismatch", "Checkpoint Line resolves to another owner or line");
+    return { commit, checkpointId: manifest.checkpointId };
+  } finally { await rm(checkout, { recursive: true, force: true }); }
 }
 
-async function decryptCheckout(checkout: string, identityPaths: string[], outputRoot: string): Promise<{ control: RemoteControl; manifest: CheckpointManifest }> {
-  const control = await readControl(checkout); const objectRoot = join(checkout, "objects");
-  const expected = control.objects.map((item) => `${item.sha256.slice("sha256:".length)}.age`).sort();
-  const actual = (await readdir(objectRoot, { withFileTypes: true })).map((entry) => entry.isFile() ? entry.name : fail("checkpoint-file-set-mismatch", `objects/${entry.name} is not a file`)).sort();
-  if (stable(actual) !== stable(expected)) fail("checkpoint-file-set-mismatch", "Remote envelope object set changed");
-  const tracked = new TextDecoder().decode(git(checkout, ["ls-files", "-z"])).split("\0").filter(Boolean).sort();
-  if (stable(tracked) !== stable(["CONTROL.json", ...expected.map((name) => `objects/${name}`)].sort())) fail("checkpoint-file-set-mismatch", "Remote control tree contains unexpected files");
-  const paths = new Set<string>();
-  for (const item of control.objects) {
-    const cipher = await readFile(join(objectRoot, `${item.sha256.slice("sha256:".length)}.age`));
-    if (cipher.length !== item.size || hash(cipher) !== item.sha256) fail("checkpoint-envelope-mismatch", `${item.sha256} changed`);
-    const record = decodeRecord(ageDecrypt(checkout, cipher, identityPaths));
-    if (paths.has(record.path)) fail("checkpoint-envelope-invalid", `${record.path} is duplicated`); paths.add(record.path);
-    const target = resolve(outputRoot, record.path); if (!target.startsWith(`${resolve(outputRoot)}${sep}`)) fail("checkpoint-path-invalid", `${record.path} escapes the checkpoint target`);
-    await mkdir(dirname(target), { recursive: true }); await writeFile(target, record.bytes, { flag: "wx" });
+export async function resolveRemoteCheckpointLine(value: unknown, options: { requestDirectory?: string } = {}): Promise<{ checkpointCommit: string; checkpointId: string; ownerMember: string; line: string } | null> {
+  const request = parseFetchRequest(value, resolve(options.requestDirectory ?? process.cwd()));
+  const temporary = await mkdtemp(join(tmpdir(), "endroit-checkpoint-line-"));
+  try {
+    const observed = await observedLine(request.binding.locator, request.ownerMember, request.line, temporary);
+    return observed ? { checkpointCommit: observed.commit, checkpointId: observed.checkpointId, ownerMember: request.ownerMember, line: request.line } : null;
+  } finally { await rm(temporary, { recursive: true, force: true }); }
+}
+function assertManifestRequest(manifest: CheckpointManifest, request: CheckpointPublishRequest): void {
+  if (manifest.workplaceRef !== request.binding.workplace || manifest.ownerMember !== request.ownerMember || manifest.line !== request.line || manifest.parentCheckpoint !== request.parentCheckpoint) fail("checkpoint-remote-mismatch", "Checkpoint manifest and publish request continuity metadata differ");
+}
+function receipt(operation: "publish" | "fetch", status: CheckpointRemoteReceipt["status"], manifest: CheckpointManifest, binding: ContinuityBinding, commit: string, files: number, lineUpdate: LineUpdate | null): CheckpointRemoteReceipt {
+  return { schema: "workplace-checkpoint-remote-receipt/1", operation, checkpointId: manifest.checkpointId, status, checkpointRef: checkpointRef(manifest.ownerMember, manifest.line, manifest.checkpointId), checkpointCommit: commit, lineRef: checkpointLineRef(manifest.ownerMember, manifest.line), ownerMember: manifest.ownerMember, line: manifest.line, parentCheckpoint: manifest.parentCheckpoint, remoteIdentity: hash(binding.locator), files, lineUpdate };
+}
+async function createCheckpointCommit(checkpointPath: string, manifest: CheckpointManifest, remote: string, temporaryRoot: string): Promise<{ repository: string; commit: string; files: number }> {
+  const repository = await mkdtemp(join(temporaryRoot, ".checkpoint-remote-stage-"));
+  await mkdir(join(repository, "checkpoint"), { recursive: false });
+  await cp(checkpointPath, join(repository, "checkpoint"), { recursive: true });
+  git(repository, ["init", "-q"]);
+  git(repository, ["add", "checkpoint"]);
+  const tree = git(repository, ["write-tree"]);
+  let parentCommit: string | null = null;
+  if (manifest.parentCheckpoint) {
+    const fetched = run(repository, ["fetch", "-q", "--no-tags", remote, checkpointRef(manifest.ownerMember, manifest.line, manifest.parentCheckpoint)], { allowFailure: true });
+    if (fetched.status !== 0) fail("checkpoint-parent-unavailable", `${manifest.parentCheckpoint} is not published on this Checkpoint Line`);
+    parentCommit = git(repository, ["rev-parse", "FETCH_HEAD"]);
   }
-  const verified = await verifyCheckpoint(outputRoot);
-  if (verified.manifest.checkpointId !== control.checkpointId) fail("checkpoint-id-mismatch", "Remote control and decrypted checkpoint differ");
-  return { control, manifest: verified.manifest };
+  const commitDate = "2000-01-01T00:00:00Z";
+  const commit = git(repository, ["commit-tree", tree, ...(parentCommit ? ["-p", parentCommit] : []), "-m", `Checkpoint ${manifest.checkpointId}`], { env: { GIT_AUTHOR_NAME: "Endroit Checkpoint", GIT_AUTHOR_EMAIL: "checkpoint@endroit.invalid", GIT_AUTHOR_DATE: commitDate, GIT_COMMITTER_NAME: "Endroit Checkpoint", GIT_COMMITTER_EMAIL: "checkpoint@endroit.invalid", GIT_COMMITTER_DATE: commitDate } });
+  return { repository, commit, files: git(repository, ["ls-files", "-z"]).split("\0").filter(Boolean).length };
 }
-function normalizedRemote(remote: string): string { return remote.replace(/\/+$/, ""); }
-function rejectProductRemote(manifest: CheckpointManifest, remote: string): void {
-  const expected = normalizedRemote(remote);
-  if (manifest.repositories.flatMap((repository) => repository.remotes).flatMap((item) => item.urls).some((url) => normalizedRemote(url) === expected)) fail("checkpoint-remote-collision", "Checkpoint remote collides with a captured product remote");
-}
-async function fetchCheckout(remote: string, ref: string, destination: string): Promise<string> {
-  await mkdir(destination, { recursive: true }); git(destination, ["init", "-q"]); git(destination, ["fetch", "-q", "--no-tags", remote, ref]); git(destination, ["checkout", "-q", "--detach", "FETCH_HEAD"]);
-  return output(git(destination, ["rev-parse", "HEAD"]));
-}
-function remoteReceipt(operation: "publish" | "fetch", status: CheckpointRemoteReceipt["status"], control: RemoteControl, remote: string, commit: string, latest: LatestResult | null): CheckpointRemoteReceipt {
-  return { schema: "workplace-checkpoint-remote-receipt/1", operation, checkpointId: control.checkpointId, status, controlRef: controlRef(control.checkpointId), controlCommit: commit, remoteIdentity: hash(remote), algorithm: "age/1", recipientRefs: control.recipientRefs, objects: control.objects.length, latest };
-}
-
-const LATEST_REF = "refs/endroit/checkpoints/latest";
-
-async function observedLatest(remote: string, parent: string): Promise<{ commit: string; checkpointId: string } | null> {
-  const line = output(git(process.cwd(), ["ls-remote", remote, LATEST_REF]));
-  if (!line) return null;
-  const checkout = await mkdtemp(join(parent, ".checkpoint-latest-"));
-  try { const commit = await fetchCheckout(remote, LATEST_REF, checkout); return { commit, checkpointId: (await readControl(checkout)).checkpointId }; }
-  finally { await rm(checkout, { recursive: true, force: true }); }
-}
-
-export async function resolveLatestRemoteCheckpoint(value: unknown, options: { requestDirectory?: string } = {}): Promise<{ controlCommit: string; checkpointId: string } | null> {
-  const requestDirectory = resolve(options.requestDirectory ?? process.cwd());
-  const request = parseFetchRequest(value, requestDirectory);
-  const latest = await observedLatest(request.remote, requestDirectory);
-  return latest ? { controlCommit: latest.commit, checkpointId: latest.checkpointId } : null;
-}
-
-async function advanceLatest(checkout: string, remote: string, control: RemoteControl, commit: string, baseCheckpoint: string | null): Promise<LatestResult> {
-  const current = await observedLatest(remote, dirname(checkout));
-  if (current?.checkpointId === control.checkpointId) return { status: "advanced", baseCheckpoint, observedCheckpoint: control.checkpointId };
-  if ((current?.checkpointId ?? null) !== baseCheckpoint) return { status: "diverged", baseCheckpoint, observedCheckpoint: current?.checkpointId ?? null };
-  const lease = current ? `${LATEST_REF}:${current.commit}` : `${LATEST_REF}:`;
-  const pushed = spawnSync("git", ["push", "-q", `--force-with-lease=${lease}`, remote, `${commit}:${LATEST_REF}`], { cwd: checkout, env: { ...process.env, LC_ALL: "C" }, maxBuffer: 1024 * 1024 * 1024 });
-  if (pushed.status !== 0) return { status: "diverged", baseCheckpoint, observedCheckpoint: (await observedLatest(remote, dirname(checkout)))?.checkpointId ?? null };
-  const after = await observedLatest(remote, dirname(checkout));
-  if (after?.commit !== commit || after.checkpointId !== control.checkpointId) fail("checkpoint-remote-mismatch", "latest did not resolve to the verified control commit");
-  return { status: "advanced", baseCheckpoint, observedCheckpoint: control.checkpointId };
+async function advanceLine(repository: string, binding: ContinuityBinding, manifest: CheckpointManifest, commit: string, temporaryRoot: string): Promise<LineUpdate> {
+  const current = await observedLine(binding.locator, manifest.ownerMember, manifest.line, temporaryRoot);
+  const expectedCommit = manifest.parentCheckpoint ? listRemote(binding.locator, checkpointRef(manifest.ownerMember, manifest.line, manifest.parentCheckpoint)) ?? fail("checkpoint-parent-unavailable", `${manifest.parentCheckpoint} is not published on this Checkpoint Line`) : null;
+  if (current?.checkpointId === manifest.checkpointId) return { status: "unchanged", expectedParent: manifest.parentCheckpoint, observedCheckpoint: manifest.checkpointId, expectedCommit, observedCommit: current.commit, resultingCommit: current.commit };
+  if ((current?.checkpointId ?? null) !== manifest.parentCheckpoint) return { status: "diverged", expectedParent: manifest.parentCheckpoint, observedCheckpoint: current?.checkpointId ?? null, expectedCommit, observedCommit: current?.commit ?? null, resultingCommit: current?.commit ?? null };
+  const ref = checkpointLineRef(manifest.ownerMember, manifest.line);
+  const lease = current ? `${ref}:${current.commit}` : `${ref}:`;
+  const pushed = run(repository, ["push", "-q", `--force-with-lease=${lease}`, binding.locator, `${commit}:${ref}`], { allowFailure: true });
+  if (pushed.status !== 0) {
+    const observed = await observedLine(binding.locator, manifest.ownerMember, manifest.line, temporaryRoot);
+    return { status: "diverged", expectedParent: manifest.parentCheckpoint, observedCheckpoint: observed?.checkpointId ?? null, expectedCommit, observedCommit: current?.commit ?? null, resultingCommit: observed?.commit ?? null };
+  }
+  const after = await observedLine(binding.locator, manifest.ownerMember, manifest.line, temporaryRoot);
+  if (after?.commit !== commit || after.checkpointId !== manifest.checkpointId) fail("checkpoint-remote-mismatch", "Checkpoint Line did not advance to the published checkpoint");
+  return { status: "advanced", expectedParent: manifest.parentCheckpoint, observedCheckpoint: manifest.checkpointId, expectedCommit, observedCommit: current?.commit ?? null, resultingCommit: after.commit };
 }
 
 export async function publishCheckpoint(checkpointPath: string, value: unknown, options: { requestDirectory?: string } = {}): Promise<{ receipt: CheckpointRemoteReceipt }> {
-  const request = parsePublishRequest(value, resolve(options.requestDirectory ?? process.cwd())); const verified = await verifyCheckpoint(checkpointPath); rejectProductRemote(verified.manifest, request.remote); const ref = controlRef(verified.manifest.checkpointId);
-  const recipientRefs = request.recipients.map((item) => item.ref);
-  const existing = output(git(process.cwd(), ["ls-remote", request.remote, ref]));
-  if (existing) {
-    const checkout = await mkdtemp(join(dirname(verified.path), ".checkpoint-remote-fetch-")); const decrypted = await mkdtemp(join(dirname(verified.path), ".checkpoint-remote-decrypt-"));
-    try {
-      const commit = await fetchCheckout(request.remote, ref, checkout); const observed = await decryptCheckout(checkout, request.identities, decrypted);
-      if (observed.control.checkpointId !== verified.manifest.checkpointId || stable(observed.control.recipientRefs) !== stable(recipientRefs)) fail("checkpoint-remote-diverged", "Existing remote ref has different checkpoint or recipients");
-      const latest = await advanceLatest(checkout, request.remote, observed.control, commit, request.baseCheckpoint);
-      return { receipt: remoteReceipt("publish", latest.status === "diverged" ? "diverged" : "verified-remote", observed.control, request.remote, commit, latest) };
-    }
-    finally { await rm(checkout, { recursive: true, force: true }); await rm(decrypted, { recursive: true, force: true }); }
-  }
-  const staging = await mkdtemp(join(dirname(verified.path), ".checkpoint-remote-stage-")); const localProof = await mkdtemp(join(dirname(verified.path), ".checkpoint-remote-proof-"));
+  const request = parsePublishRequest(value, resolve(options.requestDirectory ?? process.cwd()));
+  const verified = await verifyCheckpoint(checkpointPath);
+  assertManifestRequest(verified.manifest, request);
+  const immutableRef = checkpointRef(request.ownerMember, request.line, verified.manifest.checkpointId);
+  const temporary = await mkdtemp(join(dirname(verified.path), ".checkpoint-publish-"));
   try {
-    await mkdir(join(staging, "objects"), { recursive: true }); const objects: RemoteObject[] = [];
-    // ponytail: one age process per file; batch only after real-package profiling proves process overhead material.
-    for (const path of await filesBelow(verified.path)) {
-      const cipher = ageEncrypt(staging, encodeRecord(path, await readFile(join(verified.path, path))), request.recipients); const digest = hash(cipher);
-      await writeFile(join(staging, `objects/${digest.slice("sha256:".length)}.age`), cipher, { flag: "wx" }); objects.push({ sha256: digest, size: cipher.length });
+    const existing = await remoteCheckpoint(request.binding.locator, request.ownerMember, request.line, verified.manifest.checkpointId, temporary);
+    if (existing) {
+      if (stable(existing.manifest) !== stable(verified.manifest)) fail("checkpoint-remote-diverged", "Immutable checkpoint ref resolves to different content");
+      const repository = await mkdtemp(join(temporary, ".checkpoint-publish-retry-"));
+      try {
+        const commit = await fetchCommit(request.binding.locator, immutableRef, repository);
+        if (commit !== existing.commit) fail("checkpoint-remote-mismatch", "Immutable checkpoint changed before retry");
+        const update = await advanceLine(repository, request.binding, verified.manifest, existing.commit, temporary);
+        return { receipt: receipt("publish", update.status === "diverged" ? "diverged" : "verified-remote", verified.manifest, request.binding, existing.commit, existing.files, update) };
+      } finally { await rm(repository, { recursive: true, force: true }); }
     }
-    objects.sort((a, b) => a.sha256.localeCompare(b.sha256));
-    const control: RemoteControl = { schema: CONTROL_SCHEMA, checkpointId: verified.manifest.checkpointId, algorithm: "age/1", recipientRefs, objects };
-    await writeFile(join(staging, "CONTROL.json"), stable(control)); git(staging, ["init", "-q"]); git(staging, ["add", "CONTROL.json", "objects"]);
-    const local = await decryptCheckout(staging, request.identities, localProof); rejectProductRemote(local.manifest, request.remote);
-    git(staging, ["-c", "user.name=Endroit Checkpoint", "-c", "user.email=checkpoint@endroit.invalid", "commit", "-qm", `Checkpoint ${verified.manifest.checkpointId}`]); git(staging, ["push", "-q", request.remote, `HEAD:${ref}`]);
-    const checkout = await mkdtemp(join(dirname(verified.path), ".checkpoint-remote-fetch-")); const remoteProof = await mkdtemp(join(dirname(verified.path), ".checkpoint-remote-proof-"));
+    const created = await createCheckpointCommit(verified.path, verified.manifest, request.binding.locator, temporary);
     try {
-      const commit = await fetchCheckout(request.remote, ref, checkout); const observed = await decryptCheckout(checkout, request.identities, remoteProof);
-      if (observed.control.checkpointId !== verified.manifest.checkpointId || stable(observed.control.recipientRefs) !== stable(recipientRefs)) fail("checkpoint-remote-diverged", "Fetched remote ref differs from the published checkpoint");
-      const latest = await advanceLatest(checkout, request.remote, observed.control, commit, request.baseCheckpoint);
-      return { receipt: remoteReceipt("publish", latest.status === "diverged" ? "diverged" : "verified-remote", observed.control, request.remote, commit, latest) };
-    }
-    finally { await rm(checkout, { recursive: true, force: true }); await rm(remoteProof, { recursive: true, force: true }); }
-  } finally { await rm(staging, { recursive: true, force: true }); await rm(localProof, { recursive: true, force: true }); }
+      git(created.repository, ["push", "-q", request.binding.locator, `${created.commit}:${immutableRef}`]);
+      const published = await remoteCheckpoint(request.binding.locator, request.ownerMember, request.line, verified.manifest.checkpointId, temporary) ?? fail("checkpoint-remote-mismatch", "Published checkpoint ref is unavailable");
+      if (published.commit !== created.commit || stable(published.manifest) !== stable(verified.manifest)) fail("checkpoint-remote-mismatch", "Published checkpoint differs from the local package");
+      const update = await advanceLine(created.repository, request.binding, verified.manifest, created.commit, temporary);
+      return { receipt: receipt("publish", update.status === "diverged" ? "diverged" : "verified-remote", verified.manifest, request.binding, created.commit, created.files, update) };
+    } finally { await rm(created.repository, { recursive: true, force: true }); }
+  } finally { await rm(temporary, { recursive: true, force: true }); }
 }
 
 export async function fetchCheckpoint(checkpointId: string, value: unknown, targetPath: string, options: { requestDirectory?: string } = {}): Promise<{ path: string; receipt: CheckpointRemoteReceipt }> {
-  const request = parseFetchRequest(value, resolve(options.requestDirectory ?? process.cwd())); const ref = controlRef(checkpointId); const target = resolve(targetPath);
+  const request = parseFetchRequest(value, resolve(options.requestDirectory ?? process.cwd()));
+  if (!CHECKPOINT_ID.test(checkpointId)) fail("checkpoint-schema-invalid", "checkpointId is invalid");
+  const target = resolve(targetPath);
   if (await lstat(target).then(() => true).catch(() => false)) fail("checkpoint-output-exists", `${target} already exists`);
-  await mkdir(dirname(target), { recursive: true }); const parent = await realpath(dirname(target)); const final = join(parent, basename(target)); const checkout = await mkdtemp(join(parent, ".checkpoint-remote-fetch-")); const decrypted = await mkdtemp(join(parent, ".checkpoint-remote-decrypt-"));
+  await mkdir(dirname(target), { recursive: true });
+  const parentDirectory = await realpath(dirname(target));
+  const checkout = await mkdtemp(join(parentDirectory, ".checkpoint-fetch-"));
   try {
-    const commit = await fetchCheckout(request.remote, ref, checkout); const observed = await decryptCheckout(checkout, request.identities, decrypted); rejectProductRemote(observed.manifest, request.remote); await rename(decrypted, final);
-    return { path: final, receipt: remoteReceipt("fetch", "fetched-verified", observed.control, request.remote, commit, null) };
-  } catch (error) { await rm(decrypted, { recursive: true, force: true }); throw error; }
-  finally { await rm(checkout, { recursive: true, force: true }); }
+    const commit = await fetchCommit(request.binding.locator, checkpointRef(request.ownerMember, request.line, checkpointId), checkout);
+    const { manifest, files } = await readRemoteManifest(checkout);
+    if (manifest.checkpointId !== checkpointId || manifest.workplaceRef !== request.binding.workplace || manifest.ownerMember !== request.ownerMember || manifest.line !== request.line) fail("checkpoint-remote-mismatch", "Fetched checkpoint belongs to another Workplace, ID, owner, or line");
+    const temporary = await mkdtemp(join(parentDirectory, ".checkpoint-install-"));
+    try {
+      await rm(temporary, { recursive: true, force: true });
+      await cp(join(checkout, "checkpoint"), temporary, { recursive: true });
+      const verified = await verifyCheckpoint(temporary);
+      await rename(temporary, join(parentDirectory, basename(target)));
+      return { path: target, receipt: receipt("fetch", "fetched-verified", verified.manifest, request.binding, commit, files, null) };
+    } catch (error) { await rm(temporary, { recursive: true, force: true }); throw error; }
+  } finally { await rm(checkout, { recursive: true, force: true }); }
 }
 
 export async function restoreCheckpointFromRemote(checkpointId: string, value: unknown, targetPath: string, options: { requestDirectory?: string } = {}): Promise<{ path: string; receipt: CheckpointReceipt; remote: CheckpointRemoteReceipt }> {

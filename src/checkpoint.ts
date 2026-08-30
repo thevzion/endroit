@@ -7,6 +7,7 @@ const REF = /^workplace:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\/[a-z0-9](?:
 const REVISION = /^sha256:[a-f0-9]{64}$/;
 const OID = /^(?:[a-f0-9]{40}|[a-f0-9]{64})$/;
 const ID = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const CHECKPOINT_ID = /^checkpoint:sha256:[a-f0-9]{64}$/;
 const INDEX_SCHEMA = "workplace-checkpoint-index/1" as const;
 
 export type CheckpointCaptureRequest = {
@@ -14,13 +15,16 @@ export type CheckpointCaptureRequest = {
   version: 1;
   workplace: string;
   workplaceRevision: string;
+  ownerMember: string;
+  line: string;
+  parentCheckpoint: string | null;
   sourceRoot: string;
   output: string;
   roots: Array<{
     ref: string;
     worktrees: Array<{ id: string; path: string; logicalPath: string }>;
   }>;
-  policy: { includeUntracked: boolean; ignoredPaths: Array<{ worktree: string; path: string }> };
+  policy: { includeUntracked: boolean };
 };
 
 type RefRecord = { name: string; oid: string };
@@ -52,7 +56,6 @@ export type WorktreeSnapshot = {
   index: { schema: typeof INDEX_SCHEMA; entries: IndexEntry[]; unsupportedExtensions: string[] };
   tracked: ContentRecord[];
   untracked: ContentRecord[];
-  ignored: ContentRecord[];
   operation: OperationRecord[];
 };
 
@@ -63,6 +66,9 @@ export type CheckpointManifest = {
   checkpointId: string;
   workplaceRef: string;
   workplaceRevision: string;
+  ownerMember: string;
+  line: string;
+  parentCheckpoint: string | null;
   fidelityPolicy: CheckpointCaptureRequest["policy"];
   repositories: RepositorySnapshot[];
   worktrees: WorktreeSnapshot[];
@@ -78,14 +84,14 @@ export type CheckpointReceipt = {
   workplaceRef: string;
   portableFingerprint: string;
   status: "captured" | "verified-local" | "restored-equivalent";
-  coverage: { repositories: number; worktrees: number; untracked: number; ignored: number; exclusions: string[] };
+  coverage: { repositories: number; worktrees: number; untracked: number; exclusions: string[] };
 };
 
 export type CheckpointRestorePlan = {
   schema: "workplace-checkpoint-restore-plan/1";
   checkpointId: string;
   repositories: Array<{ repositoryId: string; rootRef: string; objectFormat: string; bundle: string; refs: number; worktrees: string[] }>;
-  worktrees: Array<{ worktreeId: string; repositoryId: string; logicalPath: string; head: string; branchRef: string | null; indexEntries: number; tracked: number; untracked: number; ignored: number; operation: number }>;
+  worktrees: Array<{ worktreeId: string; repositoryId: string; logicalPath: string; head: string; branchRef: string | null; indexEntries: number; tracked: number; untracked: number; operation: number }>;
 };
 
 export class CheckpointError extends Error {
@@ -104,8 +110,8 @@ function object(value: unknown, subject: string): Record<string, unknown> {
   return value as Record<string, unknown>;
 }
 
-function exact(value: Record<string, unknown>, required: string[], subject: string): void {
-  const unknown = Object.keys(value).filter((key) => !required.includes(key));
+function exact(value: Record<string, unknown>, allowed: string[], subject: string, required = allowed): void {
+  const unknown = Object.keys(value).filter((key) => !allowed.includes(key));
   const missing = required.filter((key) => !(key in value));
   if (unknown.length) fail("checkpoint-schema-invalid", `${subject} has unknown fields: ${unknown.join(", ")}`);
   if (missing.length) fail("checkpoint-schema-invalid", `${subject} is missing fields: ${missing.join(", ")}`);
@@ -114,6 +120,12 @@ function exact(value: Record<string, unknown>, required: string[], subject: stri
 function semanticRef(value: unknown, subject: string): string {
   if (typeof value !== "string" || !REF.test(value)) fail("checkpoint-schema-invalid", `${subject} must be a fully qualified Workplace ref`);
   return value;
+}
+
+function ownerMember(value: unknown, workplace: string, subject: string): string {
+  const member = semanticRef(value, subject);
+  if (!member.startsWith(`${workplace}/member/`)) fail("checkpoint-schema-invalid", `${subject} must belong to ${workplace}`);
+  return member;
 }
 
 function localText(value: unknown, subject: string): string {
@@ -129,10 +141,15 @@ function logicalPath(value: unknown, subject: string): string {
 
 function parseCaptureRequest(value: unknown, requestDirectory: string): CheckpointCaptureRequest {
   const source = object(value, "CheckpointCaptureRequest");
-  exact(source, ["kind", "version", "workplace", "workplaceRevision", "sourceRoot", "output", "roots", "policy"], "CheckpointCaptureRequest");
+  exact(source, ["kind", "version", "workplace", "workplaceRevision", "ownerMember", "line", "parentCheckpoint", "sourceRoot", "output", "roots", "policy"], "CheckpointCaptureRequest", ["kind", "version", "workplace", "workplaceRevision", "ownerMember", "sourceRoot", "output", "roots", "policy"]);
   if (source.kind !== "CheckpointCaptureRequest" || source.version !== 1) fail("checkpoint-schema-invalid", "Unsupported CheckpointCaptureRequest");
   if (typeof source.workplaceRevision !== "string" || !REVISION.test(source.workplaceRevision)) fail("checkpoint-schema-invalid", "workplaceRevision must be sha256");
   if (!Array.isArray(source.roots) || source.roots.length === 0) fail("checkpoint-schema-invalid", "roots must be a non-empty array");
+  const workplace = semanticRef(source.workplace, "workplace");
+  const line = source.line === undefined ? "main" : localText(source.line, "line");
+  if (!ID.test(line)) fail("checkpoint-schema-invalid", "line must be a slug");
+  const parentCheckpoint = source.parentCheckpoint === undefined || source.parentCheckpoint === null ? null : localText(source.parentCheckpoint, "parentCheckpoint");
+  if (parentCheckpoint !== null && !CHECKPOINT_ID.test(parentCheckpoint)) fail("checkpoint-schema-invalid", "parentCheckpoint must be a checkpoint ID or null");
   const sourceRoot = resolve(requestDirectory, localText(source.sourceRoot, "sourceRoot"));
   const output = resolve(requestDirectory, localText(source.output, "output"));
   const worktreeIds = new Set<string>();
@@ -161,17 +178,9 @@ function parseCaptureRequest(value: unknown, requestDirectory: string): Checkpoi
   });
   if (new Set(roots.map((root) => root.ref)).size !== roots.length) fail("checkpoint-schema-invalid", "Root refs must be unique");
   const policy = object(source.policy, "policy");
-  exact(policy, ["includeUntracked", "ignoredPaths"], "policy");
-  if (typeof policy.includeUntracked !== "boolean" || !Array.isArray(policy.ignoredPaths)) fail("checkpoint-schema-invalid", "policy is invalid");
-  const ignoredPaths = policy.ignoredPaths.map((value, index) => {
-    const subject = `policy.ignoredPaths[${index}]`;
-    const item = object(value, subject);
-    exact(item, ["worktree", "path"], subject);
-    if (typeof item.worktree !== "string" || !worktreeIds.has(item.worktree)) fail("checkpoint-schema-invalid", `${subject}.worktree is undeclared`);
-    return { worktree: item.worktree, path: logicalPath(item.path, `${subject}.path`) };
-  });
-  if (new Set(ignoredPaths.map((item) => `${item.worktree}\0${item.path}`)).size !== ignoredPaths.length) fail("checkpoint-schema-invalid", "ignoredPaths must be unique");
-  return { kind: "CheckpointCaptureRequest", version: 1, workplace: semanticRef(source.workplace, "workplace"), workplaceRevision: source.workplaceRevision, sourceRoot, output, roots, policy: { includeUntracked: policy.includeUntracked, ignoredPaths } };
+  exact(policy, ["includeUntracked"], "policy");
+  if (typeof policy.includeUntracked !== "boolean") fail("checkpoint-schema-invalid", "policy is invalid");
+  return { kind: "CheckpointCaptureRequest", version: 1, workplace, workplaceRevision: source.workplaceRevision, ownerMember: ownerMember(source.ownerMember, workplace, "ownerMember"), line, parentCheckpoint, sourceRoot, output, roots, policy: { includeUntracked: policy.includeUntracked } };
 }
 
 function command(cwd: string, args: string[], input?: string | Uint8Array, extraEnv: Record<string, string> = {}): Uint8Array {
@@ -280,12 +289,6 @@ async function inspectWorktree(declared: CheckpointCaptureRequest["roots"][numbe
   const tracked = await Promise.all(trackedPaths.map((path) => contentRecord(root, path, packageRoot, payloads)));
   const untrackedPaths = request.policy.includeUntracked ? nul(git(root, ["ls-files", "--others", "--exclude-standard", "-z"])).sort() : [];
   const untracked = await Promise.all(untrackedPaths.map((path) => contentRecord(root, path, packageRoot, payloads)));
-  const selectedIgnored = request.policy.ignoredPaths.filter((item) => item.worktree === declared.id).map((item) => item.path).sort();
-  for (const path of selectedIgnored) {
-    const check = Bun.spawnSync(["git", "check-ignore", "-q", "--", path], { cwd: root, stdout: "pipe", stderr: "pipe" });
-    if (check.exitCode !== 0) fail("checkpoint-policy-invalid", `${declared.id}:${path} is not ignored`);
-  }
-  const ignored = await Promise.all(selectedIgnored.map((path) => contentRecord(root, path, packageRoot, payloads)));
   const operation: OperationRecord[] = [];
   const operationPaths = [...OPERATION_FILES];
   for (const directory of OPERATION_DIRECTORIES) {
@@ -310,7 +313,7 @@ async function inspectWorktree(declared: CheckpointCaptureRequest["roots"][numbe
   const branch = Bun.spawnSync(["git", "symbolic-ref", "--quiet", "HEAD"], { cwd: root, stdout: "pipe", stderr: "pipe" });
   const branchRef = branch.exitCode === 0 ? text(branch.stdout) : null;
   const requiredOids = [...new Set([head, ...index.entries.map((entry) => entry.oid), ...operationOids])];
-  return { schema: "workplace-checkpoint-worktree/1", worktreeId: declared.id, repositoryId, logicalPath: declared.logicalPath, head, branchRef, index, tracked, untracked, ignored, operation, commonGitDir: common, requiredOids };
+  return { schema: "workplace-checkpoint-worktree/1", worktreeId: declared.id, repositoryId, logicalPath: declared.logicalPath, head, branchRef, index, tracked, untracked, operation, commonGitDir: common, requiredOids };
 }
 
 function refs(root: string): RefRecord[] {
@@ -419,8 +422,7 @@ function receipt(operation: CheckpointReceipt["operation"], status: CheckpointRe
     coverage: {
       repositories: manifest.repositories.length, worktrees: manifest.worktrees.length,
       untracked: manifest.worktrees.reduce((count, worktree) => count + worktree.untracked.length, 0),
-      ignored: manifest.worktrees.reduce((count, worktree) => count + worktree.ignored.length, 0),
-      exclusions: ["filesystem-metadata", "special-files", "ignored-files-not-selected", "provider-state", "credentials"],
+      exclusions: ["filesystem-metadata", "special-files", "ignored-files", "provider-state", "credentials"],
     },
   };
 }
@@ -496,6 +498,7 @@ export async function captureCheckpoint(value: unknown, options: { requestDirect
     const base = {
       schema: "workplace-checkpoint-manifest/1" as const,
       workplaceRef: request.workplace, workplaceRevision: request.workplaceRevision,
+      ownerMember: request.ownerMember, line: request.line, parentCheckpoint: request.parentCheckpoint,
       fidelityPolicy: request.policy, repositories, worktrees: captured,
       payloads: [...payloads.values()].sort((a, b) => a.sha256.localeCompare(b.sha256)),
       compatibility: { platform: process.platform, objectFormats: [...new Set(repositories.map((repository) => repository.objectFormat))].sort(), symlinks: true as const },
@@ -522,20 +525,18 @@ export async function captureCheckpoint(value: unknown, options: { requestDirect
 
 function validateManifest(value: unknown): CheckpointManifest {
   const manifest = object(value, "MANIFEST.json");
-  exact(manifest, ["schema", "checkpointId", "workplaceRef", "workplaceRevision", "fidelityPolicy", "repositories", "worktrees", "payloads", "compatibility", "portableFingerprint"], "MANIFEST.json");
+  exact(manifest, ["schema", "checkpointId", "workplaceRef", "workplaceRevision", "ownerMember", "line", "parentCheckpoint", "fidelityPolicy", "repositories", "worktrees", "payloads", "compatibility", "portableFingerprint"], "MANIFEST.json");
   if (manifest.schema !== "workplace-checkpoint-manifest/1" || typeof manifest.checkpointId !== "string" || !manifest.checkpointId.startsWith("checkpoint:sha256:")) fail("checkpoint-schema-invalid", "Unsupported checkpoint manifest");
   const workplaceRef = semanticRef(manifest.workplaceRef, "workplaceRef");
   if (typeof manifest.workplaceRevision !== "string" || !REVISION.test(manifest.workplaceRevision) || typeof manifest.portableFingerprint !== "string" || !REVISION.test(manifest.portableFingerprint)) fail("checkpoint-schema-invalid", "Manifest revisions are invalid");
   if (!Array.isArray(manifest.repositories) || !Array.isArray(manifest.worktrees) || !Array.isArray(manifest.payloads)) fail("checkpoint-schema-invalid", "Manifest components must be arrays");
+  const line = localText(manifest.line, "line");
+  if (!ID.test(line)) fail("checkpoint-schema-invalid", "line is invalid");
+  const parentCheckpoint = manifest.parentCheckpoint === null ? null : localText(manifest.parentCheckpoint, "parentCheckpoint");
+  if (parentCheckpoint !== null && !CHECKPOINT_ID.test(parentCheckpoint)) fail("checkpoint-schema-invalid", "parentCheckpoint is invalid");
   const policy = object(manifest.fidelityPolicy, "fidelityPolicy");
-  exact(policy, ["includeUntracked", "ignoredPaths"], "fidelityPolicy");
-  if (typeof policy.includeUntracked !== "boolean" || !Array.isArray(policy.ignoredPaths)) fail("checkpoint-schema-invalid", "fidelityPolicy is invalid");
-  const ignoredPaths = policy.ignoredPaths.map((value, index) => {
-    const item = object(value, `fidelityPolicy.ignoredPaths[${index}]`);
-    exact(item, ["worktree", "path"], `fidelityPolicy.ignoredPaths[${index}]`);
-    if (typeof item.worktree !== "string" || !ID.test(item.worktree)) fail("checkpoint-schema-invalid", "ignored worktree is invalid");
-    return { worktree: item.worktree, path: logicalPath(item.path, "ignored path") };
-  });
+  exact(policy, ["includeUntracked"], "fidelityPolicy");
+  if (typeof policy.includeUntracked !== "boolean") fail("checkpoint-schema-invalid", "fidelityPolicy is invalid");
   const repositories = manifest.repositories.map((value, index): RepositorySnapshot => {
     const subject = `repositories[${index}]`;
     const repository = object(value, subject);
@@ -584,7 +585,7 @@ function validateManifest(value: unknown): CheckpointManifest {
   const worktrees = manifest.worktrees.map((value, index): WorktreeSnapshot => {
     const subject = `worktrees[${index}]`;
     const worktree = object(value, subject);
-    exact(worktree, ["schema", "worktreeId", "repositoryId", "logicalPath", "head", "branchRef", "index", "tracked", "untracked", "ignored", "operation"], subject);
+    exact(worktree, ["schema", "worktreeId", "repositoryId", "logicalPath", "head", "branchRef", "index", "tracked", "untracked", "operation"], subject);
     if (worktree.schema !== "workplace-checkpoint-worktree/1" || typeof worktree.worktreeId !== "string" || !ID.test(worktree.worktreeId) || typeof worktree.repositoryId !== "string" || !/^[a-f0-9]{16}$/.test(worktree.repositoryId) || typeof worktree.head !== "string" || !OID.test(worktree.head)) fail("checkpoint-schema-invalid", `${subject} identity is invalid`);
     if (worktree.branchRef !== null && (typeof worktree.branchRef !== "string" || !worktree.branchRef.startsWith("refs/heads/"))) fail("checkpoint-schema-invalid", `${subject}.branchRef is invalid`);
     const indexSource = object(worktree.index, `${subject}.index`);
@@ -598,7 +599,7 @@ function validateManifest(value: unknown): CheckpointManifest {
       return { path: logicalPath(entry.path, `${entrySubject}.path`), stage: Number(entry.stage), mode: String(entry.mode), oid: entry.oid, assumeUnchanged: entry.assumeUnchanged as boolean, skipWorktree: entry.skipWorktree as boolean, intentToAdd: entry.intentToAdd as boolean };
     });
     if (new Set(entries.map((entry) => `${entry.path}\0${entry.stage}`)).size !== entries.length) fail("checkpoint-schema-invalid", `${subject}.index repeats an entry`);
-    if (!["tracked", "untracked", "ignored", "operation"].every((key) => Array.isArray(worktree[key]))) fail("checkpoint-schema-invalid", `${subject} content arrays are invalid`);
+    if (!["tracked", "untracked", "operation"].every((key) => Array.isArray(worktree[key]))) fail("checkpoint-schema-invalid", `${subject} content arrays are invalid`);
     const operation = (worktree.operation as unknown[]).map((value, operationIndex): OperationRecord => {
       const operationSubject = `${subject}.operation[${operationIndex}]`;
       const item = object(value, operationSubject);
@@ -608,9 +609,8 @@ function validateManifest(value: unknown): CheckpointManifest {
     });
     const tracked = (worktree.tracked as unknown[]).map((item, itemIndex) => parseContent(item, `${subject}.tracked[${itemIndex}]`));
     const untracked = (worktree.untracked as unknown[]).map((item, itemIndex) => parseContent(item, `${subject}.untracked[${itemIndex}]`));
-    const ignored = (worktree.ignored as unknown[]).map((item, itemIndex) => parseContent(item, `${subject}.ignored[${itemIndex}]`));
-    if ([tracked, untracked, ignored].some((records) => new Set(records.map((record) => record.path)).size !== records.length) || new Set(operation.map((record) => record.path)).size !== operation.length) fail("checkpoint-schema-invalid", `${subject} repeats content paths`);
-    return { schema: "workplace-checkpoint-worktree/1", worktreeId: worktree.worktreeId, repositoryId: worktree.repositoryId, logicalPath: logicalPath(worktree.logicalPath, `${subject}.logicalPath`), head: worktree.head, branchRef: worktree.branchRef as string | null, index: { schema: INDEX_SCHEMA, entries, unsupportedExtensions: indexSource.unsupportedExtensions as string[] }, tracked, untracked, ignored, operation };
+    if ([tracked, untracked].some((records) => new Set(records.map((record) => record.path)).size !== records.length) || new Set(operation.map((record) => record.path)).size !== operation.length) fail("checkpoint-schema-invalid", `${subject} repeats content paths`);
+    return { schema: "workplace-checkpoint-worktree/1", worktreeId: worktree.worktreeId, repositoryId: worktree.repositoryId, logicalPath: logicalPath(worktree.logicalPath, `${subject}.logicalPath`), head: worktree.head, branchRef: worktree.branchRef as string | null, index: { schema: INDEX_SCHEMA, entries, unsupportedExtensions: indexSource.unsupportedExtensions as string[] }, tracked, untracked, operation };
   });
   const payloads = manifest.payloads.map((value, index): PayloadRecord => {
     const subject = `payloads[${index}]`;
@@ -624,8 +624,7 @@ function validateManifest(value: unknown): CheckpointManifest {
   if (typeof compatibility.platform !== "string" || !Array.isArray(compatibility.objectFormats) || compatibility.objectFormats.some((item) => item !== "sha1" && item !== "sha256") || compatibility.symlinks !== true) fail("checkpoint-schema-invalid", "compatibility is invalid");
   if (new Set(repositories.map((item) => item.repositoryId)).size !== repositories.length || new Set(repositories.map((item) => item.rootRef)).size !== repositories.length || new Set(worktrees.map((item) => item.worktreeId)).size !== worktrees.length || new Set(worktrees.map((item) => item.logicalPath)).size !== worktrees.length || new Set(payloads.map((item) => item.sha256)).size !== payloads.length) fail("checkpoint-schema-invalid", "Manifest component identities must be unique");
   for (const worktree of worktrees) if (!repositories.some((repository) => repository.repositoryId === worktree.repositoryId && repository.worktrees.includes(worktree.worktreeId))) fail("checkpoint-schema-invalid", `${worktree.worktreeId} is not owned by its RepositorySnapshot`);
-  for (const ignored of ignoredPaths) if (!worktrees.some((worktree) => worktree.worktreeId === ignored.worktree)) fail("checkpoint-schema-invalid", `ignored path names missing worktree ${ignored.worktree}`);
-  return { schema: "workplace-checkpoint-manifest/1", checkpointId: manifest.checkpointId, workplaceRef, workplaceRevision: manifest.workplaceRevision, fidelityPolicy: { includeUntracked: policy.includeUntracked, ignoredPaths }, repositories, worktrees, payloads, compatibility: { platform: compatibility.platform, objectFormats: compatibility.objectFormats as string[], symlinks: true }, portableFingerprint: manifest.portableFingerprint };
+  return { schema: "workplace-checkpoint-manifest/1", checkpointId: manifest.checkpointId, workplaceRef, workplaceRevision: manifest.workplaceRevision, ownerMember: ownerMember(manifest.ownerMember, workplaceRef, "ownerMember"), line, parentCheckpoint, fidelityPolicy: { includeUntracked: policy.includeUntracked }, repositories, worktrees, payloads, compatibility: { platform: compatibility.platform, objectFormats: compatibility.objectFormats as string[], symlinks: true }, portableFingerprint: manifest.portableFingerprint };
 }
 
 async function readManifest(root: string): Promise<CheckpointManifest> {
@@ -687,7 +686,7 @@ export function checkpointRestorePlan(manifest: CheckpointManifest): CheckpointR
     schema: "workplace-checkpoint-restore-plan/1",
     checkpointId: manifest.checkpointId,
     repositories: manifest.repositories.map((repository) => ({ repositoryId: repository.repositoryId, rootRef: repository.rootRef, objectFormat: repository.objectFormat, bundle: repository.bundle.path, refs: repository.refs.length, worktrees: repository.worktrees })),
-    worktrees: manifest.worktrees.map((worktree) => ({ worktreeId: worktree.worktreeId, repositoryId: worktree.repositoryId, logicalPath: worktree.logicalPath, head: worktree.head, branchRef: worktree.branchRef, indexEntries: worktree.index.entries.length, tracked: worktree.tracked.length, untracked: worktree.untracked.length, ignored: worktree.ignored.length, operation: worktree.operation.length })),
+    worktrees: manifest.worktrees.map((worktree) => ({ worktreeId: worktree.worktreeId, repositoryId: worktree.repositoryId, logicalPath: worktree.logicalPath, head: worktree.head, branchRef: worktree.branchRef, indexEntries: worktree.index.entries.length, tracked: worktree.tracked.length, untracked: worktree.untracked.length, operation: worktree.operation.length })),
   };
 }
 
@@ -747,6 +746,7 @@ async function observeRestored(manifest: CheckpointManifest, target: string, pac
     });
     const request: CheckpointCaptureRequest = {
       kind: "CheckpointCaptureRequest", version: 1, workplace: manifest.workplaceRef, workplaceRevision: manifest.workplaceRevision,
+      ownerMember: manifest.ownerMember, line: manifest.line, parentCheckpoint: manifest.parentCheckpoint,
       sourceRoot: target, output: resolve(target, ".verification-unused"), roots: [{ ref: repository.rootRef, worktrees: declaredWorktrees }], policy: manifest.fidelityPolicy,
     };
     const observed = await Promise.all(declaredWorktrees.map((worktree) => inspectWorktree(worktree, repository.repositoryId, request, packageRoot, payloads)));
@@ -810,7 +810,7 @@ export async function restoreCheckpoint(checkpoint: string, targetPath: string):
         git(temporary, ["--git-dir", common, "worktree", "add", "--force", ...(snapshot.branchRef ? [] : ["--detach"]), destination, ref]);
         restoreIndex(destination, snapshot);
         for (const record of snapshot.tracked) await materialize(record, destination, verified.path);
-        for (const record of [...snapshot.untracked, ...snapshot.ignored]) await materialize(record, destination, verified.path);
+        for (const record of snapshot.untracked) await materialize(record, destination, verified.path);
         const gitDir = resolve(destination, text(git(destination, ["rev-parse", "--git-dir"])));
         for (const record of snapshot.operation) await materialize(record, gitDir, verified.path);
         for (const entry of snapshot.index.entries.filter((entry) => entry.stage === 0)) {

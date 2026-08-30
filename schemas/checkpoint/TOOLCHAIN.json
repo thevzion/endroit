@@ -8,7 +8,6 @@
     "checkpoint verify"
   ],
   "executors": [
-    "age",
     "git"
   ],
   "gitObjectFormats": [
@@ -17,8 +16,7 @@
   ],
   "qualifiedPlatforms": [],
   "reads": [
-    "workplace-checkpoint-manifest/1",
-    "workplace-checkpoint-remote-control/1"
+    "workplace-checkpoint-manifest/1"
   ],
   "schema": "workplace-checkpoint-toolchain/1",
   "toolchain": {
@@ -26,7 +24,6 @@
     "version": "0.1.0-rc.1"
   },
   "writes": [
-    "workplace-checkpoint-manifest/1",
-    "workplace-checkpoint-remote-control/1"
+    "workplace-checkpoint-manifest/1"
   ]
 }

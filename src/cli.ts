@@ -22,7 +22,7 @@ import { captureCheckpoint, CheckpointError, restoreCheckpoint, verifyCheckpoint
 import { fetchCheckpoint, publishCheckpoint, restoreCheckpointFromRemote } from "./checkpoint-remote.ts";
 import { applyWorkplaceRecovery, planWorkplaceRecovery, RecoveryError } from "./recovery.ts";
 import { CurrentMemberError } from "./current-member.ts";
-import { SiteRouteSetupError } from "./site-setup.ts";
+import { detachExternalSiteRoute, SiteRouteSetupError } from "./site-setup.ts";
 import { CheckpointStoreError, createLocalCheckpoint, fetchContinuityCheckpoint, loadContinuityDescriptor, pushContinuityCheckpoint, restoreContinuityCheckpoint } from "./checkpoint-store.ts";
 import { RootFacadeError, resolveWorkplaceRoot, setupFromRoot, statusFromRoot } from "./root-facade.ts";
 
@@ -93,13 +93,17 @@ function print(value: unknown, json: boolean): void {
     const receipt = value as unknown as { operation: string; status: string; checkpointId: string; path: string };
     console.log(`${receipt.operation} · ${receipt.status}\n${receipt.checkpointId}\n${receipt.path}`);
   }
+  else if (typeof value === "object" && value && "kind" in value && value.kind === "SiteRouteDetachReceipt") {
+    const receipt = value as unknown as { workplace: string; site: string; route: string; status: string };
+    console.log(`${receipt.workplace} · ${receipt.site}/${receipt.route} · ${receipt.status}`);
+  }
   else if (typeof value === "object" && value && "receipt" in value && typeof value.receipt === "object" && value.receipt && "kind" in value.receipt && value.receipt.kind === "ContinuityRemoteReceipt") {
-    const result = value as unknown as { receipt: { operation: string; status: string; selector: string } };
-    console.log(`${result.receipt.operation} · ${result.receipt.status}\n${result.receipt.selector}`);
+    const result = value as unknown as { receipt: { operation: string; status: string; checkpointId: string | null } };
+    console.log([`${result.receipt.operation} · ${result.receipt.status}`, result.receipt.checkpointId].filter(Boolean).join("\n"));
   }
   else if (typeof value === "object" && value && "receipt" in value) {
-    const checkpoint = value as unknown as { path?: string; receipt: { status: string; checkpointId: string; controlRef?: string; coverage?: { repositories: number; worktrees: number } } };
-    console.log([`${checkpoint.receipt.status} · ${checkpoint.receipt.checkpointId}`, checkpoint.path, checkpoint.receipt.controlRef, checkpoint.receipt.coverage ? `${checkpoint.receipt.coverage.repositories} repositories · ${checkpoint.receipt.coverage.worktrees} worktrees` : undefined].filter(Boolean).join("\n"));
+    const checkpoint = value as unknown as { path?: string; receipt: { status: string; checkpointId: string; checkpointRef?: string; coverage?: { repositories: number; worktrees: number } } };
+    console.log([`${checkpoint.receipt.status} · ${checkpoint.receipt.checkpointId}`, checkpoint.path, checkpoint.receipt.checkpointRef, checkpoint.receipt.coverage ? `${checkpoint.receipt.coverage.repositories} repositories · ${checkpoint.receipt.coverage.worktrees} worktrees` : undefined].filter(Boolean).join("\n"));
   }
   else if (typeof value === "object" && value && "check" in value) {
     const ready = value as { mount: string; changed: boolean; check: { entryStatus: string; operationStatus: string; requiredAction?: string } };
@@ -118,6 +122,9 @@ try {
     print(await setupFromRoot({ start: process.cwd(), ...(options.values.from ? { from: options.values.from } : {}), ...(options.values.with ? { with: options.values.with } : {}), ...(options.values.as ? { as: options.values.as } : {}) }), options.flags.has("json"));
   } else if (command === "status") {
     print(await statusFromRoot(options.positionals[0] ?? process.cwd()), options.flags.has("json"));
+  } else if (command === "site") {
+    if (options.positionals[0] !== "route" || options.positionals[1] !== "detach" || !options.positionals[2] || !options.positionals[3]) throw new Error("usage: endroit site route detach <site-id> <route-id> [--json]");
+    print(await detachExternalSiteRoute(await resolveWorkplaceRoot(process.cwd()), options.positionals[2], options.positionals[3]), options.flags.has("json"));
   } else if (command === "new") {
     const requestPath = options.values.request;
     const wantsPreview = options.flags.has("preview");
@@ -188,7 +195,7 @@ try {
         start = await realpath(start);
       }
       const descriptor = await loadContinuityDescriptor(await resolveWorkplaceRoot(start));
-      print(await createLocalCheckpoint(descriptor), options.flags.has("json"));
+      print(await createLocalCheckpoint(descriptor, { ...(options.values.member ? { member: options.values.member } : {}), ...(options.values.line ? { line: options.values.line } : {}) }), options.flags.has("json"));
     } else if (action === "capture") {
       const requestPath = options.values.from;
       if (!requestPath) throw new Error("usage: endroit checkpoint capture --from <request.json> [--json]");
@@ -207,7 +214,7 @@ try {
         print(await restoreCheckpoint(checkpoint, options.values.to), options.flags.has("json"));
       } else {
         const descriptor = await loadContinuityDescriptor(await resolveWorkplaceRoot(process.cwd()));
-        print(await restoreContinuityCheckpoint(descriptor, options.positionals[1] ?? "latest"), options.flags.has("json"));
+        print(await restoreContinuityCheckpoint(descriptor, options.positionals[1], { ...(options.values.member ? { member: options.values.member } : {}), ...(options.values.line ? { line: options.values.line } : {}) }), options.flags.has("json"));
       }
     } else if (action === "publish") {
       const checkpoint = options.positionals[1];
@@ -225,7 +232,7 @@ try {
         print(await fetchCheckpoint(checkpointId, JSON.parse(await Bun.file(resolvedRequest).text()) as unknown, target, { requestDirectory: dirname(resolvedRequest) }), options.flags.has("json"));
       } else {
         const descriptor = await loadContinuityDescriptor(await resolveWorkplaceRoot(process.cwd()));
-        print(await fetchContinuityCheckpoint(descriptor, options.positionals[1] ?? "latest"), options.flags.has("json"));
+        print(await fetchContinuityCheckpoint(descriptor, options.positionals[1], { ...(options.values.member ? { member: options.values.member } : {}), ...(options.values.line ? { line: options.values.line } : {}) }), options.flags.has("json"));
       }
     } else if (action === "restore-remote") {
       const checkpointId = options.positionals[1];
@@ -236,8 +243,8 @@ try {
       print(await restoreCheckpointFromRemote(checkpointId, JSON.parse(await Bun.file(resolvedRequest).text()) as unknown, target, { requestDirectory: dirname(resolvedRequest) }), options.flags.has("json"));
     } else if (action === "push") {
       const descriptor = await loadContinuityDescriptor(await resolveWorkplaceRoot(process.cwd()));
-      print(await pushContinuityCheckpoint(descriptor, options.positionals[1] ?? "latest"), options.flags.has("json"));
-    } else throw new Error("usage: endroit checkpoint [path] | <push|fetch|restore> [checkpoint-id|latest] | <capture|verify|publish|restore-remote> ...");
+      print(await pushContinuityCheckpoint(descriptor, options.positionals[1], { ...(options.values.member ? { member: options.values.member } : {}), ...(options.values.line ? { line: options.values.line } : {}) }), options.flags.has("json"));
+    } else throw new Error("usage: endroit checkpoint [path] | <push|fetch|restore> [checkpoint-id] | <capture|verify|publish|restore-remote> ...");
   } else if (command === "compile") {
     const mount = options.values.mount ?? options.values.root;
     if (!mount) throw new Error("usage: endroit compile --mount <path> [--entry <file>] [--provider <id>]");

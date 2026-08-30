@@ -11,7 +11,7 @@
   },
   "type": "object",
   "additionalProperties": false,
-  "required": ["schema", "worktreeId", "repositoryId", "logicalPath", "head", "branchRef", "index", "tracked", "untracked", "ignored", "operation"],
+  "required": ["schema", "worktreeId", "repositoryId", "logicalPath", "head", "branchRef", "index", "tracked", "untracked", "operation"],
   "properties": {
     "schema": { "const": "workplace-checkpoint-worktree/1" },
     "worktreeId": { "type": "string" },
@@ -22,7 +22,6 @@
     "index": { "$ref": "index-v1.schema.json" },
     "tracked": { "type": "array", "items": { "$ref": "#/$defs/content" } },
     "untracked": { "type": "array", "items": { "$ref": "#/$defs/content" } },
-    "ignored": { "type": "array", "items": { "$ref": "#/$defs/content" } },
     "operation": { "type": "array", "items": { "type": "object", "additionalProperties": false, "required": ["path", "sha256", "size", "payload"], "properties": { "path": { "type": "string" }, "sha256": { "type": "string" }, "size": { "type": "integer", "minimum": 0 }, "payload": { "type": "string" } } } }
   }
 }
