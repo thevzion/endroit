@@ -3,7 +3,7 @@ import { spawnSync } from "node:child_process";
 import { gitArguments, gitTransportArguments } from "./platform.ts";
 import { basename, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
-import { CheckpointError, restoreCheckpoint, verifyCheckpoint, type CheckpointManifest, type CheckpointReceipt } from "./checkpoint.ts";
+import { assertCheckpointGitPlacement, CheckpointError, restoreCheckpoint, verifyCheckpoint, type CheckpointManifest, type CheckpointReceipt } from "./checkpoint.ts";
 import { hash, stable } from "./compiler/index.ts";
 
 const CHECKPOINT_ID = /^checkpoint:sha256:[a-f0-9]{64}$/;
@@ -302,8 +302,9 @@ export async function fetchCheckpoint(checkpointId: string, value: unknown, targ
 export async function restoreCheckpointFromRemote(checkpointId: string, value: unknown, targetPath: string, options: { requestDirectory?: string } = {}): Promise<{ path: string; receipt: CheckpointReceipt; remote: CheckpointRemoteReceipt }> {
   const target = resolve(targetPath);
   if (await lstat(target).then(() => true).catch(() => false)) fail("checkpoint-target-exists", `${target} already exists`);
-  await mkdir(dirname(target), { recursive: true });
-  const temporary = await mkdtemp(join(await realpath(dirname(target)), ".checkpoint-fresh-machine-"));
+  await assertCheckpointGitPlacement(undefined, target);
+  // Remote acquisition is separate from installation; do not create destination ancestors to fetch.
+  const temporary = await mkdtemp(join(tmpdir(), ".checkpoint-fresh-machine-"));
   try {
     const fetched = await fetchCheckpoint(checkpointId, value, join(temporary, "checkpoint"), options);
     const restored = await restoreCheckpoint(fetched.path, target);

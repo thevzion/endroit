@@ -56,6 +56,9 @@ Plain `setup` adopts committed clones. Exact checkpoint setup restores into a
 new Mount instead of overwriting a clone; it preserves dirty portable sources,
 projections and Git state. A verified restoration can therefore remain
 `degraded` or `pending-member`, not `ready`. See [the recovery commands](INSTALL.md#exact-workplace-recovery).
+On Windows, recovery preflights the native Git working-directory limit and
+asks for a shorter Mount when placement is unsupported; this does not truncate
+or normalize checkpoint payload paths or bytes.
 
 ## Read by responsibility
 

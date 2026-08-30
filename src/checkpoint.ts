@@ -642,9 +642,61 @@ export async function inspectCheckpoint(path: string): Promise<{ path: string; m
   return { path: root, manifest: await readManifest(root) };
 }
 
+async function physicalFuturePath(path: string): Promise<string> {
+  let cursor = resolve(path);
+  const absent: string[] = [];
+  for (;;) {
+    try { return join(await realpath(cursor), ...absent); }
+    catch (error) {
+      if (!(error && typeof error === "object" && "code" in error && error.code === "ENOENT") || await exists(cursor)) throw error;
+      const parent = dirname(cursor);
+      if (parent === cursor) throw error;
+      absent.unshift(basename(cursor)); cursor = parent;
+    }
+  }
+}
+
+/** Git for Windows 2.55 mingw_getcwd uses a fixed MAX_PATH UTF-16 buffer before config. */
+export async function assertCheckpointGitCwd(path: string, role: string, platform: string = process.platform): Promise<void> {
+  if (platform !== "win32") return;
+  // Resolve existing junctions/short names first; an NT namespace prefix does not enlarge Git's buffer.
+  const physical = (await physicalFuturePath(path)).replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/, "");
+  if (physical.length >= 260) fail("checkpoint-git-cwd-unsupported", `${role} requires a Windows Git cwd of ${physical.length} UTF-16 units (qualified limit: <260): ${physical}. Choose a shorter Mount or checkpoint store; core.longpaths does not remove this Git startup limit.`);
+}
+
+/** Pure placement admission: no probes, temporary repositories, or destination directories. */
+export async function assertCheckpointGitPlacement(manifest: CheckpointManifest | undefined, target: string, options: { restoring?: boolean; platform?: string } = {}): Promise<void> {
+  const platform = options.platform ?? process.platform;
+  if (platform !== "win32") return;
+  const final = await physicalFuturePath(target);
+  const roots = [final, ...(options.restoring === false ? [] : [join(dirname(final), ".workplace-restore-XXXXXX")])];
+  for (const root of roots) {
+    await assertCheckpointGitCwd(root, "Checkpoint placement", platform);
+    if (!manifest) continue;
+    for (const repository of manifest.repositories) {
+      const common = join(root, ".git-repositories", `${repository.repositoryId}.git`);
+      await assertCheckpointGitCwd(common, "Repository directory", platform);
+      // Fresh repository: at most N-1 existing admin names. Reserve digits(N) for Git's collision suffix.
+      const suffix = "9".repeat(String(repository.worktrees.length).length);
+      for (const worktree of manifest.worktrees.filter((entry) => entry.repositoryId === repository.repositoryId)) {
+        const directory = join(root, worktree.logicalPath);
+        await assertCheckpointGitCwd(directory, `Worktree ${worktree.worktreeId}`, platform);
+        if (options.restoring === false) {
+          const pointer = (await readFile(join(directory, ".git"), "utf8")).trim();
+          if (!pointer.startsWith("gitdir: ") || /[\r\n\0]/.test(pointer)) fail("checkpoint-restore-mismatch", `${worktree.worktreeId} has an unexpected Git pointer`);
+          await assertCheckpointGitCwd(resolve(directory, pointer.slice(8)), `Worktree admin ${worktree.worktreeId}`, platform);
+        } else {
+          await assertCheckpointGitCwd(join(common, "worktrees", `${basename(worktree.logicalPath)}${suffix}`), `Worktree admin ${worktree.worktreeId} (collision reserve)`, platform);
+        }
+      }
+    }
+  }
+}
+
 export async function verifyCheckpoint(path: string): Promise<{ path: string; receipt: CheckpointReceipt; manifest: CheckpointManifest }> {
   const root = await realpath(resolve(path)).catch(() => fail("checkpoint-unavailable", `${path} is unavailable`));
   const manifest = await readManifest(root);
+  await assertCheckpointGitCwd(join(dirname(root), ".checkpoint-bundle-verify-XXXXXX"), "Bundle verification directory");
   const { checkpointId: _id, ...base } = manifest;
   if (checkpointId(base) !== manifest.checkpointId) fail("checkpoint-id-mismatch", "Manifest checkpoint ID changed");
   if (portableFingerprint(manifest) !== manifest.portableFingerprint) fail("checkpoint-fingerprint-mismatch", "Portable fingerprint changed");
@@ -808,14 +860,20 @@ async function assertRestoredEquivalent(manifest: CheckpointManifest, target: st
 }
 
 export async function verifyRestoredCheckpoint(checkpoint: string, targetPath: string): Promise<{ path: string; receipt: CheckpointReceipt }> {
+  const inspected = await inspectCheckpoint(checkpoint);
+  await assertCheckpointGitPlacement(inspected.manifest, targetPath, { restoring: false });
   const verified = await verifyCheckpoint(checkpoint);
+  await assertCheckpointGitPlacement(verified.manifest, targetPath, { restoring: false });
   const target = await realpath(resolve(targetPath)).catch(() => fail("checkpoint-unavailable", `${targetPath} is unavailable`));
   await assertRestoredEquivalent(verified.manifest, target);
   return { path: target, receipt: receipt("restore", "restored-equivalent", verified.manifest) };
 }
 
 export async function restoreCheckpoint(checkpoint: string, targetPath: string, options: { beforeInstall?: (staging: string) => Promise<void> } = {}): Promise<{ path: string; receipt: CheckpointReceipt }> {
+  const inspected = await inspectCheckpoint(checkpoint);
+  await assertCheckpointGitPlacement(inspected.manifest, targetPath);
   const verified = await verifyCheckpoint(checkpoint);
+  await assertCheckpointGitPlacement(verified.manifest, targetPath);
   const target = resolve(targetPath);
   if (await exists(target)) fail("checkpoint-target-exists", `${target} already exists`);
   let capabilityParent = dirname(target);

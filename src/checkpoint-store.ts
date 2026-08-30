@@ -1,6 +1,6 @@
 import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import { captureCheckpoint, restoreCheckpoint, verifyCheckpoint, type CheckpointManifest, type CheckpointReceipt } from "./checkpoint.ts";
+import { assertCheckpointGitPlacement, captureCheckpoint, inspectCheckpoint, restoreCheckpoint, verifyCheckpoint, type CheckpointManifest, type CheckpointReceipt } from "./checkpoint.ts";
 import { fetchCheckpoint, parseContinuityBinding, publishCheckpoint, resolveRemoteCheckpointLine, type CheckpointRemoteReceipt, type ContinuityBinding } from "./checkpoint-remote.ts";
 import { hash, stable } from "./compiler/index.ts";
 import { resolveCurrentMember, verifyCurrentMemberSources } from "./current-member.ts";
@@ -192,10 +192,11 @@ async function ownerForLine(descriptor: ResolvedContinuityDescriptor, explicit?:
   if (resolved.status !== "resolved") fail("continuity-unavailable", `Current Member is unresolved for ${descriptor.workplace}`);
   return resolved.member;
 }
-async function packageAt(descriptor: ResolvedContinuityDescriptor, id: string): Promise<{ path: string; manifest: CheckpointManifest; receipt: CheckpointReceipt }> {
+async function packageAt(descriptor: ResolvedContinuityDescriptor, id: string, restoreTarget?: string): Promise<{ path: string; manifest: CheckpointManifest; receipt: CheckpointReceipt }> {
   const path = checkpointPath(descriptor.store, id);
   const info = await lstat(path).catch(() => fail("continuity-unavailable", `${id} is not in the local store`));
   if (info.isSymbolicLink() || !info.isDirectory() || await realpath(path) !== resolve(await realpath(descriptor.store), relative(descriptor.store, path))) fail("continuity-collision", `${path} must be a physical checkpoint package`);
+  if (restoreTarget) await assertCheckpointGitPlacement((await inspectCheckpoint(path)).manifest, restoreTarget);
   const verified = await verifyCheckpoint(path);
   if (verified.manifest.checkpointId !== id || verified.manifest.workplaceRef !== descriptor.workplace) fail("continuity-collision", `${path} does not contain the declared Workplace checkpoint`);
   return { path, manifest: verified.manifest, receipt: verified.receipt };
@@ -237,14 +238,14 @@ export async function createLocalCheckpoint(descriptor: ResolvedContinuityDescri
   });
 }
 
-export async function selectLocalCheckpoint(descriptor: ResolvedContinuityDescriptor, selector?: string, options: { member?: string; line?: string } = {}): Promise<{ path: string; manifest: CheckpointManifest; receipt: CheckpointReceipt }> {
+export async function selectLocalCheckpoint(descriptor: ResolvedContinuityDescriptor, selector?: string, options: { member?: string; line?: string; restoreTarget?: string } = {}): Promise<{ path: string; manifest: CheckpointManifest; receipt: CheckpointReceipt }> {
   await assertPhysicalTree(descriptor.mount, descriptor.store);
   let id = selector;
   if (selector === undefined) {
     const owner = await ownerForLine(descriptor, options.member); const selectedLine = lineName(options.line ?? descriptor.line, "Checkpoint Line");
     id = (await readLine(descriptor, owner, selectedLine))?.checkpointId ?? fail("continuity-unavailable", `${owner} has no local checkpoint on line ${selectedLine}`);
   }
-  return packageAt(descriptor, checkpointId(id!));
+  return packageAt(descriptor, checkpointId(id!), options.restoreTarget);
 }
 
 export async function observeLocalCheckpoint(descriptor: ResolvedContinuityDescriptor, selector: string): Promise<{ path: string; checkpointId: string } | undefined> {
@@ -278,7 +279,7 @@ export async function fetchContinuityCheckpoint(descriptor: ResolvedContinuityDe
   });
 }
 export async function restoreContinuityCheckpoint(descriptor: ResolvedContinuityDescriptor, selector?: string, options: { member?: string; line?: string } = {}): Promise<{ path: string; receipt: CheckpointReceipt }> {
-  const local = await selectLocalCheckpoint(descriptor, selector, options); const created = await ensurePhysicalTree(descriptor.mount, dirname(descriptor.restoreTarget));
+  const local = await selectLocalCheckpoint(descriptor, selector, { ...options, restoreTarget: descriptor.restoreTarget }); const created = await ensurePhysicalTree(descriptor.mount, dirname(descriptor.restoreTarget));
   try { return await restoreCheckpoint(local.path, descriptor.restoreTarget); }
   catch (error) { await removeCreatedDirectories(created); throw error; }
 }

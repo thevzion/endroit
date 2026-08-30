@@ -2,7 +2,7 @@ import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:f
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { isBootstrapRef, resolveBootstrapRef, type BootstrapRefReceipt } from "./bootstrap-ref.ts";
-import { CheckpointError, restoreCheckpoint, verifyCheckpoint, verifyRestoredCheckpoint, type CheckpointManifest, type CheckpointReceipt } from "./checkpoint.ts";
+import { assertCheckpointGitPlacement, CheckpointError, inspectCheckpoint, restoreCheckpoint, verifyCheckpoint, verifyRestoredCheckpoint, type CheckpointManifest, type CheckpointReceipt } from "./checkpoint.ts";
 import { fetchCheckpoint, parseFetchRequest, type CheckpointRemoteReceipt } from "./checkpoint-remote.ts";
 import { fetchContinuityCheckpoint, loadContinuityDescriptor, observeLocalCheckpoint } from "./checkpoint-store.ts";
 import { checkWorkplaceMount, hash, stable, type CheckResult } from "./compiler/index.ts";
@@ -93,6 +93,7 @@ export async function setupFromCheckpoint(options: Options): Promise<WorkplaceCh
     // Refuse ordinary existing destinations before contacting a remote.
     if (await exists(target) && (await lstat(target)).isSymbolicLink()) fail("checkpoint-target-exists", "Recovery destination must be physical");
     if (await exists(target) && !await exists(join(target, ".endroit/checkpoint-setup.json"))) fail("checkpoint-target-exists", `${target} is not an exact previous restoration`);
+    await assertCheckpointGitPlacement(undefined, target, { restoring: !await exists(target) });
     if (CHECKPOINT.test(options.checkpoint)) {
       if (options.checkpointFrom) {
         let path = resolve(options.checkpointFrom);
@@ -122,6 +123,7 @@ export async function setupFromCheckpoint(options: Options): Promise<WorkplaceCh
         }
       }
     }
+    await assertCheckpointGitPlacement((await inspectCheckpoint(packagePath)).manifest, target, { restoring: !await exists(target) });
     const verified = await verifyCheckpoint(packagePath);
     const manifest = verified.manifest;
     if (contextWorkplace && contextWorkplace !== manifest.workplaceRef) fail("checkpoint-schema-invalid", "Checkpoint belongs to another Workplace than the source context");

@@ -2,7 +2,7 @@ import { lstat, mkdir, readFile, readdir, realpath, rename, rm, unlink, writeFil
 import { gitArguments } from "./platform.ts";
 import { dirname, join, relative, resolve } from "node:path";
 import { hash, stable } from "./compiler/index.ts";
-import { inspectCheckpoint, restoreCheckpoint, verifyCheckpoint, verifyRestoredCheckpoint, type CheckpointManifest } from "./checkpoint.ts";
+import { assertCheckpointGitPlacement, inspectCheckpoint, restoreCheckpoint, verifyCheckpoint, verifyRestoredCheckpoint, type CheckpointManifest } from "./checkpoint.ts";
 import { parseContinuityDescriptor, type ContinuityPolicy } from "./checkpoint-store.ts";
 import { rememberCurrentMembers, resolveCurrentMember, verifyCurrentMemberSources, type CurrentMemberResolution } from "./current-member.ts";
 import { applySiteRouteSetup, parseSiteRouteSetupRequest, planSiteRouteSetup, removeSiteRouteBinding, type SiteRouteSetupPlan, type SiteRouteSetupReceipt } from "./site-setup.ts";
@@ -358,6 +358,7 @@ export async function planWorkplaceRecovery(value: unknown, options: { anchorMou
     if (resolvedTarget !== resolve(workplaceMount, "checkouts/sites")) fail("recovery-collision", `${checkpoint.id} escapes the Site checkout family`);
     const worktrees = checkpoint.roots.flatMap((root) => root.worktrees);
     await rejectFamilyCollision(workplaceMount, resolvedTarget, worktrees);
+    await assertCheckpointGitPlacement(inspected.manifest, resolvedTarget, { restoring: !await exists(resolvedTarget) });
     return { ...checkpoint, checkpoint: inspected.path, resolvedTarget, action: await exists(resolvedTarget) ? "verify" as const : "restore" as const, worktrees };
   }));
   const cleanRoutes = new Set<string>();
@@ -428,6 +429,12 @@ export async function applyWorkplaceRecovery(plan: WorkplaceRecoveryPlan, expect
   const { revision: _revision, ...preview } = plan;
   const currentRevision = hash(stable(preview));
   if (plan.revision !== currentRevision || expectedRevision !== currentRevision) fail("recovery-digest-mismatch", `Preview digest mismatch: expected current ${currentRevision}`);
+  // Admit every destination before verification creates temporary repositories or setup writes local state.
+  for (const checkpoint of plan.checkpoints) {
+    const inspected = await inspectCheckpoint(checkpoint.checkpoint);
+    assertManifest(checkpoint, inspected.manifest);
+    await assertCheckpointGitPlacement(inspected.manifest, checkpoint.resolvedTarget, { restoring: checkpoint.action === "restore" });
+  }
   for (const checkpoint of plan.checkpoints) {
     await rejectFamilyCollision(recoveryMount(plan, checkpoint.workplace), checkpoint.resolvedTarget, checkpoint.worktrees);
     const verified = await verifyCheckpoint(checkpoint.checkpoint);

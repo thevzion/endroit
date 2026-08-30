@@ -1,23 +1,91 @@
 import { describe, expect, test } from "bun:test";
-import { chmod, cp, lstat, mkdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, cp, lstat, mkdir, readFile, readlink, readdir, realpath, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import { assertCheckpointRestoreCapabilities, captureCheckpoint, checkpointRestorePlan, restoreCheckpoint, verifyCheckpoint, verifyRestoredCheckpoint } from "../src/checkpoint.ts";
+import { assertCheckpointGitCwd, assertCheckpointGitPlacement, assertCheckpointRestoreCapabilities, captureCheckpoint, checkpointRestorePlan, restoreCheckpoint, verifyCheckpoint, verifyRestoredCheckpoint } from "../src/checkpoint.ts";
 import { fetchCheckpoint, publishCheckpoint, restoreCheckpointFromRemote } from "../src/checkpoint-remote.ts";
 import { gitArguments, gitTransportArguments } from "../src/platform.ts";
 import { checkpointFixture, cli, evidence, git, repository, run } from "./helpers/checkpoint-fixture.ts";
 
 describe("Git State Portability", () => {
-  test("verifies deep restored Git directories with short child paths and unchanged worktree evidence", async () => {
+  test("refuses unsupported Windows Git cwd before verification or destination ancestor creation", async () => {
+    const state = await checkpointFixture({ platformNeutral: true });
+    try {
+      const root = state.request.roots[0]!;
+      const captured = await captureCheckpoint({ ...state.request, roots: [{ ...root, worktrees: [root.worktrees[0]!] }] });
+      const before = evidence(state.shared);
+      const manifest = await readFile(join(captured.path, "MANIFEST.json"));
+      const entries = (await readdir(state.root, { withFileTypes: true })).map((entry) => entry.name).sort();
+      const target = join(state.root, ...Array.from({ length: 4 }, (_, index) => `deep-${index}-${"x".repeat(48)}`), "restored");
+      expect(target.length >= 260).toBe(true);
+      const trace = join(state.root, "unsupported-trace.json");
+      const canonical = await realpath(state.root);
+      const setupTarget = join(canonical, "x".repeat(260 - canonical.length - 1));
+      for (const operation of [
+        ["checkpoint", "restore", captured.path, "--to", target, "--json"],
+        ["setup", "--checkpoint", captured.path, "--to", setupTarget, "--json"],
+      ]) {
+        const args = [...cli, ...operation];
+        // On other hosts exercise the same platform admission, not a different production flag.
+        const command = process.platform === "win32" ? args : [cli[0]!, "--eval", `Object.defineProperty(process, "platform", { value: "win32" }); Bun.argv.splice(0, Bun.argv.length, ...${JSON.stringify(args)}); await import(${JSON.stringify(cli[1])});`];
+        const result = Bun.spawnSync(command, { cwd: repository, stdout: "pipe", stderr: "pipe", env: { ...process.env, GIT_TRACE2_EVENT: trace } });
+        expect(result.exitCode).toBe(1);
+        expect(JSON.parse(new TextDecoder().decode(result.stderr)).code).toBe("checkpoint-git-cwd-unsupported");
+        expect(new TextDecoder().decode(result.stderr)).toContain("shorter Mount");
+      }
+      expect((await readdir(state.root, { withFileTypes: true })).map((entry) => entry.name).sort()).toEqual(entries);
+      expect(await lstat(target).catch(() => undefined)).toBe(undefined);
+      expect(await lstat(trace).catch(() => undefined)).toBe(undefined);
+      expect(await readFile(join(captured.path, "MANIFEST.json"))).toEqual(manifest);
+      expect(evidence(state.shared)).toBe(before);
+
+      const boundary = join(canonical, "x".repeat(259 - canonical.length - 1));
+      await assertCheckpointGitCwd(boundary, "Boundary", "win32");
+      expect(await assertCheckpointGitCwd(`${boundary}x`, "Boundary", "win32").catch(String)).toContain("260 UTF-16 units");
+      expect(await assertCheckpointGitCwd(`${boundary}😀`, "Unicode boundary", "win32").catch(String)).toContain("261 UTF-16 units");
+      await assertCheckpointGitCwd(`${boundary}x`, "Unrestricted host", "linux");
+      const physical = join(canonical, "physical-" + "x".repeat(30));
+      await mkdir(physical, { recursive: false });
+      const alias = join(canonical, "alias");
+      await symlink(physical, alias, process.platform === "win32" ? "junction" : "dir");
+      const aliasTarget = join(alias, "x".repeat(260 - physical.length - 1));
+      try {
+        expect(aliasTarget.length < 260).toBe(true);
+        expect(await assertCheckpointGitCwd(aliasTarget, "Physical alias", "win32").catch(String)).toContain("260 UTF-16 units");
+      } finally { await unlink(alias); }
+      // A short target can still be inadmissible because its Git-owned worktree admin is longer.
+      const snapshot = JSON.parse(new TextDecoder().decode(manifest));
+      const adminTarget = join(canonical, "x".repeat(220 - canonical.length - 1));
+      expect(await assertCheckpointGitPlacement(snapshot, adminTarget, { platform: "win32" }).catch(String)).toContain("collision reserve");
+      const adminSuffix = join(".git-repositories", `${snapshot.repositories[0].repositoryId}.git`, "worktrees", "main");
+      const replay = join(canonical, "r".repeat(259 - canonical.length - adminSuffix.length - 2));
+      const admin = join(replay, adminSuffix);
+      await mkdir(admin, { recursive: true });
+      const worktree = join(replay, snapshot.worktrees[0].logicalPath);
+      await mkdir(worktree, { recursive: true });
+      await writeFile(join(worktree, ".git"), `gitdir: ${admin}\n`);
+      expect(admin.length).toBe(259);
+      await assertCheckpointGitPlacement(snapshot, replay, { platform: "win32", restoring: false });
+      expect(await assertCheckpointGitPlacement(snapshot, replay, { platform: "win32" }).catch(String)).toContain("collision reserve");
+    } finally { await rm(state.root, { recursive: true, force: true }); }
+  }, process.platform === "win32" ? 180_000 : 30_000);
+
+  test("verifies restored Git admins beyond 220 within native cwd capacity with unchanged worktree evidence", async () => {
     const state = await checkpointFixture({ platformNeutral: true });
     try {
       await writeFile(join(state.shared, "shared.txt"), "staged\n");
       git(state.shared, ["add", "shared.txt"]);
       await writeFile(join(state.shared, "shared.txt"), "dirty\r\n");
+      const payloadPath = join("payload-" + "x".repeat(75), "y".repeat(80), "z".repeat(50), "raw.bin");
+      const payload = new Uint8Array([0, 255, 13, 10, 128]);
+      await mkdir(dirname(join(state.shared, payloadPath)), { recursive: true });
+      await writeFile(join(state.shared, payloadPath), payload);
+      expect(join(state.shared, payloadPath).length > 260).toBe(true);
       const before = [evidence(state.shared), evidence(state.detached)];
       const cleanTracked = await readFile(join(state.detached, "shared.txt"));
       const captured = await captureCheckpoint({ ...state.request, roots: [state.request.roots[0]!] });
-      const target = join(state.root, ...Array.from({ length: 4 }, (_, index) => `deep-${index}-${"x".repeat(48)}`), "restored");
-      expect(target.length > 260).toBe(true);
+      const canonical = await realpath(state.root);
+      const target = join(canonical, "x".repeat(180 - canonical.length - "/restored".length - 1), "restored");
+      expect(target.length).toBe(180);
       const trace = join(state.root, "restore-trace.json");
       const result = Bun.spawnSync([...cli, "checkpoint", "restore", captured.path, "--to", target, "--json"], {
         cwd: repository, stdout: "pipe", stderr: "pipe",
@@ -40,8 +108,11 @@ describe("Git State Portability", () => {
       expect(childGitDirs.length > 0).toBe(true);
       expect(new Set(childGitDirs)).toEqual(new Set(["."]));
       const restoredWorktrees = [join(target, "roots/shared/main"), join(target, "roots/shared/detached")];
+      const admins = restoredWorktrees.map((path) => resolve(path, git(path, ["rev-parse", "--git-dir"])));
+      expect(admins.every((path) => path.length > 220 && path.length < 260)).toBe(true);
       expect(restoredWorktrees.map(evidence)).toEqual(before);
       expect(await readFile(join(restoredWorktrees[1]!, "shared.txt"))).toEqual(cleanTracked);
+      expect(await readFile(join(restoredWorktrees[0]!, payloadPath))).toEqual(payload);
       expect((await verifyRestoredCheckpoint(captured.path, target)).receipt.portableFingerprint).toBe(captured.receipt.portableFingerprint);
       const common = resolve(restoredWorktrees[0]!, git(restoredWorktrees[0]!, ["rev-parse", "--git-common-dir"]));
       const unreachable = join(state.root, "unreachable.txt");

@@ -2,7 +2,7 @@ import { cp, lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } 
 import { dirname, join, relative, resolve } from "node:path";
 import { BootstrapRefError, isBootstrapRef, resolveBootstrapRef, type BootstrapRefReceipt } from "./bootstrap-ref.ts";
 import { CheckpointStoreError, fetchContinuityCheckpoint, loadContinuityDescriptor, observeLocalCheckpoint, type ResolvedContinuityDescriptor } from "./checkpoint-store.ts";
-import { CheckpointError } from "./checkpoint.ts";
+import { assertCheckpointGitPlacement, CheckpointError } from "./checkpoint.ts";
 import { checkWorkplaceMount, discoverMount, hash, stable, type CheckResult } from "./compiler/index.ts";
 import { resolveCurrentMember, verifyCurrentMemberSources } from "./current-member.ts";
 import { applyWorkplaceRecovery, normalizeWorkplaceRecoveryRequest, planWorkplaceRecovery, type WorkplaceRecoveryPlan, type WorkplaceRecoveryReceipt, type WorkplaceRecoveryRequest } from "./recovery.ts";
@@ -340,6 +340,13 @@ export async function planRootSetup(options: { start?: string; from?: string; wi
   if (options.with) await assertLocalOverlay(mount, join(mount, ".endroit/recovery.json"));
   const preservation = { ...(options.preservePortable ? { preservePortable: true as const } : {}), ...(options.restoredRoutes ? { restoredRoutes: options.restoredRoutes } : {}) };
   const topology = await planWorkplaceRecovery({ ...request, checkpoints: [] }, { anchorMount: mount, requestDirectory: dirname(recovery.path), ...preservation });
+  for (const checkpoint of request.checkpoints) {
+    const ownerMount = checkpoint.workplace === request.anchor ? mount : topology.setup.plan.targets.find((entry) => entry.workplace === checkpoint.workplace)?.resolvedMount;
+    if (ownerMount) {
+      const target = resolve(ownerMount, checkpoint.target);
+      await assertCheckpointGitPlacement(undefined, target, { restoring: !await exists(target) });
+    }
+  }
   const continuity = await prepareContinuity(topology, request, { fetch: options.fetchContinuity, ...(selected.slug ? { memberSlug: selected.slug } : {}) });
   const initial = await planWorkplaceRecovery(continuity.request, {
     anchorMount: mount,
