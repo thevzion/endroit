@@ -247,17 +247,22 @@ requiring a true file symlink fails capability preflight before target
 mutation. The local cross-platform suite covers these contracts, but actual
 Windows fresh-machine qualification remains a separate acceptance gate.
 
-Windows checkpoint placement also requires each **Git working directory** to
-be shorter than 260 UTF-16 units after resolving existing junctions/short names.
-This is the qualified Git for Windows 2.55 startup capability, not a limit on
-payload file paths: `core.longpaths` does not enlarge Git's fixed `getcwd` buffer.
+Windows checkpoint placement requires each **Git working directory and its
+startup metadata paths** to be shorter than 260 UTF-16 units after resolving
+existing junctions/short names. This is the qualified Git for Windows 2.55
+startup capability, not a limit on payload file paths: `core.longpaths` is not
+available during initial discovery and does not enlarge Git's `getcwd` buffer.
 Admission checks final worktrees, adjacent staging, common Git directories and
-worktree administration paths, reserving a finite collision suffix, before
+worktree administration paths, reserving a finite collision suffix and the
+startup names `.git`, `HEAD`, `commondir`, `objects`, `refs`, `config` and
+optional `config.worktree`, before
 verification or installation can create destination directories. An unsupported
 placement returns `checkpoint-git-cwd-unsupported`; choose a shorter explicit
 Mount (or store for a verification-directory failure). No alias or system setting
 is created. Remote acquisition can precede the manifest-dependent check and may
 leave a verified local cache, but a refused destination is not materialized.
+This preserves ordinary Git discovery after restoration, not just commands
+invoked through Endroit with a special environment.
 
 ## Try the demonstrations
 

@@ -656,12 +656,20 @@ async function physicalFuturePath(path: string): Promise<string> {
   }
 }
 
-/** Git for Windows 2.55 mingw_getcwd uses a fixed MAX_PATH UTF-16 buffer before config. */
-export async function assertCheckpointGitCwd(path: string, role: string, platform: string = process.platform): Promise<void> {
+/** Git for Windows 2.55 uses MAX_PATH before repository config enables long-path expansion. */
+export async function assertCheckpointGitPath(path: string, role: string, platform: string = process.platform): Promise<void> {
   if (platform !== "win32") return;
   // Resolve existing junctions/short names first; an NT namespace prefix does not enlarge Git's buffer.
   const physical = (await physicalFuturePath(path)).replace(/^\\\\\?\\UNC\\/i, "\\\\").replace(/^\\\\\?\\/, "");
-  if (physical.length >= 260) fail("checkpoint-git-cwd-unsupported", `${role} requires a Windows Git cwd of ${physical.length} UTF-16 units (qualified limit: <260): ${physical}. Choose a shorter Mount or checkpoint store; core.longpaths does not remove this Git startup limit.`);
+  if (physical.length >= 260) fail("checkpoint-git-cwd-unsupported", `${role} requires a Windows Git startup path of ${physical.length} UTF-16 units (qualified limit: <260): ${physical}. Choose a shorter Mount or checkpoint store; core.longpaths does not remove this Git startup limit.`);
+}
+
+async function assertCheckpointGitDirectory(path: string, role: string, platform: string = process.platform): Promise<void> {
+  // setup.c reads HEAD/commondir, checks objects/refs, then config and optional config.worktree.
+  // Reserve the optional names too: ordinary Git discovery must work without a special wrapper.
+  for (const name of ["", "HEAD", "commondir", "objects", "refs", "config", "config.worktree"]) {
+    await assertCheckpointGitPath(join(path, name), `${role}${name ? `/${name}` : ""}`, platform);
+  }
 }
 
 /** Pure placement admission: no probes, temporary repositories, or destination directories. */
@@ -671,22 +679,23 @@ export async function assertCheckpointGitPlacement(manifest: CheckpointManifest 
   const final = await physicalFuturePath(target);
   const roots = [final, ...(options.restoring === false ? [] : [join(dirname(final), ".workplace-restore-XXXXXX")])];
   for (const root of roots) {
-    await assertCheckpointGitCwd(root, "Checkpoint placement", platform);
+    await assertCheckpointGitPath(root, "Checkpoint placement", platform);
     if (!manifest) continue;
     for (const repository of manifest.repositories) {
       const common = join(root, ".git-repositories", `${repository.repositoryId}.git`);
-      await assertCheckpointGitCwd(common, "Repository directory", platform);
+      await assertCheckpointGitDirectory(common, "Repository directory", platform);
       // Fresh repository: at most N-1 existing admin names. Reserve digits(N) for Git's collision suffix.
       const suffix = "9".repeat(String(repository.worktrees.length).length);
       for (const worktree of manifest.worktrees.filter((entry) => entry.repositoryId === repository.repositoryId)) {
         const directory = join(root, worktree.logicalPath);
-        await assertCheckpointGitCwd(directory, `Worktree ${worktree.worktreeId}`, platform);
+        await assertCheckpointGitPath(directory, `Worktree ${worktree.worktreeId}`, platform);
+        await assertCheckpointGitPath(join(directory, ".git"), `Worktree ${worktree.worktreeId}/.git`, platform);
         if (options.restoring === false) {
           const pointer = (await readFile(join(directory, ".git"), "utf8")).trim();
           if (!pointer.startsWith("gitdir: ") || /[\r\n\0]/.test(pointer)) fail("checkpoint-restore-mismatch", `${worktree.worktreeId} has an unexpected Git pointer`);
-          await assertCheckpointGitCwd(resolve(directory, pointer.slice(8)), `Worktree admin ${worktree.worktreeId}`, platform);
+          await assertCheckpointGitDirectory(resolve(directory, pointer.slice(8)), `Worktree admin ${worktree.worktreeId}`, platform);
         } else {
-          await assertCheckpointGitCwd(join(common, "worktrees", `${basename(worktree.logicalPath)}${suffix}`), `Worktree admin ${worktree.worktreeId} (collision reserve)`, platform);
+          await assertCheckpointGitDirectory(join(common, "worktrees", `${basename(worktree.logicalPath)}${suffix}`), `Worktree admin ${worktree.worktreeId} (collision reserve)`, platform);
         }
       }
     }
@@ -696,7 +705,7 @@ export async function assertCheckpointGitPlacement(manifest: CheckpointManifest 
 export async function verifyCheckpoint(path: string): Promise<{ path: string; receipt: CheckpointReceipt; manifest: CheckpointManifest }> {
   const root = await realpath(resolve(path)).catch(() => fail("checkpoint-unavailable", `${path} is unavailable`));
   const manifest = await readManifest(root);
-  await assertCheckpointGitCwd(join(dirname(root), ".checkpoint-bundle-verify-XXXXXX"), "Bundle verification directory");
+  await assertCheckpointGitDirectory(join(dirname(root), ".checkpoint-bundle-verify-XXXXXX"), "Bundle verification directory");
   const { checkpointId: _id, ...base } = manifest;
   if (checkpointId(base) !== manifest.checkpointId) fail("checkpoint-id-mismatch", "Manifest checkpoint ID changed");
   if (portableFingerprint(manifest) !== manifest.portableFingerprint) fail("checkpoint-fingerprint-mismatch", "Portable fingerprint changed");
