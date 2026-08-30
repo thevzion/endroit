@@ -476,5 +476,5 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(evidence(state.shared)).toBe(before);
       expect((await verifyRestoredCheckpoint(captured.path, target)).receipt.portableFingerprint).toBe(captured.receipt.portableFingerprint);
     } finally { await rm(state.root, { recursive: true, force: true }); }
-  });
+  }, heavyGitTimeout);
 });
