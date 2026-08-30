@@ -835,22 +835,25 @@ export async function restoreCheckpoint(checkpoint: string, targetPath: string, 
     await mkdir(commonRoot, { recursive: true });
     for (const repository of verified.manifest.repositories) {
       const common = join(commonRoot, `${repository.repositoryId}.git`);
-      git(temporary, ["init", "--bare", "-q", `--object-format=${repository.objectFormat}`, common]);
-      git(temporary, ["--git-dir", common, "fetch", "--no-tags", join(verified.path, repository.bundle.path), "+refs/*:refs/*"]);
-      const captureRefs = text(git(temporary, ["--git-dir", common, "for-each-ref", "--format=%(refname)", "refs/endroit/capture/"])).split("\n").filter(Boolean);
-      for (const ref of captureRefs) git(temporary, ["--git-dir", common, "update-ref", "-d", ref]);
+      await mkdir(common, { recursive: false });
+      // Git init changes to a directory argument before loading long-path configuration.
+      git(common, ["--git-dir=.", "init", "--bare", "-q", `--object-format=${repository.objectFormat}`]);
+      git(common, ["--git-dir=.", "fetch", "--no-tags", join(verified.path, repository.bundle.path), "+refs/*:refs/*"]);
+      const captureRefs = text(git(common, ["--git-dir=.", "for-each-ref", "--format=%(refname)", "refs/endroit/capture/"])).split("\n").filter(Boolean);
+      for (const ref of captureRefs) git(common, ["--git-dir=.", "update-ref", "-d", ref]);
       for (const remote of repository.remotes) {
-        if (remote.urls[0]) git(temporary, ["--git-dir", common, "remote", "add", remote.name, remote.urls[0]]);
-        for (const url of remote.urls.slice(1)) git(temporary, ["--git-dir", common, "remote", "set-url", "--add", remote.name, url]);
+        if (remote.urls[0]) git(common, ["--git-dir=.", "remote", "add", remote.name, remote.urls[0]]);
+        for (const url of remote.urls.slice(1)) git(common, ["--git-dir=.", "remote", "set-url", "--add", remote.name, url]);
       }
-      for (const [key, value] of Object.entries(repository.config)) git(temporary, ["--git-dir", common, "config", key, value]);
+      for (const [key, value] of Object.entries(repository.config)) git(common, ["--git-dir=.", "config", key, value]);
       for (const worktreeId of repository.worktrees) {
         const snapshot = verified.manifest.worktrees.find((worktree) => worktree.worktreeId === worktreeId) ?? fail("checkpoint-schema-invalid", `Missing worktree ${worktreeId}`);
         const destination = resolve(temporary, snapshot.logicalPath);
         if (!inside(temporary, destination)) fail("checkpoint-path-invalid", `${snapshot.logicalPath} escapes restore target`);
         await mkdir(dirname(destination), { recursive: true });
         const ref = snapshot.branchRef ? snapshot.branchRef.slice("refs/heads/".length) : snapshot.head;
-        git(temporary, ["--git-dir", common, "worktree", "add", "--force", ...(snapshot.branchRef ? [] : ["--detach"]), destination, ref]);
+        // The checkpoint supplies the complete index and tracked files, not just dirty overlays.
+        git(common, ["--git-dir=.", "worktree", "add", "--no-checkout", "--force", ...(snapshot.branchRef ? [] : ["--detach"]), destination, ref]);
         restoreIndex(destination, snapshot);
         for (const record of snapshot.tracked) await materialize(record, destination, verified.path);
         for (const record of snapshot.untracked) await materialize(record, destination, verified.path);

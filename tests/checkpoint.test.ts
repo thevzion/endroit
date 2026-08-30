@@ -14,6 +14,7 @@ describe("Git State Portability", () => {
       git(state.shared, ["add", "shared.txt"]);
       await writeFile(join(state.shared, "shared.txt"), "dirty\r\n");
       const before = [evidence(state.shared), evidence(state.detached)];
+      const cleanTracked = await readFile(join(state.detached, "shared.txt"));
       const captured = await captureCheckpoint({ ...state.request, roots: [state.request.roots[0]!] });
       const target = join(state.root, ...Array.from({ length: 4 }, (_, index) => `deep-${index}-${"x".repeat(48)}`), "restored");
       expect(target.length > 260).toBe(true);
@@ -27,6 +28,12 @@ describe("Git State Portability", () => {
       expect(restored.receipt.status).toBe("restored-equivalent");
       expect(restored.receipt.portableFingerprint).toBe(captured.receipt.portableFingerprint);
       const events = (await readFile(trace, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+      const initializations = events.filter((event) => event.event === "start" && event.argv.includes("init") && event.argv.includes("--bare"));
+      expect(initializations.length > 0).toBe(true);
+      expect(initializations.every((event) => event.argv.every((arg: string) => !arg.includes(".git-repositories")))).toBe(true);
+      const worktreeAdds = events.filter((event) => event.event === "start" && event.argv.includes("worktree") && event.argv.includes("add"));
+      expect(worktreeAdds.length).toBe(2);
+      expect(worktreeAdds.every((event) => event.argv.includes("--no-checkout"))).toBe(true);
       const fsckSessions = events.filter((event) => event.event === "start" && event.argv.includes("fsck")).map((event) => event.sid as string);
       const childGitDirs = events.filter((event) => event.event === "def_param" && event.param === "GIT_DIR" && fsckSessions.some((sid) => event.sid.startsWith(`${sid}/`))).map((event) => event.value);
       expect(fsckSessions.length > 0).toBe(true);
@@ -34,6 +41,7 @@ describe("Git State Portability", () => {
       expect(new Set(childGitDirs)).toEqual(new Set(["."]));
       const restoredWorktrees = [join(target, "roots/shared/main"), join(target, "roots/shared/detached")];
       expect(restoredWorktrees.map(evidence)).toEqual(before);
+      expect(await readFile(join(restoredWorktrees[1]!, "shared.txt"))).toEqual(cleanTracked);
       expect((await verifyRestoredCheckpoint(captured.path, target)).receipt.portableFingerprint).toBe(captured.receipt.portableFingerprint);
       const common = resolve(restoredWorktrees[0]!, git(restoredWorktrees[0]!, ["rev-parse", "--git-common-dir"]));
       const unreachable = join(state.root, "unreachable.txt");
