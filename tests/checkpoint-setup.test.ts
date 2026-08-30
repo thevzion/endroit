@@ -289,7 +289,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(await exists(target)).toBe(false);
       for (const [path, expected] of before) expect(evidence(path)).toBe(expected);
     } finally { await rm(state.root, { recursive: true, force: true }); }
-  });
+  }, heavyGitTimeout);
 
   test("rejects machine-local dependencies in portable Recovery declarations before installation", async () => {
     const state = await fixture();
