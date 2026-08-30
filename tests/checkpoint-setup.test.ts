@@ -363,7 +363,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(restored.remote?.status).toBe("fetched-verified");
       expect(restored.checkpoint.checkpointId).toBe(captured.receipt.checkpointId);
       expect(evidence(join(fromContext, "workplace"))).toBe(before);
-      expect(await exists(join(state.mount, ".endroit/checkpoints", captured.receipt.checkpointId.slice("checkpoint:sha256:".length), "manifest.json"))).toBe(true);
+      expect((await readdir(join(state.mount, ".endroit/checkpoints", captured.receipt.checkpointId.slice("checkpoint:sha256:".length)), { withFileTypes: true })).map((entry) => entry.name)).toContain("MANIFEST.json");
       await writeFile(requestPath, `${JSON.stringify({ ...fetch, unrecognized: true }, null, 2)}\n`);
       const rejected = join(state.root, "closed-fetch-target");
       expect(errorCli(state.root, ["setup", "--checkpoint", captured.receipt.checkpointId, "--checkpoint-from", requestPath, "--to", rejected, "--as", "operator"]).code).toBe("checkpoint-schema-invalid");
