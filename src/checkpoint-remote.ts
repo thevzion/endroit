@@ -168,6 +168,13 @@ async function observedLatest(remote: string, parent: string): Promise<{ commit:
   finally { await rm(checkout, { recursive: true, force: true }); }
 }
 
+export async function resolveLatestRemoteCheckpoint(value: unknown, options: { requestDirectory?: string } = {}): Promise<{ controlCommit: string; checkpointId: string } | null> {
+  const requestDirectory = resolve(options.requestDirectory ?? process.cwd());
+  const request = parseFetchRequest(value, requestDirectory);
+  const latest = await observedLatest(request.remote, requestDirectory);
+  return latest ? { controlCommit: latest.commit, checkpointId: latest.checkpointId } : null;
+}
+
 async function advanceLatest(checkout: string, remote: string, control: RemoteControl, commit: string, baseCheckpoint: string | null): Promise<LatestResult> {
   const current = await observedLatest(remote, dirname(checkout));
   if (current?.checkpointId === control.checkpointId) return { status: "advanced", baseCheckpoint, observedCheckpoint: control.checkpointId };

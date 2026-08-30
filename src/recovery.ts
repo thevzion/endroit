@@ -2,7 +2,7 @@ import { lstat, mkdir, readFile, readdir, realpath, rename, rm } from "node:fs/p
 import { dirname, join, relative, resolve } from "node:path";
 import { hash, stable } from "./compiler/index.ts";
 import { inspectCheckpoint, restoreCheckpoint, verifyCheckpoint, verifyRestoredCheckpoint, type CheckpointManifest } from "./checkpoint.ts";
-import { rememberCurrentMember, resolveCurrentMember, type CurrentMemberResolution } from "./current-member.ts";
+import { rememberCurrentMember, resolveCurrentMember, verifyCurrentMemberSources, type CurrentMemberResolution } from "./current-member.ts";
 import { applySiteRouteSetup, planSiteRouteSetup, type SiteRouteSetupPlan, type SiteRouteSetupReceipt } from "./site-setup.ts";
 import { applyWorkplaceSetup, planWorkplaceSetup, type WorkplaceSetupPlan, type WorkplaceSetupReceipt } from "./setup.ts";
 
@@ -50,6 +50,7 @@ export type WorkplaceRecoveryPlan = {
     worktrees: RecoveryWorktree[];
   }>;
   position: CurrentMemberResolution;
+  positionBlock?: { reason: "required-continuity"; checkpoints: string[] };
 };
 
 export type WorkplaceRecoveryReceipt = {
@@ -57,7 +58,7 @@ export type WorkplaceRecoveryReceipt = {
   version: 1;
   plan: string;
   anchor: string;
-  status: "ready" | "pending-member";
+  status: "ready" | "pending-member" | "blocked-continuity";
   setup: WorkplaceSetupReceipt;
   sites: SiteRouteSetupReceipt[];
   checkpoints: Array<{
@@ -69,7 +70,12 @@ export type WorkplaceRecoveryReceipt = {
     checkpointId: string;
     portableFingerprint: string;
   }>;
-  position: CurrentMemberResolution;
+  position: CurrentMemberResolution | {
+    status: "blocked-continuity";
+    source: "continuity";
+    workplace: string;
+    currentMember: CurrentMemberResolution;
+  };
 };
 
 export class RecoveryError extends Error {
@@ -149,7 +155,7 @@ function parseRoots(value: unknown, subject: string): RecoveryRoot[] {
   return roots;
 }
 
-function parseRequest(value: unknown, requestDirectory: string): WorkplaceRecoveryRequest {
+export function normalizeWorkplaceRecoveryRequest(value: unknown, requestDirectory: string): WorkplaceRecoveryRequest {
   const source = object(value, "WorkplaceRecoveryRequest");
   exact(source, ["kind", "version", "anchor", "setup", "sites", "checkpoints", "position"], "WorkplaceRecoveryRequest");
   if (source.kind !== "WorkplaceRecoveryRequest" || source.version !== 1 || !Array.isArray(source.sites) || !Array.isArray(source.checkpoints)) fail("invalid-recovery-request", "Unsupported WorkplaceRecoveryRequest");
@@ -269,11 +275,12 @@ function recoveryMount(plan: WorkplaceRecoveryPlan, workplace: string): string {
     : plan.setup.plan.targets.find((target) => target.workplace === workplace)?.resolvedMount ?? fail("recovery-unavailable", `${workplace} has no Mount`);
 }
 
-export async function planWorkplaceRecovery(value: unknown, options: { anchorMount: string; requestDirectory?: string; localPath?: string }): Promise<WorkplaceRecoveryPlan> {
+export async function planWorkplaceRecovery(value: unknown, options: { anchorMount: string; requestDirectory?: string; localPath?: string; positionBlock?: { reason: "required-continuity"; checkpoints: string[] } }): Promise<WorkplaceRecoveryPlan> {
   const requestDirectory = resolve(options.requestDirectory ?? process.cwd());
-  const request = parseRequest(value, requestDirectory);
+  const request = normalizeWorkplaceRecoveryRequest(value, requestDirectory);
   const setupSource = JSON.parse(await readFile(request.setup, "utf8")) as unknown;
-  const setupPlan = await planWorkplaceSetup(setupSource, { anchorMount: options.anchorMount, requestDirectory: dirname(request.setup), ...(options.localPath ? { localPath: options.localPath } : {}) });
+  const anchorMount = await realpath(resolve(options.anchorMount)).catch(() => fail("recovery-unavailable", `${resolve(options.anchorMount)} is unavailable`));
+  const setupPlan = await planWorkplaceSetup(setupSource, { anchorMount, requestDirectory: dirname(request.setup), ...(options.localPath ? { localPath: options.localPath } : {}) });
   if (request.anchor !== setupPlan.anchor) fail("invalid-recovery-request", `Recovery Anchor ${request.anchor} does not match setup ${setupPlan.anchor}`);
   const mounts = new Map<string, string>([[request.anchor, setupPlan.anchorMount], ...setupPlan.targets.map((target) => [target.workplace, target.resolvedMount] as const)]);
   const sites = await Promise.all(request.sites.map(async (site) => {
@@ -315,6 +322,7 @@ export async function planWorkplaceRecovery(value: unknown, options: { anchorMou
     sites,
     checkpoints,
     position,
+    ...(options.positionBlock ? { positionBlock: { reason: options.positionBlock.reason, checkpoints: [...options.positionBlock.checkpoints].sort() } } : {}),
   };
   return { ...preview, revision: hash(stable(preview)) };
 }
@@ -330,6 +338,7 @@ async function verifyPosition(plan: WorkplaceRecoveryPlan, position: Extract<Cur
     fail("recovery-position-mismatch", `${position.workplace} has no readable Entry Binding`);
   }
   if (entry.workplace !== position.workplace || entry.member !== position.member || entry.desk !== position.desk) fail("recovery-position-mismatch", `Position does not match ${position.workplace} Entry Binding`);
+  await verifyCurrentMemberSources({ workplaceMount: mount, workplace: position.workplace, member: position.member, desk: position.desk }).catch((error) => fail("recovery-position-mismatch", error instanceof Error ? error.message : String(error)));
   return position;
 }
 
@@ -388,7 +397,7 @@ export async function applyWorkplaceRecovery(plan: WorkplaceRecoveryPlan, expect
   const stagedRoots: string[] = [];
   const siteReceipts: SiteRouteSetupReceipt[] = [];
   const checkpointReceipts: WorkplaceRecoveryReceipt["checkpoints"] = [];
-  let position: CurrentMemberResolution | undefined;
+  let position: WorkplaceRecoveryReceipt["position"] | undefined;
   const setup = await applyWorkplaceSetup(plan.setup.plan, plan.setup.plan.revision, {
     afterApply: async (setupReceipt) => {
       if (setupReceipt.status !== "ready") fail("recovery-unavailable", "Workplace setup did not reach ready");
@@ -417,7 +426,10 @@ export async function applyWorkplaceRecovery(plan: WorkplaceRecoveryPlan, expect
           }
         }
         for (const item of staged.values()) await rm(dirname(item.receipt.family), { recursive: true, force: true });
-        if (currentPosition.status === "resolved") {
+        if (plan.positionBlock) {
+          const currentMember = currentPosition.status === "resolved" ? await verifyPosition(plan, currentPosition) : currentPosition;
+          position = { status: "blocked-continuity", source: "continuity", workplace: currentPosition.workplace, currentMember };
+        } else if (currentPosition.status === "resolved") {
           position = await verifyPosition(plan, currentPosition);
           if (currentPosition.source === "request") await rememberCurrentMember({ anchorMount: plan.anchorMount, anchor: plan.anchor, workplace: currentPosition.workplace, member: currentPosition.member, desk: currentPosition.desk });
         } else position = currentPosition;
@@ -430,5 +442,6 @@ export async function applyWorkplaceRecovery(plan: WorkplaceRecoveryPlan, expect
     },
   });
   if (!position) fail("recovery-position-mismatch", "Position was not evaluated");
-  return { kind: "WorkplaceRecoveryReceipt", version: 1, plan: plan.revision, anchor: plan.anchor, status: position.status === "resolved" ? "ready" : "pending-member", setup, sites: siteReceipts, checkpoints: checkpointReceipts, position };
+  const status = position.status === "resolved" ? "ready" : position.status;
+  return { kind: "WorkplaceRecoveryReceipt", version: 1, plan: plan.revision, anchor: plan.anchor, status, setup, sites: siteReceipts, checkpoints: checkpointReceipts, position };
 }

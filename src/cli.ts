@@ -14,6 +14,7 @@ import {
 } from "./compiler/new-workplace.ts";
 import { runNewWizard } from "./new-wizard.ts";
 import { dirname, resolve } from "node:path";
+import { lstat, realpath } from "node:fs/promises";
 import { checkGitHistory, checkGitStaged } from "./compiler/git-witness.ts";
 import { deriveWorkplaceRegistry, enterWorkplace, FederationError } from "./federation.ts";
 import { applyWorkplaceSetup, planWorkplaceSetup, SetupError } from "./setup.ts";
@@ -22,6 +23,8 @@ import { fetchCheckpoint, publishCheckpoint, restoreCheckpointFromRemote } from 
 import { applyWorkplaceRecovery, planWorkplaceRecovery, RecoveryError } from "./recovery.ts";
 import { CurrentMemberError } from "./current-member.ts";
 import { SiteRouteSetupError } from "./site-setup.ts";
+import { CheckpointStoreError, createLocalCheckpoint, fetchContinuityCheckpoint, loadContinuityDescriptor, pushContinuityCheckpoint, restoreContinuityCheckpoint } from "./checkpoint-store.ts";
+import { RootFacadeError, resolveWorkplaceRoot, setupFromRoot, statusFromRoot } from "./root-facade.ts";
 
 type Parsed = {
   values: Record<string, string>;
@@ -78,6 +81,22 @@ function print(value: unknown, json: boolean): void {
     const receipt = value as unknown as { anchor: string; status: string; checkpoints: Array<{ id: string; action: string; status: string }> };
     console.log([`${receipt.anchor} · ${receipt.status}`, ...receipt.checkpoints.map((checkpoint) => `${checkpoint.id} · ${checkpoint.action} · ${checkpoint.status}`)].join("\n"));
   }
+  else if (typeof value === "object" && value && "kind" in value && value.kind === "WorkplaceRootStatus") {
+    const status = value as unknown as { workplace: string; mount: string; check: { operationStatus: string }; recovery: { status: string; continuity?: { status: string; missing: Array<{ checkpointId: string }> } } };
+    console.log([`${status.workplace} · ${status.check.operationStatus}`, status.mount, `recovery · ${status.recovery.status}`, status.recovery.continuity ? `continuity · ${status.recovery.continuity.status}` : undefined, ...(status.recovery.continuity?.missing.map((item) => `missing · ${item.checkpointId}`) ?? [])].filter(Boolean).join("\n"));
+  }
+  else if (typeof value === "object" && value && "receipt" in value && "continuity" in value) {
+    const setup = value as unknown as { status: string; receipt: { anchor: string }; continuity: { status: string; missing: Array<{ checkpointId: string; action: string }> } };
+    console.log([`${setup.receipt.anchor} · ${setup.status}`, `continuity · ${setup.continuity.status}`, ...setup.continuity.missing.map((item) => `${item.checkpointId} · ${item.action}`)].join("\n"));
+  }
+  else if (typeof value === "object" && value && "kind" in value && value.kind === "ContinuityStoreReceipt") {
+    const receipt = value as unknown as { operation: string; status: string; checkpointId: string; path: string };
+    console.log(`${receipt.operation} · ${receipt.status}\n${receipt.checkpointId}\n${receipt.path}`);
+  }
+  else if (typeof value === "object" && value && "receipt" in value && typeof value.receipt === "object" && value.receipt && "kind" in value.receipt && value.receipt.kind === "ContinuityRemoteReceipt") {
+    const result = value as unknown as { receipt: { operation: string; status: string; selector: string } };
+    console.log(`${result.receipt.operation} · ${result.receipt.status}\n${result.receipt.selector}`);
+  }
   else if (typeof value === "object" && value && "receipt" in value) {
     const checkpoint = value as unknown as { path?: string; receipt: { status: string; checkpointId: string; controlRef?: string; coverage?: { repositories: number; worktrees: number } } };
     console.log([`${checkpoint.receipt.status} · ${checkpoint.receipt.checkpointId}`, checkpoint.path, checkpoint.receipt.controlRef, checkpoint.receipt.coverage ? `${checkpoint.receipt.coverage.repositories} repositories · ${checkpoint.receipt.coverage.worktrees} worktrees` : undefined].filter(Boolean).join("\n"));
@@ -95,7 +114,11 @@ const [command, ...rest] = Bun.argv.slice(2);
 const options = parse(rest);
 
 try {
-  if (command === "new") {
+  if (command === "setup") {
+    print(await setupFromRoot({ start: process.cwd(), ...(options.values.from ? { from: options.values.from } : {}), ...(options.values.with ? { with: options.values.with } : {}), ...(options.values.as ? { as: options.values.as } : {}) }), options.flags.has("json"));
+  } else if (command === "status") {
+    print(await statusFromRoot(options.positionals[0] ?? process.cwd()), options.flags.has("json"));
+  } else if (command === "new") {
     const requestPath = options.values.request;
     const wantsPreview = options.flags.has("preview");
     const applyRevision = options.values.apply;
@@ -156,7 +179,17 @@ try {
     } else throw new Error("usage: endroit workplace <list|enter|setup|recover> ...");
   } else if (command === "checkpoint") {
     const action = options.positionals[0];
-    if (action === "capture") {
+    if (!action || !["capture", "verify", "restore", "publish", "fetch", "restore-remote", "push"].includes(action)) {
+      let start = process.cwd();
+      if (action) {
+        start = resolve(action);
+        const info = await lstat(start).catch(() => undefined);
+        if (!info || info.isSymbolicLink() || (!info.isDirectory() && !info.isFile())) throw new Error(`usage: endroit checkpoint [existing-path] [--json] (unknown action: ${action})`);
+        start = await realpath(start);
+      }
+      const descriptor = await loadContinuityDescriptor(await resolveWorkplaceRoot(start));
+      print(await createLocalCheckpoint(descriptor), options.flags.has("json"));
+    } else if (action === "capture") {
       const requestPath = options.values.from;
       if (!requestPath) throw new Error("usage: endroit checkpoint capture --from <request.json> [--json]");
       const resolvedRequest = resolve(requestPath);
@@ -168,10 +201,14 @@ try {
       const verified = await verifyCheckpoint(checkpoint);
       print({ path: verified.path, receipt: verified.receipt }, options.flags.has("json"));
     } else if (action === "restore") {
-      const checkpoint = options.positionals[1];
-      const target = options.values.to;
-      if (!checkpoint || !target) throw new Error("usage: endroit checkpoint restore <checkpoint-directory> --to <absent-target> [--json]");
-      print(await restoreCheckpoint(checkpoint, target), options.flags.has("json"));
+      if (options.values.to) {
+        const checkpoint = options.positionals[1];
+        if (!checkpoint) throw new Error("usage: endroit checkpoint restore <checkpoint-directory> --to <absent-target> [--json]");
+        print(await restoreCheckpoint(checkpoint, options.values.to), options.flags.has("json"));
+      } else {
+        const descriptor = await loadContinuityDescriptor(await resolveWorkplaceRoot(process.cwd()));
+        print(await restoreContinuityCheckpoint(descriptor, options.positionals[1] ?? "latest"), options.flags.has("json"));
+      }
     } else if (action === "publish") {
       const checkpoint = options.positionals[1];
       const requestPath = options.values.from;
@@ -179,12 +216,17 @@ try {
       const resolvedRequest = resolve(requestPath);
       print(await publishCheckpoint(checkpoint, JSON.parse(await Bun.file(resolvedRequest).text()) as unknown, { requestDirectory: dirname(resolvedRequest) }), options.flags.has("json"));
     } else if (action === "fetch") {
-      const checkpointId = options.positionals[1];
-      const requestPath = options.values.from;
-      const target = options.values.to;
-      if (!checkpointId || !requestPath || !target) throw new Error("usage: endroit checkpoint fetch <checkpoint-id> --from <request.json> --to <absent-checkpoint-directory> [--json]");
-      const resolvedRequest = resolve(requestPath);
-      print(await fetchCheckpoint(checkpointId, JSON.parse(await Bun.file(resolvedRequest).text()) as unknown, target, { requestDirectory: dirname(resolvedRequest) }), options.flags.has("json"));
+      if (options.values.from || options.values.to) {
+        const checkpointId = options.positionals[1];
+        const requestPath = options.values.from;
+        const target = options.values.to;
+        if (!checkpointId || !requestPath || !target) throw new Error("usage: endroit checkpoint fetch <checkpoint-id> --from <request.json> --to <absent-checkpoint-directory> [--json]");
+        const resolvedRequest = resolve(requestPath);
+        print(await fetchCheckpoint(checkpointId, JSON.parse(await Bun.file(resolvedRequest).text()) as unknown, target, { requestDirectory: dirname(resolvedRequest) }), options.flags.has("json"));
+      } else {
+        const descriptor = await loadContinuityDescriptor(await resolveWorkplaceRoot(process.cwd()));
+        print(await fetchContinuityCheckpoint(descriptor, options.positionals[1] ?? "latest"), options.flags.has("json"));
+      }
     } else if (action === "restore-remote") {
       const checkpointId = options.positionals[1];
       const requestPath = options.values.from;
@@ -192,7 +234,10 @@ try {
       if (!checkpointId || !requestPath || !target) throw new Error("usage: endroit checkpoint restore-remote <checkpoint-id> --from <request.json> --to <absent-target> [--json]");
       const resolvedRequest = resolve(requestPath);
       print(await restoreCheckpointFromRemote(checkpointId, JSON.parse(await Bun.file(resolvedRequest).text()) as unknown, target, { requestDirectory: dirname(resolvedRequest) }), options.flags.has("json"));
-    } else throw new Error("usage: endroit checkpoint <capture|verify|restore|publish|fetch|restore-remote> ...");
+    } else if (action === "push") {
+      const descriptor = await loadContinuityDescriptor(await resolveWorkplaceRoot(process.cwd()));
+      print(await pushContinuityCheckpoint(descriptor, options.positionals[1] ?? "latest"), options.flags.has("json"));
+    } else throw new Error("usage: endroit checkpoint [path] | <push|fetch|restore> [checkpoint-id|latest] | <capture|verify|publish|restore-remote> ...");
   } else if (command === "compile") {
     const mount = options.values.mount ?? options.values.root;
     if (!mount) throw new Error("usage: endroit compile --mount <path> [--entry <file>] [--provider <id>]");
@@ -221,11 +266,11 @@ try {
     const result = await previewAdoption({ source, outDir, ...(ignore !== undefined ? { ignore } : {}) });
     print(result, options.flags.has("json"));
   } else {
-    throw new Error("usage: endroit <new|ready|compile|check|preview|workplace|checkpoint> ...");
+    throw new Error("usage: endroit <setup|status|new|ready|compile|check|preview|workplace|checkpoint> ...");
   }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
-  const code = error instanceof FederationError || error instanceof SetupError || error instanceof CheckpointError || error instanceof RecoveryError || error instanceof CurrentMemberError || error instanceof SiteRouteSetupError ? error.code : undefined;
+  const code = error instanceof FederationError || error instanceof SetupError || error instanceof CheckpointError || error instanceof RecoveryError || error instanceof CurrentMemberError || error instanceof SiteRouteSetupError || error instanceof RootFacadeError || error instanceof CheckpointStoreError ? error.code : undefined;
   console.error(options.flags.has("json") ? JSON.stringify({ ...(code ? { code } : {}), error: message }, null, 2) : message);
   process.exitCode = error instanceof CheckpointError ? error.code === "checkpoint-schema-invalid" || error.code === "checkpoint-path-invalid" ? 2 : 1 : code && ["unavailable", "unsafe-mount", "identity-mismatch", "compile-required", "setup-unavailable", "setup-collision", "recovery-collision", "recovery-unavailable", "recovery-position-mismatch", "current-member-collision", "site-route-collision", "site-route-unavailable"].includes(code) ? 1 : 2;
 }

@@ -1,8 +1,9 @@
 import { lstat, mkdir, readFile, realpath, rename, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
-import { stable } from "./compiler/index.ts";
+import { parseSourceEnvelope, stable } from "./compiler/index.ts";
 
 const REF = /^workplace:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
+const ID = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
 
 export type CurrentMemberBinding = {
   kind: "CurrentMemberBindings";
@@ -96,6 +97,28 @@ async function readBinding(anchorMount: string, anchor: string): Promise<Current
     if (error instanceof SyntaxError) fail("invalid-current-member-binding", `${path} is invalid JSON`);
     throw error;
   }
+}
+
+export async function verifyCurrentMemberSources(input: { workplaceMount: string; workplace: string; member: string; desk: string }): Promise<{ workplace: string; member: string; desk: string }> {
+  const workplace = ref(input.workplace, "workplace");
+  const member = ref(input.member, "member");
+  const desk = ref(input.desk, "desk");
+  const prefix = `${workplace}/member/`;
+  const id = member.startsWith(prefix) ? member.slice(prefix.length) : "";
+  if (!ID.test(id) || desk !== `${workplace}/desk/${id}`) fail("invalid-current-member-binding", "Current Member needs one same-id v1 Desk in its Workplace");
+  const mount = await realpath(resolve(input.workplaceMount)).catch(() => fail("current-member-collision", `${input.workplaceMount} is unavailable`));
+  const sources = [
+    { path: join(mount, `workplace/sources/members/${id}/MEMBER.md`), ref: member, entity: "member", role: undefined },
+    { path: join(mount, `workplace/sources/members/${id}/desk/DESK.md`), ref: desk, entity: "place", role: "desk" },
+  ];
+  for (const source of sources) {
+    const info = await lstat(source.path).catch(() => fail("invalid-current-member-binding", `${source.ref} has no source`));
+    if (info.isSymbolicLink() || !info.isFile() || await realpath(source.path) !== source.path) fail("current-member-collision", `${source.path} must be a physical source file`);
+    const envelope = parseSourceEnvelope(await readFile(source.path, "utf8"), source.path).envelope;
+    if (envelope.ref !== source.ref || envelope.entity !== source.entity || source.role && !envelope.roles?.includes(source.role)) fail("invalid-current-member-binding", `${source.path} does not prove ${source.ref}`);
+    if (source.role && (envelope.owner !== member || !envelope.relations["owned-by"]?.includes(member))) fail("invalid-current-member-binding", `${source.ref} is not owned by ${member}`);
+  }
+  return { workplace, member, desk };
 }
 
 export async function resolveCurrentMember(input: { anchorMount: string; anchor: string; workplace: string; member?: string; desk?: string }): Promise<CurrentMemberResolution> {
