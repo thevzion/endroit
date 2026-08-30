@@ -22,13 +22,13 @@ async function init(path: string): Promise<void> {
   git(path, ["config", "user.email", "fixture@example.test"]);
 }
 
-export async function checkpointFixture() {
-  const root = resolve("/tmp", `endroit-checkpoint-test-${crypto.randomUUID()}`);
-  const source = join(root, "source");
-  const shared = join(source, "shared-main");
-  const detached = join(source, "shared-detached");
-  const desk = join(source, "desk");
-  const site = join(source, "site");
+export async function checkpointFixture(options: { root?: string; source?: string; siteLayout?: boolean; platformNeutral?: boolean } = {}) {
+  const root = options.root ? resolve(options.root) : resolve("/tmp", `endroit-checkpoint-test-${crypto.randomUUID()}`);
+  const source = resolve(options.source ?? join(root, "source"));
+  const shared = join(source, options.siteLayout ? "product/main" : "shared-main");
+  const detached = join(source, options.siteLayout ? "product/detached" : "shared-detached");
+  const desk = join(source, options.siteLayout ? "desk/main" : "desk");
+  const site = join(source, options.siteLayout ? "service/main" : "site");
   await rm(root, { recursive: true, force: true });
   await init(shared);
   await writeFile(join(shared, "shared.txt"), "shared\n");
@@ -47,7 +47,7 @@ export async function checkpointFixture() {
   await writeFile(join(desk, "assume.txt"), "assume\n");
   await writeFile(join(desk, "skip.txt"), "skip\n");
   await writeFile(join(desk, "tool.sh"), "#!/bin/sh\necho fixture\n");
-  await chmod(join(desk, "tool.sh"), 0o755);
+  if (!options.platformNeutral) await chmod(join(desk, "tool.sh"), 0o755);
   git(desk, ["add", "."]); git(desk, ["commit", "-qm", "desk base"]);
   git(desk, ["update-index", "--assume-unchanged", "assume.txt"]);
   git(desk, ["update-index", "--skip-worktree", "skip.txt"]);
@@ -56,7 +56,7 @@ export async function checkpointFixture() {
   await writeFile(join(desk, "untracked.txt"), "untracked\n");
   await writeFile(join(desk, "intent.txt"), "intent\n"); git(desk, ["add", "-N", "intent.txt"]);
   await writeFile(join(desk, "cache.bin"), "ignored selected\n");
-  await symlink("work.txt", join(desk, "untracked-link"));
+  if (!options.platformNeutral) await symlink("work.txt", join(desk, "untracked-link"));
 
   await init(site);
   await writeFile(join(site, "conflict.txt"), "base\n");
@@ -73,9 +73,9 @@ export async function checkpointFixture() {
     workplace: "workplace://fixture", workplaceRevision: `sha256:${"1".repeat(64)}`,
     sourceRoot: source, output: join(root, "checkpoint"),
     roots: [
-      { ref: "workplace://fixture/root/shared", worktrees: [{ id: "shared-main", path: shared, logicalPath: "roots/shared/main" }, { id: "shared-detached", path: detached, logicalPath: "roots/shared/detached" }] },
-      { ref: "workplace://fixture/root/desk", worktrees: [{ id: "desk-main", path: desk, logicalPath: "roots/desk/main" }] },
-      { ref: "workplace://fixture/root/site", worktrees: [{ id: "site-main", path: site, logicalPath: "roots/site/main" }] },
+      { ref: "workplace://fixture/root/shared", worktrees: [{ id: "shared-main", path: shared, logicalPath: options.siteLayout ? "product/main" : "roots/shared/main" }, { id: "shared-detached", path: detached, logicalPath: options.siteLayout ? "product/detached" : "roots/shared/detached" }] },
+      { ref: "workplace://fixture/root/desk", worktrees: [{ id: "desk-main", path: desk, logicalPath: options.siteLayout ? "desk/main" : "roots/desk/main" }] },
+      { ref: "workplace://fixture/root/site", worktrees: [{ id: "site-main", path: site, logicalPath: options.siteLayout ? "service/main" : "roots/site/main" }] },
     ],
     policy: { includeUntracked: true, ignoredPaths: [{ worktree: "desk-main", path: "cache.bin" }] },
   };

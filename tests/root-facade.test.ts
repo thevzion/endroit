@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
-import { dirname, join, resolve } from "node:path";
+import { cp, mkdir, readFile, readdir, realpath, rm, symlink, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve } from "node:path";
+import { tmpdir } from "node:os";
 import { applyNewWorkplace, loadStandardProfile, planNewWorkplace, type NewWorkplaceRequest } from "../src/compiler/new-workplace.ts";
 import { applyWorkplaceRecovery, planWorkplaceRecovery, RecoveryError, type WorkplaceRecoveryPlan, type WorkplaceRecoveryRequest } from "../src/recovery.ts";
-import { planRootSetup, selectRecoveryRequest, setupFromRoot, statusFromRoot } from "../src/root-facade.ts";
+import { planRootSetup, selectRecoveryRequest, setupFromRoot, statusFromRoot, type RootSetupResult } from "../src/root-facade.ts";
+import type { ContinuityStoreReceipt } from "../src/checkpoint-store.ts";
 import type { WorkplaceSetupRequest } from "../src/setup.ts";
-import { cli, repository } from "./helpers/checkpoint-fixture.ts";
+import { checkpointFixture, cli, evidence, git, repository } from "./helpers/checkpoint-fixture.ts";
 
 const profilePath = resolve(repository, "profiles/standard/profile.json");
 const member = "workplace://anchor/member/operator";
@@ -28,7 +30,7 @@ async function tree(root: string, current = root): Promise<string[]> {
 }
 
 async function fixture() {
-  const root = resolve("/tmp", `endroit-root-facade-${crypto.randomUUID()}`);
+  const root = resolve(tmpdir(), `endroit-root-facade-${crypto.randomUUID()}`);
   const mount = join(root, "anchor");
   const request: NewWorkplaceRequest = {
     kind: "NewWorkplaceRequest", version: 1, target: mount,
@@ -204,5 +206,126 @@ describe("root-driven Workplace facade", () => {
       expect(observed instanceof Error && "code" in observed ? observed.code : undefined).toBe("recovery-request-unavailable");
       expect((await readdir(outside, { withFileTypes: true })).map((entry) => entry.name)).toEqual(["recovery.json"]);
     } finally { await rm(state.root, { recursive: true, force: true }); }
+  });
+
+  test("round-trips a dirty multi-worktree topology from machine A to B through root commands", async () => {
+    const machineA = await fixture();
+    const machineB = await fixture();
+    try {
+      const topology = await checkpointFixture({
+        root: join(machineA.root, "topology"), source: join(machineA.mount, "checkouts/sites"), siteLayout: true, platformNeutral: true,
+      });
+      const capture = {
+        ...topology.request,
+        workplace: "workplace://anchor",
+        roots: topology.request.roots.map((root) => ({
+          ...root,
+          ref: root.ref.replace("workplace://fixture", "workplace://anchor"),
+          worktrees: root.worktrees,
+        })),
+      };
+      const capturePath = join(machineA.mount, ".endroit/capture.json");
+      await writeFile(capturePath, `${JSON.stringify(capture, null, 2)}\n`);
+      await writeFile(join(machineA.mount, ".endroit/continuity.json"), `${JSON.stringify({
+        kind: "ContinuityDescriptor", version: 1, capture: "capture.json", store: "checkpoints", restoreTarget: "../unused-restore", setupContinuity: "optional",
+      }, null, 2)}\n`);
+
+      expect(git(topology.detached, ["branch", "--show-current"])).toBe("");
+      expect(git(topology.desk, ["status", "--porcelain=v2", "--untracked-files=all"])).toContain("work.txt");
+      expect(git(topology.site, ["diff", "--name-only", "--diff-filter=U"])).toBe("conflict.txt");
+      for (const worktree of capture.roots.flatMap((root) => root.worktrees)) {
+        expect(relative(topology.source, worktree.path).replaceAll("\\", "/")).toBe(worktree.logicalPath);
+      }
+
+      const created = jsonCli(join(machineA.mount, "workplace"), ["checkpoint", "--json"]) as ContinuityStoreReceipt;
+      expect(created.operation).toBe("create");
+      expect(created.verification.coverage).toEqual({
+        repositories: 3, worktrees: 4, untracked: 1, ignored: 1,
+        exclusions: ["filesystem-metadata", "special-files", "ignored-files-not-selected", "provider-state", "credentials"],
+      });
+      expect(git(join(machineA.mount, "workplace"), ["remote"])).toBe("");
+      for (const worktree of capture.roots.flatMap((root) => root.worktrees)) expect(git(worktree.path, ["remote"])).toBe("");
+
+      const targetStore = join(machineB.mount, ".endroit/checkpoints");
+      const targetPackage = join(targetStore, created.checkpointId.slice("checkpoint:sha256:".length));
+      await mkdir(targetStore, { recursive: true });
+      await cp(created.path, targetPackage, { recursive: true });
+      await writeFile(join(targetStore, "latest.json"), `${JSON.stringify({ kind: "ContinuityLatest", version: 1, checkpointId: created.checkpointId }, null, 2)}\n`);
+      await writeFile(join(machineB.mount, ".endroit/continuity.json"), `${JSON.stringify({
+        kind: "ContinuityDescriptor", version: 1, capture: "unused.json", store: "checkpoints", restoreTarget: "../manual-restore", setupContinuity: "required",
+      }, null, 2)}\n`);
+
+      const recoveryRoots = capture.roots.map((root) => ({
+        ref: root.ref,
+        worktrees: root.worktrees.map((worktree) => {
+          const [site, route] = worktree.logicalPath.split("/");
+          return { id: worktree.id, logicalPath: worktree.logicalPath, site: site!, route: route! };
+        }),
+      }));
+      const recovery: WorkplaceRecoveryRequest = {
+        ...machineB.recovery,
+        setup: machineB.setupPath,
+        checkpoints: [{
+          id: "anchor-sites", workplace: "workplace://anchor", checkpoint: join(machineB.root, "absent-package"), target: "checkouts/sites",
+          checkpointId: created.checkpointId, portableFingerprint: created.verification.portableFingerprint, roots: recoveryRoots,
+        }],
+      };
+      await writeFile(join(machineB.mount, ".endroit/recovery.json"), `${JSON.stringify(recovery, null, 2)}\n`);
+
+      const status = jsonCli(machineB.mount, ["status", "--json"]) as { recovery: { continuity: { status: string; verification: string } } };
+      expect(status.recovery.continuity).toEqual({ status: "available", requirement: "required", missing: [], verification: "not-run" });
+      const target = join(machineB.mount, "checkouts/sites");
+      const manualTarget = join(machineB.mount, "manual-restore");
+      expect(await Bun.file(target).exists()).toBe(false);
+      expect(await Bun.file(manualTarget).exists()).toBe(false);
+      const restored = jsonCli(machineB.mount, ["checkpoint", "restore", "latest", "--json"]) as { path: string; receipt: { status: string; checkpointId: string; portableFingerprint: string } };
+      expect(restored.path).toBe(await realpath(manualTarget));
+      expect(restored.receipt).toEqual({
+        schema: "workplace-checkpoint-receipt/1", operation: "restore", checkpointId: created.checkpointId,
+        workplaceRef: "workplace://anchor", portableFingerprint: created.verification.portableFingerprint,
+        status: "restored-equivalent", coverage: created.verification.coverage,
+      });
+      expect(await Bun.file(join(machineB.mount, ".endroit/current-member.json")).exists()).toBe(false);
+      expect(await Bun.file(target).exists()).toBe(false);
+
+      const sourceEvidence = new Map(capture.roots.flatMap((root) => root.worktrees).map((worktree) => [worktree.id, evidence(worktree.path)]));
+      for (const worktree of capture.roots.flatMap((root) => root.worktrees)) {
+        const restoredPath = join(manualTarget, worktree.logicalPath);
+        expect(resolve(restoredPath)).not.toBe(resolve(worktree.path));
+        expect(evidence(restoredPath)).toBe(sourceEvidence.get(worktree.id));
+        expect(git(restoredPath, ["remote"])).toBe("");
+      }
+
+      const first = jsonCli(join(machineB.mount, "workplace"), ["setup", "--json"]) as RootSetupResult;
+      expect(first.status).toBe("ready");
+      expect(first.receipt.checkpoints).toEqual([{
+        id: "anchor-sites", workplace: "workplace://anchor", target: await realpath(target), action: "restore",
+        status: "restored-equivalent", checkpointId: created.checkpointId, portableFingerprint: created.verification.portableFingerprint,
+      }]);
+      for (const worktree of capture.roots.flatMap((root) => root.worktrees)) {
+        expect(evidence(join(target, worktree.logicalPath))).toBe(sourceEvidence.get(worktree.id));
+      }
+      const memberBinding = await readFile(join(machineB.mount, ".endroit/current-member.json"), "utf8");
+      const storeBeforeReplay = await tree(targetStore);
+      const evidenceBeforeReplay = new Map(capture.roots.flatMap((root) => root.worktrees).map((worktree) => [worktree.id, evidence(join(target, worktree.logicalPath))]));
+      const replay = jsonCli(machineB.mount, ["setup", "--json"]) as RootSetupResult;
+      expect(replay.status).toBe("ready");
+      expect(replay.receipt.checkpoints).toEqual([{
+        id: "anchor-sites", workplace: "workplace://anchor", target: await realpath(target), action: "verify",
+        status: "restored-equivalent", checkpointId: created.checkpointId, portableFingerprint: created.verification.portableFingerprint,
+      }]);
+      expect(await readFile(join(machineB.mount, ".endroit/current-member.json"), "utf8")).toBe(memberBinding);
+      expect(await tree(targetStore)).toEqual(storeBeforeReplay);
+      for (const worktree of capture.roots.flatMap((root) => root.worktrees)) expect(evidence(join(target, worktree.logicalPath))).toBe(evidenceBeforeReplay.get(worktree.id));
+
+      if (process.env.ENDROIT_ACCEPTANCE_TRACE === "1") console.log(JSON.stringify({
+        machineA: await realpath(machineA.mount), machineB: await realpath(machineB.mount), sourceRoot: await realpath(topology.source), restoredRoot: await realpath(target),
+        checkpointId: created.checkpointId, sourceFingerprint: created.verification.portableFingerprint, targetFingerprint: restored.receipt.portableFingerprint,
+        firstAction: first.receipt.checkpoints[0]?.action, replayAction: replay.receipt.checkpoints[0]?.action, replayUnchanged: true,
+      }));
+    } finally {
+      await rm(machineA.root, { recursive: true, force: true });
+      await rm(machineB.root, { recursive: true, force: true });
+    }
   });
 });
