@@ -3,6 +3,7 @@ import { dirname, join, relative, resolve } from "node:path";
 import { checkStaticWorkplace, discoverMount, hash, loadCompileInput, parseSourceEnvelope, stable } from "./index.ts";
 import type { Diagnostic, SourceRecord } from "./model.ts";
 import { portableDeclarationKind, validatePortableDeclaration } from "./portable-declarations.ts";
+import { gitArguments } from "../platform.ts";
 
 export type GitGuardHook = {
   root: "shared";
@@ -31,7 +32,7 @@ const SUBJECT = /^([a-z][a-z0-9-]*)\(([a-z][a-z0-9-]*):([a-z0-9][a-z0-9-]*)\): (
 function fail(message: string): never { throw new Error(message); }
 
 function git(root: string, args: string[], optional = false): string | undefined {
-  const result = Bun.spawnSync(["git", ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(["git", ...gitArguments(args)], { cwd: root, stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== 0) {
     if (optional) return undefined;
     fail(`git ${args[0]} failed in ${root}: ${new TextDecoder().decode(result.stderr).trim()}`);

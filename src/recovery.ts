@@ -1,4 +1,5 @@
-import { lstat, mkdir, readFile, readdir, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, realpath, rename, rm, unlink, writeFile } from "node:fs/promises";
+import { gitArguments } from "./platform.ts";
 import { dirname, join, relative, resolve } from "node:path";
 import { hash, stable } from "./compiler/index.ts";
 import { inspectCheckpoint, restoreCheckpoint, verifyCheckpoint, verifyRestoredCheckpoint, type CheckpointManifest } from "./checkpoint.ts";
@@ -412,8 +413,9 @@ async function rollbackSites(receipts: SiteRouteSetupReceipt[]): Promise<void> {
     for (const site of [...receipt.sites].reverse()) {
       for (const route of [...site.routes].reverse()) {
         if (route.status !== "unchanged") {
-          if (route.binding.kind === "worktree") Bun.spawnSync(["git", `--git-dir=${route.binding.commonGitDir}`, "worktree", "remove", "--force", route.path], { cwd: dirname(route.binding.commonGitDir), stdout: "pipe", stderr: "pipe" });
-          await rm(route.path, { recursive: route.binding.kind !== "external-link", force: true });
+          if (route.binding.kind === "worktree") Bun.spawnSync(["git", ...gitArguments([`--git-dir=${route.binding.commonGitDir}`, "worktree", "remove", "--force", route.path])], { cwd: dirname(route.binding.commonGitDir), stdout: "pipe", stderr: "pipe" });
+          if (route.binding.kind === "external-link") { if (await exists(route.path)) await unlink(route.path); }
+          else await rm(route.path, { recursive: true, force: true });
         }
         if (route.bindingStatus === "created") await removeSiteRouteBinding(workplaceMount, site.id, route.id, route.binding);
       }

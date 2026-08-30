@@ -1,11 +1,38 @@
 import { describe, expect, test } from "bun:test";
-import { cp, mkdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
-import { join, resolve } from "node:path";
+import { cp, lstat, mkdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
+import { dirname, join, relative, resolve } from "node:path";
 import { assertCheckpointRestoreCapabilities, captureCheckpoint, checkpointRestorePlan, restoreCheckpoint, verifyCheckpoint } from "../src/checkpoint.ts";
 import { fetchCheckpoint, publishCheckpoint, restoreCheckpointFromRemote } from "../src/checkpoint-remote.ts";
+import { gitArguments, gitTransportArguments } from "../src/platform.ts";
 import { checkpointFixture, cli, evidence, git, repository, run } from "./helpers/checkpoint-fixture.ts";
 
 describe("Git State Portability", () => {
+  test("rebases resolved Git pointers while refusing a pointer outside restored repositories", async () => {
+    const state = await checkpointFixture({ platformNeutral: true });
+    try {
+      const root = state.request.roots[0]!;
+      const captured = await captureCheckpoint({ ...state.request, roots: [{ ...root, worktrees: [root.worktrees[0]!] }] });
+      const before = evidence(state.shared);
+      const target = join(state.root, "canonical-target");
+      const restored = await restoreCheckpoint(captured.path, target, { beforeInstall: async (staging) => {
+        const pointer = join(staging, "roots/shared/main/.git");
+        const admin = resolve(dirname(pointer), (await readFile(pointer, "utf8")).trim().slice("gitdir: ".length));
+        await writeFile(pointer, `gitdir: ${relative(dirname(pointer), admin)}\n`);
+        await writeFile(join(admin, "gitdir"), `${relative(admin, pointer)}\n`);
+      } });
+      expect(restored.receipt.status).toBe("restored-equivalent");
+      expect(evidence(join(target, "roots/shared/main"))).toBe(before);
+      const unsafe = join(state.root, "unsafe-target");
+      let blocked = "";
+      try { await restoreCheckpoint(captured.path, unsafe, { beforeInstall: async (staging) => {
+        await writeFile(join(staging, "roots/shared/main/.git"), `gitdir: ${join(state.shared, ".git")}\n`);
+      } }); } catch (error) { blocked = error instanceof Error ? error.message : String(error); }
+      expect(blocked).toContain("unexpected Git pointer");
+      expect(await lstat(unsafe).catch(() => undefined)).toBe(undefined);
+      expect(evidence(state.shared)).toBe(before);
+    } finally { await rm(state.root, { recursive: true, force: true }); }
+  });
+
   test("round-trips clean, linked, detached, dirty and conflicted state while excluding ignored files", async () => {
     const state = await checkpointFixture();
     try {
@@ -126,11 +153,11 @@ describe("Git State Portability", () => {
       const replay = JSON.parse(run(repository, [...cli, "checkpoint", "publish", captured.path, "--from", publishPath, "--json"])) as Awaited<ReturnType<typeof publishCheckpoint>>;
       expect(replay.receipt.checkpointCommit).toBe(published.receipt.checkpointCommit);
       expect(replay.receipt.lineUpdate?.status).toBe("unchanged");
-      expect(git(state.root, ["ls-remote", productRemote, "refs/heads/develop"]).split("\t")[0]).toBe(git(state.shared, ["rev-parse", "develop"]));
+      expect(git(state.root, ["ls-remote", ...gitTransportArguments("ls-remote", productRemote), productRemote, "refs/heads/develop"]).split("\t")[0]).toBe(git(state.shared, ["rev-parse", "develop"]));
 
       const checkout = join(state.root, "remote-checkout");
       await mkdir(checkout, { recursive: true });
-      git(checkout, ["init", "-q"]); git(checkout, ["fetch", "-q", "--no-tags", productRemote, published.receipt.checkpointRef]); git(checkout, ["checkout", "-q", "--detach", "FETCH_HEAD"]);
+      git(checkout, ["init", "-q"]); git(checkout, ["fetch", ...gitTransportArguments("fetch", productRemote), "-q", "--no-tags", productRemote, published.receipt.checkpointRef]); git(checkout, ["checkout", "-q", "--detach", "FETCH_HEAD"]);
       const remoteFiles = git(checkout, ["ls-tree", "-r", "--name-only", "HEAD"]).split("\n").filter(Boolean);
       expect(remoteFiles.every((path) => path.startsWith("checkpoint/"))).toBe(true);
       expect(remoteContains(checkout, remoteFiles, "workplace://fixture")).toBe(true);
@@ -161,15 +188,15 @@ describe("Git State Portability", () => {
       expect(secondPublished.receipt.status).toBe("diverged");
       expect(secondPublished.receipt.lineUpdate?.observedCheckpoint).toBe(firstBranch.receipt.checkpointId);
       expect(secondPublished.receipt.lineUpdate).toEqual({ status: "diverged", expectedParent: captured.receipt.checkpointId, observedCheckpoint: firstBranch.receipt.checkpointId, expectedCommit: published.receipt.checkpointCommit, observedCommit: firstPublished.receipt.checkpointCommit, resultingCommit: firstPublished.receipt.checkpointCommit });
-      expect(git(state.root, ["ls-remote", productRemote, firstPublished.receipt.checkpointRef]).startsWith(firstPublished.receipt.checkpointCommit)).toBe(true);
-      expect(git(state.root, ["ls-remote", productRemote, secondPublished.receipt.checkpointRef]).startsWith(secondPublished.receipt.checkpointCommit)).toBe(true);
-      expect(git(state.root, ["ls-remote", productRemote, published.receipt.lineRef]).startsWith(firstPublished.receipt.checkpointCommit)).toBe(true);
+      expect(git(state.root, ["ls-remote", ...gitTransportArguments("ls-remote", productRemote), productRemote, firstPublished.receipt.checkpointRef]).startsWith(firstPublished.receipt.checkpointCommit)).toBe(true);
+      expect(git(state.root, ["ls-remote", ...gitTransportArguments("ls-remote", productRemote), productRemote, secondPublished.receipt.checkpointRef]).startsWith(secondPublished.receipt.checkpointCommit)).toBe(true);
+      expect(git(state.root, ["ls-remote", ...gitTransportArguments("ls-remote", productRemote), productRemote, published.receipt.lineRef]).startsWith(firstPublished.receipt.checkpointCommit)).toBe(true);
 
       const colleague = "workplace://fixture/member/reviewer";
       const colleagueCheckpoint = await captureCheckpoint({ ...state.request, ownerMember: colleague, output: join(state.root, "checkpoint-reviewer") });
       const colleaguePublished = await publishCheckpoint(colleagueCheckpoint.path, { ...publishRequest, ownerMember: colleague });
       expect(colleaguePublished.receipt.lineRef).not.toBe(published.receipt.lineRef);
-      expect(git(state.root, ["ls-remote", productRemote, colleaguePublished.receipt.lineRef]).startsWith(colleaguePublished.receipt.checkpointCommit)).toBe(true);
+      expect(git(state.root, ["ls-remote", ...gitTransportArguments("ls-remote", productRemote), productRemote, colleaguePublished.receipt.lineRef]).startsWith(colleaguePublished.receipt.checkpointCommit)).toBe(true);
 
       let roleMismatch = "";
       try { await publishCheckpoint(captured.path, { ...publishRequest, binding: { ...binding, role: "separate" } }); }
@@ -182,7 +209,7 @@ describe("Git State Portability", () => {
 
       const deleted = remoteFiles.find((path) => path.startsWith("checkpoint/payloads/"))!;
       await rm(join(checkout, deleted), { force: true, recursive: false });
-      git(checkout, ["add", "-u"]); git(checkout, ["-c", "user.name=Tamper", "-c", "user.email=tamper@example.test", "commit", "-qm", "tamper"]); git(checkout, ["push", "-q", "--force", productRemote, `HEAD:${published.receipt.checkpointRef}`]);
+      git(checkout, ["add", "-u"]); git(checkout, ["-c", "user.name=Tamper", "-c", "user.email=tamper@example.test", "commit", "-qm", "tamper"]); git(checkout, ["push", ...gitTransportArguments("push", productRemote), "-q", "--force", productRemote, `HEAD:${published.receipt.checkpointRef}`]);
       const tamperedTarget = join(state.root, "tampered-fetch");
       let tampered = "";
       try { await fetchCheckpoint(captured.receipt.checkpointId, fetchRequest, tamperedTarget); }
@@ -195,7 +222,7 @@ describe("Git State Portability", () => {
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }
-  });
+  }, process.platform === "win32" ? 180_000 : 30_000); // Multi-generation capture, publish, fetch, divergence and restore.
 });
 
 async function readlinkText(path: string): Promise<string> {
@@ -209,7 +236,7 @@ function textCommon(path: string): string {
 function remoteContains(checkout: string, files: string[], expected: string): boolean {
   const needle = new TextEncoder().encode(expected);
   return files.some((path) => {
-    const result = Bun.spawnSync(["git", "show", `HEAD:${path}`], { cwd: checkout, stdout: "pipe", stderr: "pipe" });
+    const result = Bun.spawnSync(["git", ...gitArguments(["show", `HEAD:${path}`])], { cwd: checkout, stdout: "pipe", stderr: "pipe" });
     const bytes = result.stdout;
     return bytes.some((_, index) => index + needle.length <= bytes.length && needle.every((value, offset) => bytes[index + offset] === value));
   });

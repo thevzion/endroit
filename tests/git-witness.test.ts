@@ -1,17 +1,18 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { checkWorkplaceMount, materializeMeeting, readyWorkplace } from "../src/compiler/index.ts";
 import { checkGitHistory, checkGitStaged, gitGuardExecutable } from "../src/compiler/git-witness.ts";
 import { applyNewWorkplace, loadStandardProfile, planNewWorkplace, type NewWorkplaceRequest } from "../src/compiler/new-workplace.ts";
 import { validatePortableDeclaration } from "../src/compiler/portable-declarations.ts";
+import { gitArguments } from "../src/platform.ts";
 
 const repository = resolve(import.meta.dir, "..");
 const cliCommand = [Bun.argv[0]!, resolve(repository, "src/cli.ts")];
 
 function git(root: string, args: string[]): string {
-  const result = Bun.spawnSync(["git", ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(["git", ...gitArguments(args)], { cwd: root, stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== 0) throw new Error(new TextDecoder().decode(result.stderr));
   return new TextDecoder().decode(result.stdout).trim();
 }
@@ -25,6 +26,28 @@ function request(target: string): NewWorkplaceRequest {
     providers: ["codex"],
     git: { initialize: true, commits: true, author: { name: "Witness Fixture", email: "witness@example.test" } },
   };
+}
+
+async function createWitness(target: string) {
+  const profile = await loadStandardProfile(resolve(repository, "profiles/standard/profile.json"));
+  const plan = planNewWorkplace(request(target), { profile, cliCommand });
+  const created = await applyNewWorkplace(plan, plan.revision);
+  return { plan, created, workplace: "workplace://witness-studio" };
+}
+
+async function stageMeeting(shared: string, workplace: string) {
+  const room = `${workplace}/room/product`;
+  const meeting = materializeMeeting({ workplace, meetingId: "20260825t140000z-build-1234abcd", owner: `${workplace}/member/alexis`, room, intent: "Build one bounded result", nextBoundary: "Verify the result." });
+  const roomBytes = `---\nref: ${JSON.stringify(room)}\nentity: place\nroles: [room]\nslot: rooms\nowner: ${JSON.stringify(`${workplace}/member/alexis`)}\nscope: ${JSON.stringify(workplace)}\nlabel: Product\nsummary: Own bounded product work.\nwhen: [A product needs durable continuity.]\nrelations:\n  contains: [${JSON.stringify(meeting.ref)}]\n---\n\n# Product\n`;
+  const roomPath = resolve(shared, "sources/rooms/product/ROOM.md");
+  const meetingPath = resolve(shared, "sources", meeting.relativePath);
+  await mkdir(resolve(roomPath, ".."), { recursive: true });
+  await mkdir(resolve(meetingPath, ".."), { recursive: true });
+  await writeFile(roomPath, roomBytes);
+  await writeFile(meetingPath, meeting.bytes);
+  git(shared, ["add", "sources"]);
+  const message = `open-room(place:product): declare Room and Meeting\n\nMeeting: ${meeting.ref}\nAuthority: human-invoked\n`;
+  return { meeting, roomBytes, roomPath, meetingPath, message };
 }
 
 describe("Git witness", () => {
@@ -59,14 +82,12 @@ describe("Git witness", () => {
     expect(gitGuardExecutable(0o755, "linux")).toBe(true);
   });
 
-  test("guards staged bytes and finds a bypassed dangling Meeting in history", async () => {
+  test("guards staged sources and projection commits through real Git hooks", async () => {
     const target = resolve(tmpdir(), `endroit-git-witness-${crypto.randomUUID()}`);
     await rm(target, { recursive: true, force: true });
     try {
-      const profile = await loadStandardProfile(resolve(repository, "profiles/standard/profile.json"));
-      const plan = planNewWorkplace(request(target), { profile, cliCommand });
+      const { plan, created, workplace } = await createWitness(target);
       expect(plan.gitGuards.hooks).toHaveLength(2);
-      const created = await applyNewWorkplace(plan, plan.revision);
       for (const root of [created.roots.shared]) for (const name of ["pre-commit", "commit-msg"]) {
         const hook = await readFile(resolve(root, `.git/hooks/${name}`), "utf8");
         expect(hook).toContain("endroit-git-guard:v1");
@@ -74,18 +95,7 @@ describe("Git witness", () => {
         expect(hook).toContain("--staged");
       }
 
-      const workplace = "workplace://witness-studio";
-      const room = `${workplace}/room/product`;
-      const meeting = materializeMeeting({ workplace, meetingId: "20260825t140000z-build-1234abcd", owner: `${workplace}/member/alexis`, room, intent: "Build one bounded result", nextBoundary: "Verify the result." });
-      const roomBytes = `---\nref: ${JSON.stringify(room)}\nentity: place\nroles: [room]\nslot: rooms\nowner: ${JSON.stringify(`${workplace}/member/alexis`)}\nscope: ${JSON.stringify(workplace)}\nlabel: Product\nsummary: Own bounded product work.\nwhen: [A product needs durable continuity.]\nrelations:\n  contains: [${JSON.stringify(meeting.ref)}]\n---\n\n# Product\n`;
-      const roomPath = resolve(created.roots.shared, "sources/rooms/product/ROOM.md");
-      const meetingPath = resolve(created.roots.shared, "sources", meeting.relativePath);
-      await mkdir(resolve(roomPath, ".."), { recursive: true });
-      await mkdir(resolve(meetingPath, ".."), { recursive: true });
-      await writeFile(roomPath, roomBytes);
-      await writeFile(meetingPath, meeting.bytes);
-      git(created.roots.shared, ["add", "sources"]);
-      const message = `open-room(place:product): declare Room and Meeting\n\nMeeting: ${meeting.ref}\nAuthority: human-invoked\n`;
+      const { meeting, roomBytes, roomPath, meetingPath, message } = await stageMeeting(created.roots.shared, workplace);
       const providerPath = resolve(target, ".endroit/providers/codex.json");
       const provider = await readFile(providerPath, "utf8");
       await writeFile(providerPath, "{\n");
@@ -121,7 +131,21 @@ describe("Git witness", () => {
       const compile = `compile(workplace:witness-studio): project portable control plane\n\nMeeting: ${meeting.ref}\nAuthority: projection\nBuild: ${sourceOid}\n`;
       expect((await checkGitStaged({ start: created.roots.shared, commitMessage: compile })).status).toBe("valid");
       git(created.roots.shared, ["-c", "user.name=Witness Fixture", "-c", "user.email=witness@example.test", "commit", "-m", compile]);
+    } finally {
+      await rm(target, { recursive: true, force: true });
+    }
+  });
 
+  test("guards portable declaration closure without changing semantic revisions", async () => {
+    const target = resolve(tmpdir(), `endroit-git-witness-${crypto.randomUUID()}`);
+    try {
+      const { created, workplace } = await createWitness(target);
+      const { meeting, message } = await stageMeeting(created.roots.shared, workplace);
+      git(created.roots.shared, ["-c", "user.name=Witness Fixture", "-c", "user.email=witness@example.test", "commit", "-m", message]);
+      const sourceOid = git(created.roots.shared, ["rev-parse", "HEAD"]);
+      expect((await readyWorkplace({ start: target })).check.operationStatus).toBe("ready");
+      git(created.roots.shared, ["add", "WORKPLACE.md", ".workplace"]);
+      git(created.roots.shared, ["-c", "user.name=Witness Fixture", "-c", "user.email=witness@example.test", "commit", "-m", `compile(workplace:witness-studio): project portable control plane\n\nMeeting: ${meeting.ref}\nAuthority: projection\nBuild: ${sourceOid}\n`]);
       const mapPath = resolve(created.roots.shared, ".workplace/workplace-map.json");
       const semanticRevision = JSON.parse(await readFile(mapPath, "utf8")).sourceRevision;
       const setupPath = resolve(created.roots.shared, ".workplace/setup.json");
@@ -162,7 +186,8 @@ describe("Git witness", () => {
       await rm(resolve(created.roots.shared, dependencyPath, ".."), { recursive: true, force: true });
       await symlink(outside, resolve(created.roots.shared, dependencyPath, ".."), process.platform === "win32" ? "junction" : "dir");
       expect((await checkWorkplaceMount({ mount: target })).diagnostics.some((item) => item.code === "portable-declaration-invalid")).toBe(true);
-      await rm(resolve(created.roots.shared, dependencyPath, ".."), { recursive: true, force: true });
+      await unlink(resolve(created.roots.shared, dependencyPath, ".."));
+      expect(await readFile(resolve(outside, "setup.json"), "utf8")).toBe(`${JSON.stringify(setup)}\n`);
       await mkdir(resolve(created.roots.shared, dependencyPath, ".."), { recursive: true });
       await writeFile(resolve(created.roots.shared, dependencyPath), `${JSON.stringify({ ...setup, anchor: "workplace://wrong" })}\n`);
       git(created.roots.shared, ["add", dependencyPath]);
@@ -185,7 +210,15 @@ describe("Git witness", () => {
         expect(JSON.parse(await readFile(mapPath, "utf8")).sourceRevision).toBe(semanticRevision);
       }
       await writeFile(recoveryPath, `${JSON.stringify(recovery)}\n`);
+    } finally {
+      await rm(target, { recursive: true, force: true });
+    }
+  });
 
+  test("repairs only owned hooks and rejects a bypassed dangling Meeting in history", async () => {
+    const target = resolve(tmpdir(), `endroit-git-witness-${crypto.randomUUID()}`);
+    try {
+      const { plan, created, workplace } = await createWitness(target);
       await rm(resolve(created.roots.shared, ".git/hooks/pre-commit"), { force: true, recursive: false });
       expect((await checkWorkplaceMount({ mount: target })).operationStatus).toBe("degraded");
       expect((await readyWorkplace({ start: target })).check.operationStatus).toBe("ready");

@@ -53,6 +53,7 @@ describe("immutable qualification runs", () => {
       expect(preview.exitCode).toBe(0);
       const revision = (JSON.parse(new TextDecoder().decode(preview.stdout)) as { revision: string }).revision;
       const apply = Bun.spawnSync([Bun.argv[0]!, resolve(repository, "src/cli.ts"), "new", "--request", first.requestPath, "--apply", revision, "--json"], { cwd: repository, stdout: "pipe", stderr: "pipe" });
+      if (apply.exitCode !== 0) throw new Error(new TextDecoder().decode(apply.stderr) || new TextDecoder().decode(apply.stdout));
       expect(apply.exitCode).toBe(0);
       expect(await Bun.file(resolve(first.mount, "FRONTDOOR.md")).exists()).toBe(true);
       const recorded = JSON.parse(await readFile(resolve(first.root, "RUN.json"), "utf8")) as { status: string; mount: string };

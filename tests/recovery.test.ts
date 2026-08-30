@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { lstat, mkdir, readFile, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { captureCheckpoint, restoreCheckpoint, verifyCheckpoint } from "../src/checkpoint.ts";
 import { applyNewWorkplace, loadStandardProfile, planNewWorkplace, type NewWorkplaceRequest } from "../src/compiler/new-workplace.ts";
@@ -9,6 +9,8 @@ import type { WorkplaceRecoveryPlan, WorkplaceRecoveryReceipt, WorkplaceRecovery
 import { checkpointFixture, cli, evidence, git, repository, run } from "./helpers/checkpoint-fixture.ts";
 
 const profilePath = resolve(repository, "profiles/standard/profile.json");
+// Multi-repository restore plus repeated preview/apply; no global timeout override.
+const heavyGitTimeout = process.platform === "win32" ? 180_000 : 30_000;
 
 function jsonCli(args: string[], expected = 0): unknown {
   const output = run(repository, [...cli, ...args], expected);
@@ -116,11 +118,12 @@ describe("fresh-machine Workplace recovery", () => {
       const checkouts = join(state.anchor.mount, "checkouts");
       const outsideCheckouts = join(state.root, "outside-checkouts");
       await mkdir(outsideCheckouts, { recursive: true });
-      await symlink(outsideCheckouts, checkouts);
+      await symlink(outsideCheckouts, checkouts, process.platform === "win32" ? "junction" : "dir");
       const escapedFamily = errorCli(["workplace", "recover", state.anchor.mount, "--from", state.requestPath, "--preview", "--json"], 1);
       expect(escapedFamily.code).toBe("setup-collision");
       expect(await exists(join(outsideCheckouts, "workplaces"))).toBe(false);
-      await rm(checkouts, { recursive: false, force: false });
+      await unlink(checkouts);
+      expect(await exists(outsideCheckouts)).toBe(true);
 
       for (const invalid of [
         { ...state.request, checkpoints: [{ ...state.request.checkpoints[0]!, target: "checkouts/workplaces" }] },
@@ -159,13 +162,14 @@ describe("fresh-machine Workplace recovery", () => {
       const outsideSites = join(state.root, "outside-sites");
       await mkdir(outsideSites, { recursive: true });
       await mkdir(dirname(target), { recursive: true });
-      await symlink(outsideSites, target);
+      await symlink(outsideSites, target, process.platform === "win32" ? "junction" : "dir");
       const racedFamily = errorCli(["workplace", "recover", state.anchor.mount, "--from", state.requestPath, "--apply", preview.revision, "--json"], 1);
       expect(racedFamily.code).toBe("site-route-collision");
       expect(await exists(join(outsideSites, "shared"))).toBe(false);
       expect(await exists(managedPeer)).toBe(false);
       expect(await exists(join(state.anchor.mount, ".endroit/workplaces.json"))).toBe(false);
-      await rm(target, { recursive: false, force: false });
+      await unlink(target);
+      expect(await exists(outsideSites)).toBe(true);
 
       const stale = errorCli(["workplace", "recover", state.anchor.mount, "--from", state.requestPath, "--apply", `sha256:${"0".repeat(64)}`, "--json"], 2);
       expect(stale.code).toBe("recovery-digest-mismatch");
@@ -203,13 +207,13 @@ describe("fresh-machine Workplace recovery", () => {
       const restoredRoute = join(target, "desk/main");
       const outsideRoute = join(state.root, "outside-route");
       await rename(restoredRoute, outsideRoute);
-      await symlink(outsideRoute, restoredRoute);
+      await symlink(outsideRoute, restoredRoute, process.platform === "win32" ? "junction" : "dir");
       const escapedRoute = errorCli(["workplace", "recover", state.anchor.mount, "--from", state.requestPath, "--preview", "--json"], 1);
       expect(escapedRoute.code).toBe("recovery-collision");
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }
-  });
+  }, heavyGitTimeout);
 
   test("rolls setup back when an existing restore target mismatches", async () => {
     const state = await recoveryFixture();
@@ -257,7 +261,7 @@ describe("fresh-machine Workplace recovery", () => {
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }
-  });
+  }, heavyGitTimeout);
 
   test("removes a newly restored target when Position resolution fails", async () => {
     const state = await recoveryFixture();

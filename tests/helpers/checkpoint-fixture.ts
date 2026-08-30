@@ -2,12 +2,13 @@ import { chmod, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { CheckpointCaptureRequest } from "../../src/checkpoint.ts";
+import { gitArguments } from "../../src/platform.ts";
 
 export const repository = resolve(import.meta.dir, "../..");
 export const cli = [Bun.argv[0]!, resolve(repository, "src/cli.ts")];
 
 export function run(cwd: string, args: string[], expected = 0): string {
-  const result = Bun.spawnSync(args, { cwd, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(args[0] === "git" ? ["git", ...gitArguments(args.slice(1))] : args, { cwd, stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== expected) throw new Error(`${args.join(" ")} exited ${result.exitCode}: ${new TextDecoder().decode(result.stderr)}`);
   return new TextDecoder().decode(result.stdout).trim();
 }

@@ -204,6 +204,13 @@ describe("static Workplace compiler", () => {
       const first = await compileStaticWorkplace(input, { outDir: resolve(root, "first") });
       const second = await compileStaticWorkplace(input, { outDir: resolve(root, "second") });
       expect(first.files).toEqual(second.files);
+      expect(first.files.every((path) => !path.includes("\\"))).toBe(true);
+      const portableManifest = JSON.parse(await readFile(resolve(first.root, "workplace/.workplace/projection-manifest.json"), "utf8")) as { files: Array<{ path: string }> };
+      const localManifest = JSON.parse(await readFile(resolve(first.root, ".endroit/projection-manifest.json"), "utf8")) as { files: Array<{ path: string }> };
+      const witnessed = [...portableManifest.files, ...localManifest.files].map((item) => item.path).sort();
+      const foreignSources = input.sources.map((source) => source.mountPath).filter((path) => path && !path.startsWith("workplace/"));
+      expect(witnessed).toEqual(first.files.filter((path) => !path.endsWith("projection-manifest.json") && !foreignSources.includes(path)));
+      expect(localManifest.files.map((item) => item.path)).toContain("rooms/product/AGENTS.md");
       for (const path of first.files) {
         expect(await readFile(resolve(first.root, path), "utf8")).toBe(await readFile(resolve(second.root, path), "utf8"));
       }

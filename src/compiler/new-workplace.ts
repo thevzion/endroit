@@ -10,6 +10,7 @@ import type { CheckResult } from "./index.ts";
 import type { LoadedProfilePackage, ProviderBinding, ProviderSurfaceTarget } from "./model.ts";
 import { installGitGuards, planGitGuards, type GitGuardManifest } from "./git-witness.ts";
 import { instantiateCoordinationPolicy, loadProfilePackage, renderProfileTemplate } from "./profile-package.ts";
+import { gitArguments } from "../platform.ts";
 
 export type NewProvider = "codex" | "claude";
 
@@ -335,7 +336,7 @@ export function renderNewWorkplacePreview(plan: NewWorkplacePlan): string {
 }
 
 function runGit(root: string, args: string[], author?: { name: string; email: string }): string {
-  const command = ["git", ...(author ? ["-c", `user.name=${author.name}`, "-c", `user.email=${author.email}`] : []), ...args];
+  const command = ["git", ...gitArguments([...(author ? ["-c", `user.name=${author.name}`, "-c", `user.email=${author.email}`] : []), ...args])];
   const result = Bun.spawnSync(command, { cwd: root, stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== 0) fail(`git ${args[0]} failed in ${root}: ${new TextDecoder().decode(result.stderr).trim()}`);
   return new TextDecoder().decode(result.stdout).trim();

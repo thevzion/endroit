@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
-import { lstat, mkdir, readFile, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, realpath, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { gitArguments } from "../src/platform.ts";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { applySiteRouteSetup, planSiteRouteSetup, SiteRouteSetupError, type SiteRouteSetupRequest } from "../src/site-setup.ts";
@@ -7,7 +8,7 @@ import { applySiteRouteSetup, planSiteRouteSetup, SiteRouteSetupError, type Site
 const cli = [Bun.argv[0]!, resolve(import.meta.dir, "../src/cli.ts")];
 
 function run(cwd: string, args: string[], expected = 0): string {
-  const result = Bun.spawnSync(args, { cwd, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(args[0] === "git" ? ["git", ...gitArguments(args.slice(1))] : args, { cwd, stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== expected) throw new Error(`${args.join(" ")} exited ${result.exitCode}: ${new TextDecoder().decode(result.stderr)}`);
   return new TextDecoder().decode(result.stdout).trim();
 }
@@ -98,7 +99,7 @@ describe("portable Site and Route setup", () => {
 
       const outsideGit = join(state.root, "outside-git");
       await rename(join(branchPath, ".git"), outsideGit);
-      await symlink(outsideGit, join(branchPath, ".git"));
+      await symlink(outsideGit, join(branchPath, ".git"), process.platform === "win32" ? "junction" : "dir");
       const unsafeReplay = await planSiteRouteSetup(state.request, { workplaceMount: state.workplaceMount, requestDirectory: state.requestDirectory });
       expect(await errorCode(() => applySiteRouteSetup(unsafeReplay, unsafeReplay.revision))).toBe("site-route-collision");
     } finally {
@@ -185,10 +186,12 @@ describe("portable Site and Route setup", () => {
     try {
       const outside = join(state.root, "outside");
       await mkdir(outside, { recursive: true });
-      await symlink(outside, join(state.workplaceMount, "checkouts"));
+      await writeFile(join(outside, "keep.txt"), "external target stays intact\n");
+      await symlink(outside, join(state.workplaceMount, "checkouts"), process.platform === "win32" ? "junction" : "dir");
       expect(await errorCode(() => planSiteRouteSetup(state.request, { workplaceMount: state.workplaceMount, requestDirectory: state.requestDirectory }))).toBe("site-route-collision");
       expect(await exists(join(outside, "sites"))).toBe(false);
-      await rm(join(state.workplaceMount, "checkouts"), { recursive: false, force: true });
+      await unlink(join(state.workplaceMount, "checkouts"));
+      expect(await readFile(join(outside, "keep.txt"), "utf8")).toBe("external target stays intact\n");
 
       const collision = join(state.workplaceMount, "checkouts/sites/product/develop");
       await mkdir(collision, { recursive: true });

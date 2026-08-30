@@ -1,5 +1,5 @@
 import { lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { basename, dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, posix, relative, resolve, sep } from "node:path";
 import { isAlias, isNode, parseDocument, visit } from "yaml";
 import type {
   Composition,
@@ -852,7 +852,7 @@ export async function loadCompileInput(options: {
 }
 
 function relativeLink(from: string, to: string): string {
-  const value = relative(dirname(from), to).split(sep).join("/");
+  const value = posix.relative(posix.dirname(from), to);
   return value.startsWith(".") ? value : `./${value}`;
 }
 
@@ -1148,7 +1148,7 @@ function scopedFrontDoor(input: CompileInput, source: SourceRecord, entry: MapEn
   }));
   const methodLines = methods.map(({ method, work }) => {
     const suffix = work ? ` for [${work.envelope.summary}](${relativeLink(entry.projectionPath, entries.find((candidate) => candidate.ref === work.envelope.ref)?.projectionPath ?? "")})` : " for opening new owned Work";
-    return `- [${method.title}](${relativeLink(entry.projectionPath, join(dirname(entry.projectionPath), `methods/${method.id}.md`))})${suffix} — load only when intent matches: ${method.intent.join(", ")}.`;
+    return `- [${method.title}](${relativeLink(entry.projectionPath, posix.join(posix.dirname(entry.projectionPath), `methods/${method.id}.md`))})${suffix} — load only when intent matches: ${method.intent.join(", ")}.`;
   });
   const sections: FrontDoorIR["sections"] = [];
   const push = (section: FrontDoorIR["sections"][number] | undefined) => { if (section) sections.push(section); };
@@ -1588,10 +1588,10 @@ export async function compileStaticWorkplace(input: CompileInput, options: { out
       const scopedDoor = renderFrontDoor(ir);
       const scopedPath = entry.projectionPath;
       files.set(scopedPath, scopedDoor);
-      if (selectedTarget(input, "AGENTS.md", "front-door")) files.set(join(dirname(scopedPath), "AGENTS.md"), providerAdapter("codex", scopedDoor));
-      if (selectedTarget(input, "CLAUDE.md", "front-door")) files.set(join(dirname(scopedPath), "CLAUDE.md"), providerAdapter("claude", scopedDoor));
+      if (selectedTarget(input, "AGENTS.md", "front-door")) files.set(posix.join(posix.dirname(scopedPath), "AGENTS.md"), providerAdapter("codex", scopedDoor));
+      if (selectedTarget(input, "CLAUDE.md", "front-door")) files.set(posix.join(posix.dirname(scopedPath), "CLAUDE.md"), providerAdapter("claude", scopedDoor));
       for (const { method, work } of methodsForPlace(input, source)) {
-        const methodPath = join(dirname(scopedPath), `methods/${method.id}.md`);
+        const methodPath = posix.join(posix.dirname(scopedPath), `methods/${method.id}.md`);
         const workPath = work ? byRef.get(work.envelope.ref)?.projectionPath ?? fail(`Method Work is not mapped: ${work.envelope.ref}`) : undefined;
         files.set(methodPath, methodMarkdown(input, method, work, methodPath, workPath));
       }
@@ -1616,7 +1616,8 @@ export async function compileStaticWorkplace(input: CompileInput, options: { out
       if (files.has("AGENTS.md")) surfaces.push("AGENTS.md");
       if (files.has("CLAUDE.md")) surfaces.push("CLAUDE.md");
     }
-    if (files.has(join(dirname(entry.projectionPath), "AGENTS.md"))) surfaces.push(join(dirname(entry.projectionPath), "AGENTS.md"));
+    const adapterPath = posix.join(posix.dirname(entry.projectionPath), "AGENTS.md");
+    if (files.has(adapterPath)) surfaces.push(adapterPath);
     return { source: { ref: source.envelope.ref, revision: source.revision }, responsibility: `source:${source.envelope.entity}`, surfaces };
   });
   files.set("workplace/.workplace/instruction-coverage.json", stable({ workplace: input.workplace.workplace, coverage }));

@@ -76,6 +76,7 @@ declare module "node:fs/promises" {
   export function readdir(path: string, options: { withFileTypes: true }): Promise<Dirent[]>;
   export function rename(from: string, to: string): Promise<void>;
   export function rm(path: string, options: { recursive: boolean; force: boolean }): Promise<void>;
+  export function unlink(path: string): Promise<void>;
   export function stat(path: string): Promise<{ size: number; mode: number; isFile(): boolean }>;
   export function symlink(target: string, path: string, type?: "dir" | "file" | "junction"): Promise<void>;
   export function writeFile(path: string, data: string, options?: { flag: "wx" }): Promise<void>;
@@ -104,6 +105,7 @@ declare module "node:child_process" {
 }
 
 declare module "node:path" {
+  export const posix: { dirname(path: string): string; join(...paths: string[]): string; relative(from: string, to: string): string };
   export const sep: string;
   export function basename(path: string): string;
   export function dirname(path: string): string;
@@ -127,6 +129,6 @@ declare module "bun:test" {
     toThrow(expected?: string): void;
   };
   export function describe(name: string, run: () => void): void;
-  export function test(name: string, run: () => void | Promise<void>): void;
+  export function test(name: string, run: () => void | Promise<void>, timeout?: number): void;
   export function expect(value: unknown): Matchers;
 }

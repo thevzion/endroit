@@ -1,5 +1,5 @@
 import { lstat, mkdir, readFile, rename, rm, stat, writeFile } from "node:fs/promises";
-import { join, relative, resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { hash, stable } from "../compiler/index.ts";
 import { findQualificationRun } from "./runs.ts";
 
@@ -64,7 +64,7 @@ export async function freezeQualificationRun(options: { repository: string; runI
       verified = await verifyArchive(temporaryPath, root);
       await rename(temporaryPath, finalPath);
     }
-    const archive = { path: relative(root, finalPath), format: "tar.gz", digest: verified.digest, bytes: verified.bytes, members: verified.members };
+    const archive = { path: "archive/mount.tar.gz", format: "tar.gz", digest: verified.digest, bytes: verified.bytes, members: verified.members };
     const updated = { ...run, mountState: "frozen", archive };
     const runTemporary = `${runPath}.freeze-${crypto.randomUUID()}.tmp`;
     await writeFile(runTemporary, stable(updated), { flag: "wx" });

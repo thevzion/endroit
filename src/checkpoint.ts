@@ -3,6 +3,7 @@ import { spawnSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { hash, stable } from "./compiler/index.ts";
+import { gitArguments, gitTransportArguments } from "./platform.ts";
 
 const REF = /^workplace:\/\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?(?:\/[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)*$/;
 const REVISION = /^sha256:[a-f0-9]{64}$/;
@@ -185,7 +186,7 @@ function parseCaptureRequest(value: unknown, requestDirectory: string): Checkpoi
 }
 
 function command(cwd: string, args: string[], input?: string | Uint8Array, extraEnv: Record<string, string> = {}): Uint8Array {
-  const result = spawnSync(args[0]!, args.slice(1), { cwd, ...(input === undefined ? {} : { input }), env: { ...process.env, LC_ALL: "C", GIT_NO_REPLACE_OBJECTS: "1", ...extraEnv }, maxBuffer: 512 * 1024 * 1024 });
+  const result = spawnSync(args[0]!, args[0] === "git" ? gitArguments(args.slice(1)) : args.slice(1), { cwd, ...(input === undefined ? {} : { input }), env: { ...process.env, LC_ALL: "C", GIT_NO_REPLACE_OBJECTS: "1", ...extraEnv }, maxBuffer: 512 * 1024 * 1024 });
   if (result.status !== 0) fail("checkpoint-git-failed", `${args.slice(0, 3).join(" ")} failed: ${new TextDecoder().decode(result.stderr).trim()}`);
   return result.stdout;
 }
@@ -307,11 +308,11 @@ async function inspectWorktree(declared: CheckpointCaptureRequest["roots"][numbe
     operation.push({ path, sha256: stored.sha256, size: stored.size, payload: stored.path });
     operationOids.push(...new TextDecoder().decode(bytes).split(/[^a-f0-9]+/i).filter((value) => {
       if (!OID.test(value)) return false;
-      return Bun.spawnSync(["git", "cat-file", "-e", `${value}^{object}`], { cwd: root, stdout: "pipe", stderr: "pipe" }).exitCode === 0;
+      return Bun.spawnSync(["git", ...gitArguments(["cat-file", "-e", `${value}^{object}`])], { cwd: root, stdout: "pipe", stderr: "pipe" }).exitCode === 0;
     }));
   }
   const head = text(git(root, ["rev-parse", "HEAD"]));
-  const branch = Bun.spawnSync(["git", "symbolic-ref", "--quiet", "HEAD"], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  const branch = Bun.spawnSync(["git", ...gitArguments(["symbolic-ref", "--quiet", "HEAD"])], { cwd: root, stdout: "pipe", stderr: "pipe" });
   const branchRef = branch.exitCode === 0 ? text(branch.stdout) : null;
   const requiredOids = [...new Set([head, ...index.entries.map((entry) => entry.oid), ...operationOids])];
   return { schema: "workplace-checkpoint-worktree/1", worktreeId: declared.id, repositoryId, logicalPath: declared.logicalPath, head, branchRef, index, tracked, untracked, operation, commonGitDir: common, requiredOids };
@@ -343,7 +344,7 @@ function remotes(root: string): RemoteRecord[] {
 function portableConfig(root: string): Record<string, string> {
   const result: Record<string, string> = {};
   for (const key of ["core.autocrlf", "core.eol", "core.filemode", "core.symlinks"]) {
-    const observed = Bun.spawnSync(["git", "config", "--local", "--get", key], { cwd: root, stdout: "pipe", stderr: "pipe" });
+    const observed = Bun.spawnSync(["git", ...gitArguments(["config", "--local", "--get", key])], { cwd: root, stdout: "pipe", stderr: "pipe" });
     if (observed.exitCode === 0) result[key] = text(observed.stdout);
   }
   return result;
@@ -369,7 +370,7 @@ async function copyObject(source: string, targetBare: string, oid: string): Prom
     if (observed !== oid) fail("checkpoint-object-mismatch", `Object ${oid} changed while copying`);
     return type;
   }
-  git(targetBare, ["fetch", "--no-tags", source, oid]);
+  git(targetBare, ["fetch", ...gitTransportArguments("fetch", source), "--no-tags", source, oid]);
   git(targetBare, ["update-ref", `refs/endroit/capture/object-${oid}`, oid]);
   return type;
 }
@@ -379,7 +380,7 @@ async function createBundle(source: string, destination: string, sourceRefs: Ref
   const temporary = await mkdtemp(join(dirname(destination), ".repository-build-"));
   try {
     git(temporary, ["init", "--bare", "-q"]);
-    for (const ref of sourceRefs) git(temporary, ["fetch", "--no-tags", source, `+${ref.name}:${ref.name}`]);
+    for (const ref of sourceRefs) git(temporary, ["fetch", ...gitTransportArguments("fetch", source), "--no-tags", source, `+${ref.name}:${ref.name}`]);
     const indexEntries = worktrees.flatMap((worktree) => worktree.index.entries);
     const required = [...new Set(worktrees.flatMap((worktree) => worktree.requiredOids))].sort();
     for (const oid of required) await copyObject(source, temporary, oid);
@@ -732,11 +733,18 @@ async function materialize(record: ContentRecord | OperationRecord, root: string
 }
 
 async function rebaseWorktreePointers(manifest: CheckpointManifest, temporary: string, final: string): Promise<void> {
+  const canonical = await realpath(temporary);
+  const patches: Array<{ pointer: string; bytes: string }> = [];
+  const worktreePointers = new Set<string>();
   for (const worktree of manifest.worktrees) {
     const pointer = join(temporary, worktree.logicalPath, ".git");
-    const current = await readFile(pointer, "utf8");
-    if (!current.includes(temporary)) fail("checkpoint-restore-mismatch", `${worktree.worktreeId} has an unexpected Git pointer`);
-    await writeFile(pointer, current.replaceAll(temporary, final));
+    const current = (await readFile(pointer, "utf8")).trim();
+    const admin = current.startsWith("gitdir: ") && !/[\r\n\0]/.test(current)
+      ? await realpath(resolve(dirname(pointer), current.slice("gitdir: ".length))).catch(() => "") : "";
+    const expected = join(canonical, ".git-repositories", `${worktree.repositoryId}.git`, "worktrees");
+    if (!admin || !inside(expected, admin) || admin === expected) fail("checkpoint-restore-mismatch", `${worktree.worktreeId} has an unexpected Git pointer`);
+    worktreePointers.add(await realpath(pointer));
+    patches.push({ pointer, bytes: `gitdir: ${join(final, relative(canonical, admin)).split(sep).join("/")}\n` });
   }
   for (const repository of manifest.repositories) {
     const adminRoot = join(temporary, ".git-repositories", `${repository.repositoryId}.git`, "worktrees");
@@ -744,11 +752,14 @@ async function rebaseWorktreePointers(manifest: CheckpointManifest, temporary: s
     for (const entry of await readdir(adminRoot, { withFileTypes: true })) {
       if (!entry.isDirectory()) continue;
       const pointer = join(adminRoot, entry.name, "gitdir");
-      const current = await readFile(pointer, "utf8");
-      if (!current.includes(temporary)) fail("checkpoint-restore-mismatch", `${repository.repositoryId}/${entry.name} has an unexpected worktree pointer`);
-      await writeFile(pointer, current.replaceAll(temporary, final));
+      const current = (await readFile(pointer, "utf8")).trim();
+      const worktreePointer = !/[\r\n\0]/.test(current) ? await realpath(resolve(dirname(pointer), current)).catch(() => "") : "";
+      if (!worktreePointers.delete(worktreePointer)) fail("checkpoint-restore-mismatch", `${repository.repositoryId}/${entry.name} has an unexpected worktree pointer`);
+      patches.push({ pointer, bytes: `${join(final, relative(canonical, worktreePointer)).split(sep).join("/")}\n` });
     }
   }
+  if (worktreePointers.size) fail("checkpoint-restore-mismatch", "Restored worktree pointers are incomplete");
+  for (const patch of patches) await writeFile(patch.pointer, patch.bytes);
 }
 
 function restoreIndex(worktree: string, snapshot: WorktreeSnapshot): void {

@@ -11,6 +11,8 @@ import { checkpointFixture, cli, evidence, git, repository } from "./helpers/che
 
 const workplace = "workplace://checkpoint-fixture";
 const member = `${workplace}/member/operator`;
+// These end-to-end cases run many Git processes; ordinary tests retain the 30s default.
+const heavyGitTimeout = process.platform === "win32" ? 180_000 : 30_000;
 
 function jsonCli<T = SetupReceipt>(cwd: string, args: string[], expected = 0, env: Record<string, string | undefined> = process.env): T {
   const result = Bun.spawnSync([...cli, ...args, "--json"], { cwd, stdout: "pipe", stderr: "pipe", env });
@@ -178,7 +180,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(evidence(join(target, "workplace"))).toBe(drifted);
       expect(await readFile(join(target, "workplace/untracked.txt"), "utf8")).toBe("Changed after restoration.\n");
     } finally { await rm(state.root, { recursive: true, force: true }); }
-  });
+  }, heavyGitTimeout);
 
   test("distinguishes ready from unresolved Member without guessing the only declared human", async () => {
     const state = await fixture();
@@ -259,7 +261,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect((await readdir(collision, { withFileTypes: true })).map((entry) => entry.name)).toEqual(["keep.txt"]);
       expect(await readFile(join(collision, "keep.txt"), "utf8")).toBe("Existing user-owned bytes.\n");
       const linked = join(state.root, "linked-target");
-      await symlink(collision, linked);
+      await symlink(collision, linked, process.platform === "win32" ? "junction" : "dir");
       expect(errorCli(state.root, ["setup", "--checkpoint", captured.path, "--to", linked, "--as", "operator"]).code).toBe("checkpoint-target-exists");
       expect((await lstat(linked)).isSymbolicLink()).toBe(true);
       expect((await readdir(collision, { withFileTypes: true })).map((entry) => entry.name)).toEqual(["keep.txt"]);
@@ -270,23 +272,21 @@ describe("checkpoint-first fresh-machine setup", () => {
     } finally { await rm(state.root, { recursive: true, force: true }); }
   });
 
-  test("rejects a checkpoint without one Root or with a captured peer Workplace", async () => {
+  for (const variant of ["missing-root", "peer-workplace"] as const) test(`rejects a checkpoint with ${variant}`, async () => {
     const state = await fixture({ sites: true });
     try {
       const before = new Map(state.captureRequest.roots.flatMap((root) => root.worktrees).map((worktree) => [worktree.path, evidence(worktree.path)]));
-      for (const variant of ["missing-root", "peer-workplace"]) {
-        const request: CheckpointCaptureRequest = {
-          ...state.captureRequest, output: join(state.root, variant),
-          roots: state.captureRequest.roots.map((root, index) => ({ ...root, worktrees: root.worktrees.map((worktree) => ({
-            ...worktree,
-            logicalPath: variant === "missing-root" && index === 0 ? "checkouts/sites/root/main" : variant === "peer-workplace" && index === 2 ? "checkouts/workplaces/peer/workplace" : worktree.logicalPath,
-          })) })),
-        };
-        const captured = await captureCheckpoint(request);
-        const target = join(state.root, `${variant}-target`);
-        expect(errorCli(state.root, ["setup", "--checkpoint", captured.path, "--to", target, "--as", "operator"]).code).toBe(variant === "missing-root" ? "checkpoint-schema-invalid" : "checkpoint-path-invalid");
-        expect(await exists(target)).toBe(false);
-      }
+      const request: CheckpointCaptureRequest = {
+        ...state.captureRequest, output: join(state.root, variant),
+        roots: state.captureRequest.roots.map((root, index) => ({ ...root, worktrees: root.worktrees.map((worktree) => ({
+          ...worktree,
+          logicalPath: variant === "missing-root" && index === 0 ? "checkouts/sites/root/main" : variant === "peer-workplace" && index === 2 ? "checkouts/workplaces/peer/workplace" : worktree.logicalPath,
+        })) })),
+      };
+      const captured = await captureCheckpoint(request);
+      const target = join(state.root, `${variant}-target`);
+      expect(errorCli(state.root, ["setup", "--checkpoint", captured.path, "--to", target, "--as", "operator"]).code).toBe(variant === "missing-root" ? "checkpoint-schema-invalid" : "checkpoint-path-invalid");
+      expect(await exists(target)).toBe(false);
       for (const [path, expected] of before) expect(evidence(path)).toBe(expected);
     } finally { await rm(state.root, { recursive: true, force: true }); }
   });
@@ -372,7 +372,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(git(state.shared, ["remote", "-v"])).toBe(originBefore);
       expect(evidence(state.shared)).toBe(before);
     } finally { await rm(state.root, { recursive: true, force: true }); }
-  });
+  }, heavyGitTimeout);
 
   test("selects a checkpoint ID from the current Workplace local store", async () => {
     const state = await fixture({ dirty: true });

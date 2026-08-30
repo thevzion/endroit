@@ -129,7 +129,7 @@ describe("endroit new", () => {
       expect(openRoom).toContain("Literal angle-bracket tokens are invalid");
       expect(openRoom).toContain("Authority: delegated");
       expect(openRoom).toContain("Build: <exact-room-and-meeting-source-oid>");
-      expect(openRoom).toContain(cliCommand[0]!);
+      expect(openRoom).toContain(cliCommand.map((part) => JSON.stringify(part)).join(" "));
       expect(openRoom).toContain("Only there may `open-work` become visible");
       const change = await readFile(resolve(target, "workplace/sources/CHANGE.md"), "utf8");
       expect(change).toContain("<affordance>(<kind>:<slug>): <observed effect>");

@@ -1,4 +1,5 @@
 import { lstat, mkdir, readFile, realpath, rename, rm, writeFile } from "node:fs/promises";
+import { gitArguments, gitTransportArguments } from "./platform.ts";
 import { basename, dirname, join, relative, resolve, sep } from "node:path";
 import { checkWorkplaceMount, compileWorkplaceMount, hash, readyWorkplace, stable, type CheckResult, type EntryBinding, type ProviderBinding } from "./compiler/index.ts";
 import {
@@ -238,7 +239,7 @@ export async function planWorkplaceSetup(value: unknown, options: { anchorMount:
 }
 
 function git(root: string, args: string[]): string {
-  const result = Bun.spawnSync(["git", ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(["git", ...gitArguments(args)], { cwd: root, stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== 0) fail("setup-unavailable", `git ${args[0]} failed: ${new TextDecoder().decode(result.stderr).trim()}`);
   return new TextDecoder().decode(result.stdout).trim();
 }
@@ -298,14 +299,14 @@ async function bindAndReady(target: WorkplaceSetupPlan["targets"][number], mount
 async function cloneTarget(target: WorkplaceSetupPlan["targets"][number]): Promise<void> {
   if (!target.source) fail("setup-unavailable", `${target.workplace} has no Git source`);
   if (absolutePath(target.source) && await exists(target.source)) {
-    const bare = Bun.spawnSync(["git", "-C", target.source, "rev-parse", "--is-bare-repository"], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+    const bare = Bun.spawnSync(["git", ...gitArguments(["-C", target.source, "rev-parse", "--is-bare-repository"])], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
     if (bare.exitCode !== 0) fail("setup-unavailable", `${target.source} is not a Git source`);
     if (new TextDecoder().decode(bare.stdout).trim() !== "true" && git(target.source, ["status", "--porcelain"])) fail("setup-unavailable", `${target.source} is dirty; setup transports committed Git only`);
   }
   const temp = join(dirname(target.resolvedMount), `.${basename(target.resolvedMount)}.endroit-setup-${process.pid}-${crypto.randomUUID()}`);
   await mkdir(temp, { recursive: true });
   try {
-    const clone = Bun.spawnSync(["git", "clone", "--", target.source, join(temp, "workplace")], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
+    const clone = Bun.spawnSync(["git", ...gitArguments(["clone", ...gitTransportArguments("clone", target.source), "--", target.source, join(temp, "workplace")])], { cwd: process.cwd(), stdout: "pipe", stderr: "pipe" });
     if (clone.exitCode !== 0) fail("setup-unavailable", `git clone failed for ${target.workplace}: ${new TextDecoder().decode(clone.stderr).trim()}`);
     await bindAndReady(target, temp);
     await mkdir(dirname(target.resolvedMount), { recursive: true });

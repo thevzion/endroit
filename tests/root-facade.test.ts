@@ -11,6 +11,8 @@ import { checkpointFixture, cli, evidence, git, repository } from "./helpers/che
 
 const profilePath = resolve(repository, "profiles/standard/profile.json");
 const member = "workplace://anchor/member/operator";
+// Multi-capture/restore/replay workflows need a bounded native-Windows Git process budget.
+const heavyGitTimeout = process.platform === "win32" ? 180_000 : 30_000;
 
 function fileUrl(path: string): string {
   const normalized = resolve(path).replaceAll("\\", "/");
@@ -146,7 +148,7 @@ describe("root-driven Workplace facade", () => {
       const local = await selectRecoveryRequest(state.mount);
       expect(local.provenance).toBe("local");
       expect(local.path).toBe(await realpath(join(state.mount, ".endroit/recovery.json")));
-      expect(local.request.setup).toContain(join(state.mount, ".endroit/bootstrap"));
+      expect(local.request.setup).toContain(await realpath(join(state.mount, ".endroit/bootstrap")));
       const members = JSON.parse(await readFile(join(state.mount, ".endroit/current-member.json"), "utf8")) as { members: Array<{ workplace: string }> };
       expect(members.members.map((entry) => entry.workplace)).toEqual([state.workplace, peer.workplace].sort());
       expect((await setupFromRoot({ start: state.mount, as: "operator" })).receipt.setup.targets[0]?.status).toBe("unchanged");
@@ -207,7 +209,7 @@ describe("root-driven Workplace facade", () => {
       git(bootstrap, ["add", ".workplace"]); git(bootstrap, ["commit", "-qm", "rollback package"]);
       const outside = join(state.root, "outside-cache");
       await mkdir(outside, { recursive: true });
-      await symlink(outside, join(state.mount, ".endroit/bootstrap"));
+      await symlink(outside, join(state.mount, ".endroit/bootstrap"), process.platform === "win32" ? "junction" : "dir");
       expect(await Bun.file(join(state.mount, ".endroit/current-member.json")).exists()).toBe(false);
       let observed: unknown;
       try { await setupFromRoot({ start: state.mount, with: `git+${fileUrl(bootstrap)}#refs/heads/develop:.workplace/recovery.json`, as: "operator" }); }
@@ -359,7 +361,7 @@ describe("root-driven Workplace facade", () => {
       await mkdir(outside, { recursive: true });
       await writeFile(join(outside, "recovery.json"), `${JSON.stringify({ ...state.recovery, setup: state.setupPath }, null, 2)}\n`);
       await rm(join(state.mount, ".endroit"), { recursive: true, force: true });
-      await symlink(outside, join(state.mount, ".endroit"));
+      await symlink(outside, join(state.mount, ".endroit"), process.platform === "win32" ? "junction" : "dir");
       let observed: unknown;
       try { await selectRecoveryRequest(state.mount); }
       catch (error) { observed = error; }
@@ -494,7 +496,7 @@ describe("root-driven Workplace facade", () => {
       await rm(anchor.root, { recursive: true, force: true });
       await rm(peer.root, { recursive: true, force: true });
     }
-  });
+  }, heavyGitTimeout);
 
   test("round-trips a dirty multi-worktree topology from machine A to B through root commands", async () => {
     const machineA = await fixture();
@@ -621,5 +623,5 @@ describe("root-driven Workplace facade", () => {
       await rm(machineA.root, { recursive: true, force: true });
       await rm(machineB.root, { recursive: true, force: true });
     }
-  });
+  }, heavyGitTimeout);
 });

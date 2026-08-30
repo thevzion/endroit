@@ -3,6 +3,7 @@ import { homedir, tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { hash, stable } from "../compiler/index.ts";
 import { findQualificationRun, snapshotQualificationRun } from "./runs.ts";
+import { gitArguments } from "../platform.ts";
 
 type Json = Record<string, unknown>;
 
@@ -13,7 +14,7 @@ const ABSOLUTE_MARKDOWN = /(?:^|[\s"'])((?:(?:[A-Za-z]:[\\/]|\\\\|\/)[^\s"'()\]}
 function fail(message: string): never { throw new Error(message); }
 
 function git(root: string, args: string[]): string | undefined {
-  const result = Bun.spawnSync(["git", ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(["git", ...gitArguments(args)], { cwd: root, stdout: "pipe", stderr: "pipe" });
   return result.exitCode === 0 ? new TextDecoder().decode(result.stdout).trim() : undefined;
 }
 

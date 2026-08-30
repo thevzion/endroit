@@ -1,5 +1,6 @@
 import { cp, lstat, mkdir, mkdtemp, realpath, rename, rm } from "node:fs/promises";
 import { spawnSync } from "node:child_process";
+import { gitArguments, gitTransportArguments } from "./platform.ts";
 import { basename, dirname, join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { CheckpointError, restoreCheckpoint, verifyCheckpoint, type CheckpointManifest, type CheckpointReceipt } from "./checkpoint.ts";
@@ -135,7 +136,7 @@ export function parseFetchRequest(value: unknown, requestDirectory: string): Che
 }
 
 function run(cwd: string, args: string[], options: { allowFailure?: boolean; env?: Record<string, string> } = {}): { status: number; stdout: string; stderr: string } {
-  const result = spawnSync("git", args, { cwd, env: { ...process.env, LC_ALL: "C", ...options.env }, maxBuffer: 1024 * 1024 * 1024 });
+  const result = spawnSync("git", gitArguments(args), { cwd, env: { ...process.env, LC_ALL: "C", ...options.env }, maxBuffer: 1024 * 1024 * 1024 });
   const value = { status: result.status ?? 1, stdout: new TextDecoder().decode(result.stdout).trim(), stderr: new TextDecoder().decode(result.stderr).trim() };
   if (!options.allowFailure && value.status !== 0) fail("checkpoint-remote-git-failed", `git ${args.slice(0, 4).join(" ")} failed: ${value.stderr}`);
   return value;
@@ -153,14 +154,14 @@ export function checkpointLineRef(ownerMember: string, lineName: string): string
   return `refs/endroit/checkpoints/owners/${memberKey(member(ownerMember, "ownerMember"))}/lines/${line(lineName, "line")}/head`;
 }
 function listRemote(locatorValue: string, ref: string): string | null {
-  const result = run(process.cwd(), ["ls-remote", locatorValue, ref], { allowFailure: true });
+  const result = run(process.cwd(), ["ls-remote", ...gitTransportArguments("ls-remote", locatorValue), locatorValue, ref], { allowFailure: true });
   if (result.status !== 0) fail("checkpoint-remote-git-failed", `git ls-remote failed: ${result.stderr}`);
   return result.stdout.split(/\s+/)[0] || null;
 }
 async function fetchCommit(locatorValue: string, ref: string, destination: string): Promise<string> {
   await mkdir(destination, { recursive: true });
   git(destination, ["init", "-q"]);
-  git(destination, ["fetch", "-q", "--no-tags", locatorValue, ref]);
+  git(destination, ["fetch", ...gitTransportArguments("fetch", locatorValue), "-q", "--no-tags", locatorValue, ref]);
   git(destination, ["checkout", "-q", "--detach", "FETCH_HEAD"]);
   return git(destination, ["rev-parse", "HEAD"]);
 }
@@ -214,7 +215,7 @@ async function createCheckpointCommit(checkpointPath: string, manifest: Checkpoi
   const tree = git(repository, ["write-tree"]);
   let parentCommit: string | null = null;
   if (manifest.parentCheckpoint) {
-    const fetched = run(repository, ["fetch", "-q", "--no-tags", remote, checkpointRef(manifest.ownerMember, manifest.line, manifest.parentCheckpoint)], { allowFailure: true });
+    const fetched = run(repository, ["fetch", ...gitTransportArguments("fetch", remote), "-q", "--no-tags", remote, checkpointRef(manifest.ownerMember, manifest.line, manifest.parentCheckpoint)], { allowFailure: true });
     if (fetched.status !== 0) fail("checkpoint-parent-unavailable", `${manifest.parentCheckpoint} is not published on this Checkpoint Line`);
     parentCommit = git(repository, ["rev-parse", "FETCH_HEAD"]);
   }
@@ -229,7 +230,7 @@ async function advanceLine(repository: string, binding: ContinuityBinding, manif
   if ((current?.checkpointId ?? null) !== manifest.parentCheckpoint) return { status: "diverged", expectedParent: manifest.parentCheckpoint, observedCheckpoint: current?.checkpointId ?? null, expectedCommit, observedCommit: current?.commit ?? null, resultingCommit: current?.commit ?? null };
   const ref = checkpointLineRef(manifest.ownerMember, manifest.line);
   const lease = current ? `${ref}:${current.commit}` : `${ref}:`;
-  const pushed = run(repository, ["push", "-q", `--force-with-lease=${lease}`, binding.locator, `${commit}:${ref}`], { allowFailure: true });
+  const pushed = run(repository, ["push", ...gitTransportArguments("push", binding.locator), "-q", `--force-with-lease=${lease}`, binding.locator, `${commit}:${ref}`], { allowFailure: true });
   if (pushed.status !== 0) {
     const observed = await observedLine(binding.locator, manifest.ownerMember, manifest.line, temporaryRoot);
     return { status: "diverged", expectedParent: manifest.parentCheckpoint, observedCheckpoint: observed?.checkpointId ?? null, expectedCommit, observedCommit: current?.commit ?? null, resultingCommit: observed?.commit ?? null };
@@ -259,7 +260,7 @@ export async function publishCheckpoint(checkpointPath: string, value: unknown, 
     }
     const created = await createCheckpointCommit(verified.path, verified.manifest, request.binding.locator, temporary);
     try {
-      git(created.repository, ["push", "-q", request.binding.locator, `${created.commit}:${immutableRef}`]);
+      git(created.repository, ["push", ...gitTransportArguments("push", request.binding.locator), "-q", request.binding.locator, `${created.commit}:${immutableRef}`]);
       const published = await remoteCheckpoint(request.binding.locator, request.ownerMember, request.line, verified.manifest.checkpointId, temporary) ?? fail("checkpoint-remote-mismatch", "Published checkpoint ref is unavailable");
       if (published.commit !== created.commit || stable(published.manifest) !== stable(verified.manifest)) fail("checkpoint-remote-mismatch", "Published checkpoint differs from the local package");
       const update = await advanceLine(created.repository, request.binding, verified.manifest, created.commit, temporary);

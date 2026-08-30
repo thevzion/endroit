@@ -14,11 +14,14 @@ import {
   type ContinuityStoreReceipt,
 } from "../src/checkpoint-store.ts";
 import type { CheckpointCaptureRequest } from "../src/checkpoint.ts";
+import { gitArguments, gitTransportArguments } from "../src/platform.ts";
 
 const cli = [Bun.argv[0]!, resolve(import.meta.dir, "../src/cli.ts")];
+// Multi-generation capture/push/fetch/restore only; other tests keep the 30s default.
+const heavyGitTimeout = process.platform === "win32" ? 180_000 : 30_000;
 
 function run(cwd: string, args: string[], expected = 0): string {
-  const result = Bun.spawnSync(args, { cwd, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(args[0] === "git" ? ["git", ...gitArguments(args.slice(1))] : args, { cwd, stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== expected) throw new Error(`${args.join(" ")} exited ${result.exitCode}: ${new TextDecoder().decode(result.stderr)}`);
   return new TextDecoder().decode(result.stdout).trim();
 }
@@ -136,7 +139,7 @@ describe("root-driven checkpoint store", () => {
       expect(await exists(join(state.mount, ".endroit/checkpoints"))).toBe(false);
       const outsidePath = join(state.root, "outside-path/child");
       await mkdir(outsidePath, { recursive: true });
-      await symlink(dirname(outsidePath), join(state.mount, "linked-path"));
+      await symlink(dirname(outsidePath), join(state.mount, "linked-path"), process.platform === "win32" ? "junction" : "dir");
       run(state.mount, [...cli, "checkpoint", "linked-path/child", "--json"], 2);
       expect(await exists(join(state.mount, ".endroit/checkpoints"))).toBe(false);
       const absentRemote = JSON.parse(run(state.mount, [...cli, "checkpoint", "push", "--json"])) as { receipt: { status: string; checkpointId: string | null } };
@@ -154,10 +157,10 @@ describe("root-driven checkpoint store", () => {
       const product = join(state.root, "product.git");
       git(state.root, ["init", "-q", "--bare", product]);
       await writeDescriptor(descriptorPath, descriptorAt(descriptorPath, state, { policy: { remote: "separate", requirement: "optional" }, binding: separateBinding(remote, product) }));
-      expect(git(state.root, ["ls-remote", remote, "refs/endroit/checkpoints/*"])).toBe("");
+      expect(git(state.root, ["ls-remote", ...gitTransportArguments("ls-remote", remote), remote, "refs/endroit/checkpoints/*"])).toBe("");
       const pushed = JSON.parse(run(state.mount, [...cli, "checkpoint", "push", "--json"])) as { receipt: { status: string } };
       expect(pushed.receipt.status).toBe("verified-remote");
-      expect(git(state.root, ["ls-remote", remote, "refs/endroit/checkpoints/*"])).not.toBe("");
+      expect(git(state.root, ["ls-remote", ...gitTransportArguments("ls-remote", remote), remote, "refs/endroit/checkpoints/*"])).not.toBe("");
       expect(git(state.root, ["--git-dir", product, "show-ref"], 1)).toBe("");
 
       const secondMount = join(state.root, "second-mount");
@@ -180,7 +183,7 @@ describe("root-driven checkpoint store", () => {
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }
-  });
+  }, heavyGitTimeout);
 
   test("loads local before portable and rejects a closed or escaping descriptor", async () => {
     const state = await fixture();
@@ -288,7 +291,7 @@ describe("root-driven checkpoint store", () => {
     } finally {
       await rm(state.root, { recursive: true, force: true });
     }
-  });
+  }, heavyGitTimeout);
 
   test("fails closed when the local-state family is a symlink", async () => {
     const state = await fixture();
@@ -298,7 +301,7 @@ describe("root-driven checkpoint store", () => {
       const outside = join(state.root, "outside-local-state");
       await mkdir(outside, { recursive: true });
       await rm(join(state.mount, ".endroit"), { recursive: true, force: true });
-      await symlink(outside, join(state.mount, ".endroit"));
+      await symlink(outside, join(state.mount, ".endroit"), process.platform === "win32" ? "junction" : "dir");
       expect(await errorCode(() => loadContinuityDescriptor(state.mount))).toBe("continuity-collision");
       expect(await readdir(outside, { withFileTypes: true })).toEqual([]);
     } finally {

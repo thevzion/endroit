@@ -4,6 +4,7 @@ import { mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { spawnSync } from "node:child_process";
+const gitArguments = (args) => process.platform === "win32" ? ["-c", "core.longpaths=true", ...args] : args;
 
 const root = resolve(process.argv[2] ?? "");
 if (!process.argv[2]) throw new Error("usage: node scripts/checkpoint-validate.mjs <checkpoint-directory>");
@@ -55,7 +56,7 @@ for (const repository of manifest.repositories) {
   if (stable(repository) !== readFileSync(join(root, sidecar), "utf8") || digest(join(root, repository.bundle.path)) !== repository.bundle.sha256) throw new Error(`${repository.repositoryId} changed`);
   const bare = mkdtempSync(join(tmpdir(), "checkpoint-static-"));
   try {
-    if (spawnSync("git", ["init", "--bare", "-q", `--object-format=${repository.objectFormat}`], { cwd: bare }).status !== 0 || spawnSync("git", ["bundle", "verify", join(root, repository.bundle.path)], { cwd: bare }).status !== 0) throw new Error(`${repository.repositoryId} bundle is invalid`);
+    if (spawnSync("git", gitArguments(["init", "--bare", "-q", `--object-format=${repository.objectFormat}`]), { cwd: bare }).status !== 0 || spawnSync("git", gitArguments(["bundle", "verify", join(root, repository.bundle.path)]), { cwd: bare }).status !== 0) throw new Error(`${repository.repositoryId} bundle is invalid`);
   } finally { rmSync(bare, { recursive: true, force: true }); }
   expected.add(sidecar); expected.add(repository.bundle.path);
 }

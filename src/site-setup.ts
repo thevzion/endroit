@@ -1,4 +1,5 @@
-import { lstat, mkdir, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, readFile, readdir, readlink, realpath, rename, rm, symlink, unlink, writeFile } from "node:fs/promises";
+import { gitArguments, gitTransportArguments } from "./platform.ts";
 import { basename, dirname, join, relative, resolve } from "node:path";
 import { hash, stable } from "./compiler/index.ts";
 
@@ -264,7 +265,7 @@ export async function planSiteRouteSetup(value: unknown, options: { workplaceMou
 }
 
 function git(cwd: string, args: string[]): string {
-  const result = Bun.spawnSync(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(["git", ...gitArguments(args)], { cwd, stdout: "pipe", stderr: "pipe" });
   if (result.exitCode !== 0) fail("site-route-unavailable", `git ${args[0]} failed: ${new TextDecoder().decode(result.stderr).trim()}`);
   return new TextDecoder().decode(result.stdout).trim();
 }
@@ -284,7 +285,7 @@ async function observeRoute(path: string, locator: string, revision: SiteRouteRe
     if (git(path, ["symbolic-ref", "--quiet", "--short", "HEAD"]) !== revision.name) fail("site-route-unavailable", `${path} is not on branch ${revision.name}`);
     if (git(path, ["rev-parse", `refs/remotes/origin/${revision.name}`]) !== commit) fail("site-route-unavailable", `${path} does not match origin/${revision.name}`);
   } else {
-    const symbolic = Bun.spawnSync(["git", "symbolic-ref", "--quiet", "HEAD"], { cwd: path, stdout: "pipe", stderr: "pipe" });
+    const symbolic = Bun.spawnSync(["git", ...gitArguments(["symbolic-ref", "--quiet", "HEAD"])], { cwd: path, stdout: "pipe", stderr: "pipe" });
     if (symbolic.exitCode === 0 || commit !== revision.sha) fail("site-route-unavailable", `${path} is not detached at ${revision.sha}`);
   }
   const checkoutRealpath = await realpath(path);
@@ -390,9 +391,9 @@ export async function removeSiteRouteBinding(workplaceMount: string, siteValue: 
 async function cloneRoute(path: string, locator: string, revision: SiteRouteRevision): Promise<void> {
   const temporary = `${path}.endroit-site-setup-${process.pid}-${crypto.randomUUID()}`;
   try {
-    if (revision.kind === "branch") git(dirname(path), ["clone", "--no-tags", "--single-branch", "--branch", revision.name, "--", locator, temporary]);
+    if (revision.kind === "branch") git(dirname(path), ["clone", ...gitTransportArguments("clone", locator), "--no-tags", "--single-branch", "--branch", revision.name, "--", locator, temporary]);
     else {
-      git(dirname(path), ["clone", "--no-checkout", "--no-tags", "--", locator, temporary]);
+      git(dirname(path), ["clone", ...gitTransportArguments("clone", locator), "--no-checkout", "--no-tags", "--", locator, temporary]);
       git(temporary, ["checkout", "--detach", revision.sha]);
     }
     if (await exists(path)) fail("site-route-collision", `${path} appeared during clone`);
@@ -409,7 +410,7 @@ async function worktreeRoute(path: string, source: string, revision: SiteRouteRe
     else git(source, ["worktree", "add", "--detach", "--", path, revision.sha]);
   } catch (error) {
     if (await exists(path)) {
-      Bun.spawnSync(["git", "worktree", "remove", "--force", path], { cwd: source, stdout: "pipe", stderr: "pipe" });
+      Bun.spawnSync(["git", ...gitArguments(["worktree", "remove", "--force", path])], { cwd: source, stdout: "pipe", stderr: "pipe" });
       await rm(path, { recursive: true, force: true });
     }
     throw error;
@@ -424,7 +425,7 @@ async function linkRoute(path: string, target: string): Promise<void> {
     await (symlink as unknown as (target: string, path: string, type: "dir" | "junction") => Promise<void>)(target, temporary, process.platform === "win32" ? "junction" : "dir");
     if (await exists(path)) fail("site-route-collision", `${path} appeared during external link creation`);
     await rename(temporary, path);
-  } catch (error) { await rm(temporary, { recursive: false, force: true }); throw error; }
+  } catch (error) { if (await exists(temporary)) await unlink(temporary); throw error; }
 }
 
 export async function applySiteRouteSetup(plan: SiteRouteSetupPlan, expectedRevision: string, options: { targetFamily?: string } = {}): Promise<SiteRouteSetupReceipt> {
@@ -493,8 +494,9 @@ export async function applySiteRouteSetup(plan: SiteRouteSetupPlan, expectedRevi
     }
   } catch (error) {
     for (const created of createdRoutes.reverse()) {
-      if (created.physical.kind === "worktree" && created.source) Bun.spawnSync(["git", "worktree", "remove", "--force", created.path], { cwd: created.source, stdout: "pipe", stderr: "pipe" });
-      await rm(created.path, { recursive: created.physical.kind !== "external-link", force: true });
+      if (created.physical.kind === "worktree" && created.source) Bun.spawnSync(["git", ...gitArguments(["worktree", "remove", "--force", created.path])], { cwd: created.source, stdout: "pipe", stderr: "pipe" });
+      if (created.physical.kind === "external-link") { if (await exists(created.path)) await unlink(created.path); }
+      else await rm(created.path, { recursive: true, force: true });
     }
     for (const path of createdDirectories.reverse()) {
       if (await readdir(path, { withFileTypes: true }).then((entries) => entries.length === 0).catch(() => false)) await rm(path, { recursive: true, force: true });
@@ -515,7 +517,7 @@ export async function detachExternalSiteRoute(workplaceMount: string, siteValue:
     if (!info.isSymbolicLink()) fail("site-route-collision", `${mount} is not an external-link Route`);
     const linkedTarget = await realpath(mount).catch(async () => resolve(dirname(mount), await readlink(mount)));
     if (linkedTarget !== resolve(record.binding.realpath)) fail("site-route-collision", `${mount} does not resolve to its bound target`);
-    await rm(mount, { recursive: false, force: false });
+    await unlink(mount);
   }
   await removeSiteRouteBinding(workplaceMount, site, route, record.binding);
   return { kind: "SiteRouteDetachReceipt", version: 1, workplace, site, route, status: "detached", binding: record.binding };

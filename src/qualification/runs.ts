@@ -2,6 +2,7 @@ import { mkdir, readFile, readdir, stat, writeFile } from "node:fs/promises";
 import { basename, join, relative, resolve, sep } from "node:path";
 import { checkWorkplaceMount, hash, stable } from "../compiler/index.ts";
 import { checkGitHistory } from "../compiler/git-witness.ts";
+import { gitArguments } from "../platform.ts";
 
 export type QualificationRun = {
   id: string;
@@ -181,7 +182,7 @@ export async function findQualificationRun(repository: string, id: string): Prom
 }
 
 function git(root: string, args: string[]): { ok: boolean; output: string } {
-  const result = Bun.spawnSync(["git", ...args], { cwd: root, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(["git", ...gitArguments(args)], { cwd: root, stdout: "pipe", stderr: "pipe" });
   return { ok: result.exitCode === 0, output: new TextDecoder().decode(result.exitCode === 0 ? result.stdout : result.stderr).trim() };
 }
 

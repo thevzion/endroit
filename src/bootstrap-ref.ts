@@ -1,4 +1,5 @@
 import { lstat, mkdir, mkdtemp, readFile, realpath, rm, writeFile } from "node:fs/promises";
+import { gitArguments, gitTransportArguments } from "./platform.ts";
 import { tmpdir } from "node:os";
 import { dirname, join, relative, resolve } from "node:path";
 import { hash } from "./compiler/index.ts";
@@ -37,7 +38,7 @@ function inside(parent: string, child: string): boolean {
 }
 
 function runRaw(args: string[], cwd: string, allowFailure = false): { status: number; stdout: Uint8Array; stderr: string } {
-  const result = Bun.spawnSync(["git", ...args], { cwd, stdout: "pipe", stderr: "pipe" });
+  const result = Bun.spawnSync(["git", ...gitArguments(args)], { cwd, stdout: "pipe", stderr: "pipe" });
   const output = { status: result.exitCode, stdout: new Uint8Array(result.stdout), stderr: new TextDecoder().decode(result.stderr).trim() };
   if (!allowFailure && output.status !== 0) fail("bootstrap-ref-unavailable", `git ${args[0]} failed: ${output.stderr}`);
   return output;
@@ -142,7 +143,7 @@ export async function resolveBootstrapRef(value: string, options: { singleFile?:
   const checkout = join(temporary, "package");
   try {
     run(["init", "-q", repository], temporary);
-    run(["-C", repository, "fetch", "-q", "--depth=1", "--no-tags", source.locator, source.ref], temporary);
+    run(["-C", repository, "fetch", ...gitTransportArguments("fetch", source.locator), "-q", "--depth=1", "--no-tags", source.locator, source.ref], temporary);
     const oid = run(["-C", repository, "rev-parse", "--verify", "FETCH_HEAD^{commit}"], temporary);
     await mkdir(checkout, { recursive: false });
     await extractClosure(repository, oid, source.path, checkout, options.singleFile);

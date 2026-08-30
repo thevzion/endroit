@@ -24,7 +24,10 @@ describe("qualification run freeze", () => {
       const record = JSON.parse(await readFile(runPath, "utf8")) as Record<string, unknown>;
       await writeFile(runPath, `${JSON.stringify({ ...record, status: "observed" }, null, 2)}\n`);
 
-      expect((await freezeQualificationRun({ repository: sandbox, runId: run.id })).changed).toBe(true);
+      const frozen = await freezeQualificationRun({ repository: sandbox, runId: run.id });
+      expect(frozen.changed).toBe(true);
+      expect(frozen.archive.path).toBe("archive/mount.tar.gz");
+      expect(JSON.parse(await readFile(runPath, "utf8")).archive.path).toBe("archive/mount.tar.gz");
       const archivePath = resolve(run.root, "archive/mount.tar.gz");
       expect((await stat(archivePath)).size > 0).toBe(true);
       expect(await Bun.file(run.mount).exists()).toBe(false);
