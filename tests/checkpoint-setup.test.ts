@@ -180,7 +180,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(evidence(join(target, "workplace"))).toBe(drifted);
       expect(await readFile(join(target, "workplace/untracked.txt"), "utf8")).toBe("Changed after restoration.\n");
     } finally { await rm(state.root, { recursive: true, force: true }); }
-  }, heavyGitTimeout);
+  }, process.platform === "win32" ? 180_000 : 60_000); // Full topology restore, entry, replay and drift verification.
 
   test("distinguishes ready from unresolved Member without guessing the only declared human", async () => {
     const state = await fixture();
