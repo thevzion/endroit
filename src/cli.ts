@@ -20,6 +20,8 @@ import { applyWorkplaceSetup, planWorkplaceSetup, SetupError } from "./setup.ts"
 import { captureCheckpoint, CheckpointError, restoreCheckpoint, verifyCheckpoint } from "./checkpoint.ts";
 import { fetchCheckpoint, publishCheckpoint, restoreCheckpointFromRemote } from "./checkpoint-remote.ts";
 import { applyWorkplaceRecovery, planWorkplaceRecovery, RecoveryError } from "./recovery.ts";
+import { CurrentMemberError } from "./current-member.ts";
+import { SiteRouteSetupError } from "./site-setup.ts";
 
 type Parsed = {
   values: Record<string, string>;
@@ -69,8 +71,8 @@ function print(value: unknown, json: boolean): void {
     console.log([`${receipt.anchor} · ${receipt.status}`, ...receipt.targets.map((target) => `${target.workplace} · ${target.status}`)].join("\n"));
   }
   else if (typeof value === "object" && value && "kind" in value && value.kind === "WorkplaceRecoveryPlan") {
-    const plan = value as unknown as { anchor: string; revision: string; checkpoints: Array<{ id: string; action: string; worktrees: unknown[] }> };
-    console.log([`${plan.anchor} · recovery preview`, ...plan.checkpoints.map((checkpoint) => `${checkpoint.id} · ${checkpoint.action} · ${checkpoint.worktrees.length} worktrees`), plan.revision].join("\n"));
+    const plan = value as unknown as { anchor: string; revision: string; sites: Array<{ workplace: string; plan: { sites: Array<{ routes: unknown[] }> } }>; checkpoints: Array<{ id: string; action: string; worktrees: unknown[] }> };
+    console.log([`${plan.anchor} · recovery preview`, ...plan.sites.map((site) => `${site.workplace} · ${site.plan.sites.flatMap((item) => item.routes).length} clean routes`), ...plan.checkpoints.map((checkpoint) => `${checkpoint.id} · ${checkpoint.action} · ${checkpoint.worktrees.length} worktrees`), plan.revision].join("\n"));
   }
   else if (typeof value === "object" && value && "kind" in value && value.kind === "WorkplaceRecoveryReceipt") {
     const receipt = value as unknown as { anchor: string; status: string; checkpoints: Array<{ id: string; action: string; status: string }> };
@@ -223,7 +225,7 @@ try {
   }
 } catch (error) {
   const message = error instanceof Error ? error.message : String(error);
-  const code = error instanceof FederationError || error instanceof SetupError || error instanceof CheckpointError || error instanceof RecoveryError ? error.code : undefined;
+  const code = error instanceof FederationError || error instanceof SetupError || error instanceof CheckpointError || error instanceof RecoveryError || error instanceof CurrentMemberError || error instanceof SiteRouteSetupError ? error.code : undefined;
   console.error(options.flags.has("json") ? JSON.stringify({ ...(code ? { code } : {}), error: message }, null, 2) : message);
-  process.exitCode = error instanceof CheckpointError ? error.code === "checkpoint-schema-invalid" || error.code === "checkpoint-path-invalid" ? 2 : 1 : code && ["unavailable", "unsafe-mount", "identity-mismatch", "compile-required", "setup-unavailable", "setup-collision", "recovery-collision", "recovery-unavailable", "recovery-position-mismatch"].includes(code) ? 1 : 2;
+  process.exitCode = error instanceof CheckpointError ? error.code === "checkpoint-schema-invalid" || error.code === "checkpoint-path-invalid" ? 2 : 1 : code && ["unavailable", "unsafe-mount", "identity-mismatch", "compile-required", "setup-unavailable", "setup-collision", "recovery-collision", "recovery-unavailable", "recovery-position-mismatch", "current-member-collision", "site-route-collision", "site-route-unavailable"].includes(code) ? 1 : 2;
 }
