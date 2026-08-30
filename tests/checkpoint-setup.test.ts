@@ -200,7 +200,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(await exists(join(unresolved, ".endroit/current-member.json"))).toBe(false);
       expect(evidence(join(unresolved, "workplace"))).toBe(before);
     } finally { await rm(state.root, { recursive: true, force: true }); }
-  });
+  }, heavyGitTimeout);
 
   test("enters a preserved dirty Root read-only and refuses changed local door, source or Member", async () => {
     const state = await fixture({ dirty: true });
@@ -231,7 +231,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(evidence(join(target, "workplace"))).toBe(before);
       expect(receipt.check.operationStatus).toBe("compile-required");
     } finally { await rm(state.root, { recursive: true, force: true }); }
-  });
+  }, heavyGitTimeout);
 
   test("keeps semantic-invalid restoration exact but unavailable for a Front Door", async () => {
     const state = await fixture({ invalid: true });
@@ -247,7 +247,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(evidence(join(target, "workplace"))).toBe(before);
       expect((await verifyRestoredCheckpoint(captured.path, target)).receipt.portableFingerprint).toBe(captured.receipt.portableFingerprint);
     } finally { await rm(state.root, { recursive: true, force: true }); }
-  });
+  }, heavyGitTimeout);
 
   test("refuses collisions and an invalid Member before installing a destination", async () => {
     const state = await fixture();
@@ -270,7 +270,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(await exists(missingMember)).toBe(false);
       expect(evidence(state.shared)).toBe(before);
     } finally { await rm(state.root, { recursive: true, force: true }); }
-  });
+  }, heavyGitTimeout);
 
   for (const variant of ["missing-root", "peer-workplace"] as const) test(`rejects a checkpoint with ${variant}`, async () => {
     const state = await fixture({ sites: true });
@@ -393,7 +393,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(evidence(join(target, "workplace"))).toBe(before);
       expect(evidence(state.shared)).toBe(before);
     } finally { await rm(state.root, { recursive: true, force: true }); }
-  });
+  }, heavyGitTimeout);
 
   test("sets up a managed peer independently without absorbing it into the Root checkpoint", async () => {
     const state = await fixture();
