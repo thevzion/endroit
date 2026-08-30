@@ -1485,6 +1485,8 @@ function disclosureContract(input: CompileInput, doors: FrontDoorIR[]) {
 }
 
 function sourceRevision(input: CompileInput): Revision {
+  // Operational setup/recovery/continuity declarations have their own Plan digests.
+  // Including checkpoint IDs here would make restoration metadata self-referential.
   return hash([...input.sources.filter((source) => source.mountPath?.startsWith("workplace/")).map((source) => `${source.envelope.ref}:${source.revision}`), ...input.equipment.map((item) => `${item.ref}:${hash(stable(item))}`), `${input.coordination.ref}:${hash(stable(input.coordination))}`, `profile:${input.profilePackage?.digest ?? hash(stable(input.profile))}`, `.workplaceignore:${input.ignore.revision}`].sort().join("\n"));
 }
 
@@ -1849,7 +1851,7 @@ export async function readyWorkplace(options: { start: string; provider?: string
   const mount = await discoverMount(options.start) ?? fail(`No Workplace Mount found from ${resolve(options.start)}`);
   const before = await checkWorkplaceMount({ mount, ...(options.provider ? { provider: options.provider } : {}), ...(options.profilePath ? { profilePath: options.profilePath } : {}) });
   if (before.diagnostics.some((item) => item.code === "git-witness-invalid" || item.code === "git-merge-implicit")) return { mount, changed: false, check: before };
-  if (before.diagnostics.some((item) => item.code === "profile-package-unavailable")) return { mount, changed: false, check: before };
+  if (before.diagnostics.some((item) => ["profile-package-unavailable", "portable-declaration-invalid", "portable-text-policy-invalid"].includes(item.code))) return { mount, changed: false, check: before };
   if (before.compileStatus === "valid" && !["compile-required", "degraded"].includes(before.operationStatus)) return { mount, changed: false, check: before };
   await (await import("./git-witness.ts")).repairGitGuards(mount);
   await compileWorkplaceMount({ mount, ...(options.provider ? { provider: options.provider } : {}), ...(options.profilePath ? { profilePath: options.profilePath } : {}) });

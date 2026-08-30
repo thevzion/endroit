@@ -1,7 +1,8 @@
-import { chmod, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
+import { chmod, lstat, mkdir, readFile, readdir, realpath, stat, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
 import { checkStaticWorkplace, discoverMount, hash, loadCompileInput, parseSourceEnvelope, stable } from "./index.ts";
 import type { Diagnostic, SourceRecord } from "./model.ts";
+import { portableDeclarationKind, validatePortableDeclaration } from "./portable-declarations.ts";
 
 export type GitGuardHook = {
   root: "shared";
@@ -264,12 +265,50 @@ export async function checkGitHistory(root: string, mount?: string): Promise<Git
   return { status: diagnostics.length > 0 ? "invalid" : "valid", diagnostics };
 }
 
-function classify(root: string, mount: string, path: string): "source" | "projection" | "foreign" {
+function classify(root: string, mount: string, path: string): "source" | "declaration" | "projection" | "foreign" {
   const shared = resolve(root) === resolve(mount, "workplace");
+  if (shared && portableDeclarationKind(path)) return "declaration";
   if (shared && (path === "WORKPLACE.md" || path.startsWith(".workplace/"))) return "projection";
-  if (shared && (path.startsWith("sources/") || ["profile.json", "composition.json", "coordination.json", "workplace.json", "links.json", ".workplaceignore"].includes(path))) return "source";
+  if (shared && (path.startsWith("sources/") || ["profile.json", "composition.json", "coordination.json", "workplace.json", "links.json", ".workplaceignore", ".gitattributes"].includes(path))) return "source";
   if (!shared && path.endsWith(".md")) return "source";
   return "foreign";
+}
+
+async function checkPortableDeclarations(root: string, indexed = false): Promise<Diagnostic[]> {
+  const diagnostics: Diagnostic[] = [];
+  const read = async (file: string) => {
+    if (indexed) {
+      if (!/^100(?:644|755) /.test(git(root, ["ls-files", "--stage", "--", file]) ?? "")) throw new Error(`${file} must be a regular indexed file`);
+      return git(root, ["show", `:${file}`])!;
+    }
+    const info = await lstat(join(root, file));
+    if (!info.isFile() || info.isSymbolicLink() || await realpath(join(root, file)) !== resolve(await realpath(root), file)) throw new Error(`${file} must be a physical declaration file without linked ancestors`);
+    return await readFile(join(root, file), "utf8");
+  };
+  let workplace: string;
+  try { workplace = JSON.parse(await read("workplace.json")).workplace as string; }
+  catch (error) { return [{ severity: "error", code: "portable-declaration-invalid", subject: "workplace.json", message: error instanceof Error ? error.message : String(error) }]; }
+  const paths = (git(root, ["ls-files", ...(indexed ? [] : ["--cached", "--others", "--exclude-standard"]), "--", ".workplace"], true) ?? "").split("\n").filter((path) => portableDeclarationKind(path));
+  for (const path of new Set(paths)) try {
+    const bytes = await read(path);
+    const dependencies = validatePortableDeclaration(root, path, bytes, workplace);
+    for (const dependency of dependencies) {
+      const content = await read(dependency.path);
+      validatePortableDeclaration(root, dependency.path, content, workplace);
+      if (JSON.parse(content)[dependency.field] !== dependency.identity) throw new Error(`${path} dependency ${dependency.path} must target ${dependency.identity}`);
+    }
+    if (portableDeclarationKind(path) === "recovery") {
+      const recovery = JSON.parse(bytes);
+      const setup = JSON.parse(await read(dependencies.find((item) => item.field === "anchor")!.path));
+      const admitted = new Set([recovery.anchor, ...setup.targets.filter((target: { required: boolean }) => target.required).map((target: { workplace: string }) => target.workplace)]);
+      if (![recovery.position.workplace, ...recovery.sites.map((item: { workplace: string }) => item.workplace), ...(recovery.continuity ?? []).map((item: { workplace: string }) => item.workplace), ...recovery.checkpoints.map((item: { workplace: string }) => item.workplace)].every((identity) => admitted.has(identity))) throw new Error("Recovery references a Workplace absent from its Setup targets");
+    }
+  } catch (error) { diagnostics.push({ severity: "error", code: "portable-declaration-invalid", subject: path, message: error instanceof Error ? error.message : String(error) }); }
+  if (await exists(join(root, ".gitattributes"))) {
+    const attributes = git(root, ["check-attr", ...(indexed ? ["--cached"] : []), "eol", "--", ".gitattributes", ".gitignore", ".workplaceignore", "sources/.workplaceignore", "source.json", "source.md"], true) ?? "";
+    if (attributes.split("\n").some((line) => !line.endsWith(": lf"))) diagnostics.push({ severity: "error", code: "portable-text-policy-invalid", subject: ".gitattributes", message: "Semantic JSON/Markdown and Git/Workplace policy files require eol=lf" });
+  }
+  return diagnostics;
 }
 
 export async function checkGitStaged(options: { start: string; commitMessage?: string }): Promise<GitWitnessResult> {
@@ -282,9 +321,10 @@ export async function checkGitStaged(options: { start: string; commitMessage?: s
   });
   const classes = new Set(rows.map((row) => classify(root, mount, row.path)));
   if (classes.has("foreign")) diagnostics.push({ severity: "error", code: "staged-foreign", subject: root, message: "Staged paths include files outside the Root contract." });
-  if (classes.has("source") && classes.has("projection")) diagnostics.push({ severity: "error", code: "staged-mixed-responsibility", subject: root, message: "Owned sources and projections require separate commits." });
-  const unstagedSources = (git(root, ["diff", "--name-only"]) ?? "").split("\n").filter((path) => classify(root, mount, path) === "source");
-  if (classes.has("source") && unstagedSources.length > 0) diagnostics.push({ severity: "error", code: "staged-source-worktree-ambiguous", subject: root, message: `Unstaged source changes prevent exact index validation: ${unstagedSources.join(", ")}` });
+  const owned = classes.has("source") || classes.has("declaration");
+  if (owned && classes.has("projection")) diagnostics.push({ severity: "error", code: "staged-mixed-responsibility", subject: root, message: "Owned sources/declarations and projections require separate commits." });
+  const unstagedSources = (git(root, ["diff", "--name-only"]) ?? "").split("\n").filter((path) => ["source", "declaration"].includes(classify(root, mount, path)));
+  if (owned && unstagedSources.length > 0) diagnostics.push({ severity: "error", code: "staged-source-worktree-ambiguous", subject: root, message: `Unstaged source changes prevent exact index validation: ${unstagedSources.join(", ")}` });
   for (const row of rows) {
     if (row.status.startsWith("R") || row.status.startsWith("C")) diagnostics.push({ severity: "error", code: "staged-rename-unsupported", subject: row.path, message: "Stage rename as explicit delete/add after validating the semantic effect." });
     if (row.status === "D") continue;
@@ -299,9 +339,15 @@ export async function checkGitStaged(options: { start: string; commitMessage?: s
   try { await loadMountCompileInput(mount); }
   catch (error) { diagnostics.push({ severity: "error", code: "staged-graph-invalid", subject: root, message: error instanceof Error ? error.message : String(error) }); }
   if (classes.has("projection")) {
+    try {
+      const manifest = JSON.parse(await readFile(join(mount, "workplace/.workplace/projection-manifest.json"), "utf8")) as { files: Array<{ path: string }> };
+      const projected = new Set([".workplace/projection-manifest.json", ...manifest.files.map((item) => item.path.replace(/^workplace\//, ""))]);
+      for (const row of rows) if (row.status !== "D" && classify(root, mount, row.path) === "projection" && !projected.has(row.path)) diagnostics.push({ severity: "error", code: "staged-projection-not-compiler-owned", subject: row.path, message: "Path is neither a closed portable declaration nor a compiler-owned projection" });
+    } catch (error) { diagnostics.push({ severity: "error", code: "staged-projection-not-compiler-owned", subject: root, message: error instanceof Error ? error.message : String(error) }); }
     const compiled = await checkStaticWorkplace({ mount });
     if (compiled.compileStatus !== "valid") diagnostics.push({ severity: "error", code: "staged-projection-not-compiler-owned", subject: root, message: "Projection bytes do not match the public Manifest." });
   }
+  if (resolve(root) === resolve(mount, "workplace")) diagnostics.push(...await checkPortableDeclarations(root, true));
   if (options.commitMessage) {
     try {
       const contract = parseCommitContract(options.commitMessage);
@@ -325,7 +371,7 @@ export async function checkGitStaged(options: { start: string; commitMessage?: s
         }
       }
       if (classes.has("projection") && contract.operation !== "compile") fail("Projection batch requires compile operation");
-      if (classes.has("source") && contract.operation === "compile") fail("compile operation cannot commit owned sources");
+      if (owned && contract.operation === "compile") fail("compile operation cannot commit owned sources/declarations");
     } catch (error) { diagnostics.push({ severity: "error", code: "commit-message-invalid", subject: root, message: error instanceof Error ? error.message : String(error) }); }
   }
   return { status: diagnostics.length > 0 ? "invalid" : "valid", diagnostics };
@@ -333,6 +379,7 @@ export async function checkGitStaged(options: { start: string; commitMessage?: s
 
 export async function checkMountGit(mount: string): Promise<GitWitnessResult> {
   const diagnostics: Diagnostic[] = [];
+  diagnostics.push(...await checkPortableDeclarations(resolve(mount, "workplace")));
   for (const root of await mountRoots(mount)) diagnostics.push(...(await checkGitHistory(root, mount)).diagnostics);
   const guards = await checkGitGuards(mount);
   diagnostics.push(...guards.diagnostics);

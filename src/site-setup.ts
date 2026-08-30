@@ -168,7 +168,7 @@ function productLocator(value: unknown, requestDirectory: string, subject: strin
   return { kind: "ProductRemote", locator: resolve(requestDirectory, locator) };
 }
 
-function parseRequest(value: unknown, requestDirectory: string): SiteRouteSetupRequest {
+export function parseSiteRouteSetupRequest(value: unknown, requestDirectory: string): SiteRouteSetupRequest {
   const source = object(value, "SiteRouteSetupRequest");
   exact(source, ["kind", "version", "workplace", "sites"], "SiteRouteSetupRequest");
   if (source.kind !== "SiteRouteSetupRequest" || source.version !== 1 || !Array.isArray(source.sites) || source.sites.length === 0) fail("invalid-site-route-request", "Unsupported SiteRouteSetupRequest");
@@ -244,7 +244,7 @@ async function assertFamily(workplaceMount: string, family: string, sites: Array
 }
 
 export async function planSiteRouteSetup(value: unknown, options: { workplaceMount: string; requestDirectory?: string; allowAbsentMount?: boolean }): Promise<SiteRouteSetupPlan> {
-  const request = parseRequest(value, resolve(options.requestDirectory ?? process.cwd()));
+  const request = parseSiteRouteSetupRequest(value, resolve(options.requestDirectory ?? process.cwd()));
   const workplaceMount = resolve(options.workplaceMount);
   const mountPresent = await exists(workplaceMount);
   if (!mountPresent && !options.allowAbsentMount) fail("site-route-unavailable", `${workplaceMount} is unavailable`);

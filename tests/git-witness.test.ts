@@ -1,10 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { resolve } from "node:path";
 import { checkWorkplaceMount, materializeMeeting, readyWorkplace } from "../src/compiler/index.ts";
 import { checkGitHistory, checkGitStaged, gitGuardExecutable } from "../src/compiler/git-witness.ts";
 import { applyNewWorkplace, loadStandardProfile, planNewWorkplace, type NewWorkplaceRequest } from "../src/compiler/new-workplace.ts";
+import { validatePortableDeclaration } from "../src/compiler/portable-declarations.ts";
 
 const repository = resolve(import.meta.dir, "..");
 const cliCommand = [Bun.argv[0]!, resolve(repository, "src/cli.ts")];
@@ -27,6 +28,31 @@ function request(target: string): NewWorkplaceRequest {
 }
 
 describe("Git witness", () => {
+  test("keeps portable declarations closed, bounded and separate from local bindings", () => {
+    const root = resolve(tmpdir(), "declaration-fixture/workplace");
+    const workplace = "workplace://fixture";
+    const path = ".workplace/continuity.json";
+    const continuity = { kind: "ContinuityDescriptor", version: 1, anchor: workplace, workplace, capture: "../../.endroit/capture.json", store: "../../.endroit/checkpoints", restoreTarget: "../../checkouts/sites", line: "main", policy: { remote: "none", requirement: "optional" } };
+    const validate = (file: string, value: unknown) => validatePortableDeclaration(root, file, JSON.stringify(value), workplace);
+    expect(validate(path, continuity)).toEqual([]);
+    for (const field of ["capture", "store", "restoreTarget"]) expect(() => validate(path, { ...continuity, [field]: "../../../../outside" })).toThrow();
+    expect(() => validate(path, { ...continuity, restoreTarget: "../../workplace" })).toThrow();
+    expect(() => validate(path, { ...continuity, ignoredPaths: ["secret"] })).toThrow();
+    expect(() => validate(path, { ...continuity, capture: "D:payload" })).toThrow();
+    expect(() => validate(".workplace/unknown.json", continuity)).toThrow();
+    expect(() => validate(path, { ...continuity, anchor: "workplace://other" })).toThrow();
+    const target = { workplace: "workplace://peer", relation: "attachment", required: true, mount: { mode: "managed", path: "checkouts/workplaces/peer" }, source: "https://example.test/peer", entry: { kind: "EntryBinding", workplace: "workplace://peer", member: "workplace://peer/member/operator", desk: "workplace://peer/desk/operator", rootBindings: { shared: "workplace" } }, providers: [] };
+    const setup = { kind: "WorkplaceSetupRequest", version: 1, anchor: workplace, targets: [target] };
+    expect(validate(".workplace/setup.json", setup)).toEqual([]);
+    expect(() => validate(".workplace/setup.json", { ...setup, targets: [{ ...target, source: "https://example.test/peer?token=secret" }] })).toThrow();
+    expect(() => validate(".workplace/setup.json", { ...setup, targets: [{ ...target, source: "git@example.test:repo\nignored" }] })).toThrow();
+    expect(() => validate(".workplace/setup.json", { ...setup, targets: [{ ...target, entry: { ...target.entry, rootBindings: { shared: "workplace", private: "../../outside" } } }] })).toThrow();
+    expect(validate(".workplace/bootstrap/peer/setup.json", { ...setup, anchor: "workplace://peer", targets: [] })).toEqual([]);
+    const recovery = { kind: "WorkplaceRecoveryRequest", version: 1, anchor: workplace, setup: "setup.json", sites: [], checkpoints: [], position: { workplace } };
+    expect(() => validate(".workplace/recovery.json", { ...recovery, continuity: [{ workplace, descriptor: "continuity.json" }] })).toThrow();
+    expect(() => validate(".workplace/recovery.json", { ...recovery, checkpoints: [{ id: "selected", workplace, checkpoint: "../../../../outside", target: "checkouts/sites", checkpointId: `checkpoint:sha256:${"1".repeat(64)}`, portableFingerprint: `sha256:${"2".repeat(64)}`, roots: [{ ref: `${workplace}/root/product`, worktrees: [{ id: "main", logicalPath: "product/main", site: "product", route: "main" }] }] }] })).toThrow();
+  });
+
   test("treats Windows Git hooks as executable without POSIX mode bits", () => {
     expect(gitGuardExecutable(0o644, "win32")).toBe(true);
     expect(gitGuardExecutable(0o644, "linux")).toBe(false);
@@ -95,6 +121,70 @@ describe("Git witness", () => {
       const compile = `compile(workplace:witness-studio): project portable control plane\n\nMeeting: ${meeting.ref}\nAuthority: projection\nBuild: ${sourceOid}\n`;
       expect((await checkGitStaged({ start: created.roots.shared, commitMessage: compile })).status).toBe("valid");
       git(created.roots.shared, ["-c", "user.name=Witness Fixture", "-c", "user.email=witness@example.test", "commit", "-m", compile]);
+
+      const mapPath = resolve(created.roots.shared, ".workplace/workplace-map.json");
+      const semanticRevision = JSON.parse(await readFile(mapPath, "utf8")).sourceRevision;
+      const setupPath = resolve(created.roots.shared, ".workplace/setup.json");
+      const recoveryPath = resolve(created.roots.shared, ".workplace/recovery.json");
+      const setup = { kind: "WorkplaceSetupRequest", version: 1, anchor: workplace, targets: [] };
+      const recovery = { kind: "WorkplaceRecoveryRequest", version: 1, anchor: workplace, setup: "setup.json", sites: [], checkpoints: [], position: { workplace } };
+      await writeFile(setupPath, `${JSON.stringify(setup)}\n`);
+      await writeFile(recoveryPath, `${JSON.stringify(recovery)}\n`);
+      await writeFile(resolve(created.roots.shared, ".gitattributes"), `${await readFile(resolve(created.roots.shared, ".gitattributes"), "utf8")}# Portable text policy.\n`);
+      git(created.roots.shared, ["add", ".gitattributes", ".workplace/setup.json", ".workplace/recovery.json"]);
+      const declarationMessage = `work(workplace:recovery): declare portable recovery\n\nMeeting: ${meeting.ref}\nAuthority: human-invoked\n`;
+      expect((await checkGitStaged({ start: created.roots.shared, commitMessage: declarationMessage })).diagnostics).toEqual([]);
+      await writeFile(recoveryPath, `${JSON.stringify({ ...recovery, unknown: true })}\n`);
+      git(created.roots.shared, ["add", ".workplace/recovery.json"]);
+      expect((await checkGitStaged({ start: created.roots.shared })).diagnostics.some((item) => item.code === "portable-declaration-invalid")).toBe(true);
+      expect((await checkWorkplaceMount({ mount: target })).operationStatus).toBe("degraded");
+      const hookBeforeInvalidReady = await readFile(resolve(created.roots.shared, ".git/hooks/pre-commit"), "utf8");
+      expect((await readyWorkplace({ start: target })).changed).toBe(false);
+      expect(await readFile(resolve(created.roots.shared, ".git/hooks/pre-commit"), "utf8")).toBe(hookBeforeInvalidReady);
+      expect(JSON.parse(await readFile(mapPath, "utf8")).sourceRevision).toBe(semanticRevision);
+      await writeFile(recoveryPath, `${JSON.stringify(recovery)}\n`);
+      git(created.roots.shared, ["add", ".workplace/recovery.json"]);
+      const dependencyPath = ".workplace/bootstrap/witness-studio/setup.json";
+      await mkdir(resolve(created.roots.shared, dependencyPath, ".."), { recursive: true });
+      await writeFile(resolve(created.roots.shared, dependencyPath), `${JSON.stringify(setup)}\n`);
+      await writeFile(recoveryPath, `${JSON.stringify({ ...recovery, setup: "bootstrap/witness-studio/setup.json" })}\n`);
+      git(created.roots.shared, ["add", ".workplace/recovery.json"]);
+      expect((await checkGitStaged({ start: created.roots.shared })).diagnostics.some((item) => item.code === "portable-declaration-invalid")).toBe(true);
+      git(created.roots.shared, ["add", dependencyPath]);
+      expect((await checkGitStaged({ start: created.roots.shared })).status).toBe("valid");
+      const indexedBlob = git(created.roots.shared, ["rev-parse", `:${dependencyPath}`]);
+      git(created.roots.shared, ["update-index", "--cacheinfo", `120000,${indexedBlob},${dependencyPath}`]);
+      expect((await checkGitStaged({ start: created.roots.shared })).diagnostics.some((item) => item.code === "portable-declaration-invalid")).toBe(true);
+      git(created.roots.shared, ["add", dependencyPath]);
+      const outside = resolve(target, "outside");
+      await mkdir(outside, { recursive: true });
+      await writeFile(resolve(outside, "setup.json"), `${JSON.stringify(setup)}\n`);
+      await rm(resolve(created.roots.shared, dependencyPath, ".."), { recursive: true, force: true });
+      await symlink(outside, resolve(created.roots.shared, dependencyPath, ".."), process.platform === "win32" ? "junction" : "dir");
+      expect((await checkWorkplaceMount({ mount: target })).diagnostics.some((item) => item.code === "portable-declaration-invalid")).toBe(true);
+      await rm(resolve(created.roots.shared, dependencyPath, ".."), { recursive: true, force: true });
+      await mkdir(resolve(created.roots.shared, dependencyPath, ".."), { recursive: true });
+      await writeFile(resolve(created.roots.shared, dependencyPath), `${JSON.stringify({ ...setup, anchor: "workplace://wrong" })}\n`);
+      git(created.roots.shared, ["add", dependencyPath]);
+      expect((await checkGitStaged({ start: created.roots.shared })).diagnostics.some((item) => item.code === "portable-declaration-invalid")).toBe(true);
+      git(created.roots.shared, ["rm", "--cached", dependencyPath]);
+      await rm(resolve(created.roots.shared, dependencyPath), { recursive: false, force: false });
+      await writeFile(recoveryPath, `${JSON.stringify(recovery)}\n`);
+      git(created.roots.shared, ["add", ".workplace/recovery.json"]);
+      await writeFile(resolve(created.roots.shared, ".workplace/unknown.json"), "{}\n");
+      git(created.roots.shared, ["add", ".workplace/unknown.json"]);
+      expect((await checkGitStaged({ start: created.roots.shared })).diagnostics.some((item) => item.code === "staged-projection-not-compiler-owned")).toBe(true);
+      git(created.roots.shared, ["rm", "--cached", ".workplace/unknown.json"]);
+      await rm(resolve(created.roots.shared, ".workplace/unknown.json"), { recursive: false, force: false });
+      git(created.roots.shared, ["-c", "user.name=Witness Fixture", "-c", "user.email=witness@example.test", "commit", "-m", declarationMessage]);
+      expect((await readyWorkplace({ start: target })).changed).toBe(false);
+      expect(JSON.parse(await readFile(mapPath, "utf8")).sourceRevision).toBe(semanticRevision);
+      for (const digit of ["1", "2"]) {
+        await writeFile(recoveryPath, `${JSON.stringify({ ...recovery, checkpoints: [{ id: "selected", workplace, checkpoint: `../../.endroit/checkpoints/${digit.repeat(64)}`, target: "checkouts/sites", checkpointId: `checkpoint:sha256:${digit.repeat(64)}`, portableFingerprint: `sha256:${"3".repeat(64)}`, roots: [{ ref: `${workplace}/root/product`, worktrees: [{ id: "product-main", logicalPath: "product/main", site: "product", route: "main" }] }] }] })}\n`);
+        expect((await readyWorkplace({ start: target })).changed).toBe(false);
+        expect(JSON.parse(await readFile(mapPath, "utf8")).sourceRevision).toBe(semanticRevision);
+      }
+      await writeFile(recoveryPath, `${JSON.stringify(recovery)}\n`);
 
       await rm(resolve(created.roots.shared, ".git/hooks/pre-commit"), { force: true, recursive: false });
       expect((await checkWorkplaceMount({ mount: target })).operationStatus).toBe("degraded");

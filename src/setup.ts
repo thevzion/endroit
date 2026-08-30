@@ -173,7 +173,7 @@ function sourceLocator(value: unknown, requestDirectory: string, subject: string
   return resolve(requestDirectory, source);
 }
 
-function parseRequest(value: unknown, requestDirectory: string): WorkplaceSetupRequest {
+export function parseWorkplaceSetupRequest(value: unknown, requestDirectory: string): WorkplaceSetupRequest {
   const request = object(value, "WorkplaceSetupRequest");
   exact(request, ["kind", "version", "anchor", "targets"], "WorkplaceSetupRequest");
   if (request.kind !== "WorkplaceSetupRequest" || request.version !== 1 || !Array.isArray(request.targets)) fail("invalid-setup-request", "Unsupported WorkplaceSetupRequest");
@@ -209,7 +209,7 @@ function parseRequest(value: unknown, requestDirectory: string): WorkplaceSetupR
 
 export async function planWorkplaceSetup(value: unknown, options: { anchorMount: string; requestDirectory?: string; localPath?: string }): Promise<WorkplaceSetupPlan> {
   const anchorMount = resolve(options.anchorMount);
-  const request = parseRequest(value, resolve(options.requestDirectory ?? process.cwd()));
+  const request = parseWorkplaceSetupRequest(value, resolve(options.requestDirectory ?? process.cwd()));
   const state = await readWorkplaceFederationState(anchorMount, options.localPath);
   if (request.anchor !== state.anchor) fail("invalid-setup-request", `Request Anchor ${request.anchor} does not match ${state.anchor}`);
   const managedRoot = resolve(anchorMount, "checkouts/workplaces");
