@@ -1,12 +1,55 @@
 import { describe, expect, test } from "bun:test";
-import { cp, lstat, mkdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
+import { chmod, cp, lstat, mkdir, readFile, readlink, realpath, rm, writeFile } from "node:fs/promises";
 import { dirname, join, relative, resolve } from "node:path";
-import { assertCheckpointRestoreCapabilities, captureCheckpoint, checkpointRestorePlan, restoreCheckpoint, verifyCheckpoint } from "../src/checkpoint.ts";
+import { assertCheckpointRestoreCapabilities, captureCheckpoint, checkpointRestorePlan, restoreCheckpoint, verifyCheckpoint, verifyRestoredCheckpoint } from "../src/checkpoint.ts";
 import { fetchCheckpoint, publishCheckpoint, restoreCheckpointFromRemote } from "../src/checkpoint-remote.ts";
 import { gitArguments, gitTransportArguments } from "../src/platform.ts";
 import { checkpointFixture, cli, evidence, git, repository, run } from "./helpers/checkpoint-fixture.ts";
 
 describe("Git State Portability", () => {
+  test("verifies deep restored Git directories with short child paths and unchanged worktree evidence", async () => {
+    const state = await checkpointFixture({ platformNeutral: true });
+    try {
+      await writeFile(join(state.shared, "shared.txt"), "staged\n");
+      git(state.shared, ["add", "shared.txt"]);
+      await writeFile(join(state.shared, "shared.txt"), "dirty\r\n");
+      const before = [evidence(state.shared), evidence(state.detached)];
+      const captured = await captureCheckpoint({ ...state.request, roots: [state.request.roots[0]!] });
+      const target = join(state.root, ...Array.from({ length: 4 }, (_, index) => `deep-${index}-${"x".repeat(48)}`), "restored");
+      expect(target.length > 260).toBe(true);
+      const trace = join(state.root, "restore-trace.json");
+      const result = Bun.spawnSync([...cli, "checkpoint", "restore", captured.path, "--to", target, "--json"], {
+        cwd: repository, stdout: "pipe", stderr: "pipe",
+        env: { ...process.env, GIT_TRACE2_EVENT: trace, GIT_TRACE2_ENV_VARS: "GIT_DIR" },
+      });
+      if (result.exitCode !== 0) throw new Error(new TextDecoder().decode(result.stderr));
+      const restored = JSON.parse(new TextDecoder().decode(result.stdout));
+      expect(restored.receipt.status).toBe("restored-equivalent");
+      expect(restored.receipt.portableFingerprint).toBe(captured.receipt.portableFingerprint);
+      const events = (await readFile(trace, "utf8")).trim().split("\n").map((line) => JSON.parse(line));
+      const fsckSessions = events.filter((event) => event.event === "start" && event.argv.includes("fsck")).map((event) => event.sid as string);
+      const childGitDirs = events.filter((event) => event.event === "def_param" && event.param === "GIT_DIR" && fsckSessions.some((sid) => event.sid.startsWith(`${sid}/`))).map((event) => event.value);
+      expect(fsckSessions.length > 0).toBe(true);
+      expect(childGitDirs.length > 0).toBe(true);
+      expect(new Set(childGitDirs)).toEqual(new Set(["."]));
+      const restoredWorktrees = [join(target, "roots/shared/main"), join(target, "roots/shared/detached")];
+      expect(restoredWorktrees.map(evidence)).toEqual(before);
+      expect((await verifyRestoredCheckpoint(captured.path, target)).receipt.portableFingerprint).toBe(captured.receipt.portableFingerprint);
+      const common = resolve(restoredWorktrees[0]!, git(restoredWorktrees[0]!, ["rev-parse", "--git-common-dir"]));
+      const unreachable = join(state.root, "unreachable.txt");
+      await writeFile(unreachable, "unreferenced object for full integrity verification\n");
+      const oid = git(restoredWorktrees[0]!, ["hash-object", "-w", unreachable]);
+      const looseObject = join(common, "objects", oid.slice(0, 2), oid.slice(2));
+      await chmod(looseObject, 0o600);
+      await writeFile(looseObject, "corrupt object\n");
+      let failure = "";
+      try { await verifyRestoredCheckpoint(captured.path, target); }
+      catch (error) { failure = error instanceof Error ? error.message : String(error); }
+      expect(failure).toContain("fsck");
+      expect([evidence(state.shared), evidence(state.detached)]).toEqual(before);
+    } finally { await rm(state.root, { recursive: true, force: true }); }
+  }, process.platform === "win32" ? 180_000 : 30_000);
+
   test("rebases resolved Git pointers while refusing a pointer outside restored repositories", async () => {
     const state = await checkpointFixture({ platformNeutral: true });
     try {

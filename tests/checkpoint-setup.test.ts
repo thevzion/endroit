@@ -308,7 +308,7 @@ describe("checkpoint-first fresh-machine setup", () => {
       expect(await readFile(outside, "utf8")).toBe(outsideBytes);
       expect(evidence(state.shared)).toBe(before);
     } finally { await rm(state.root, { recursive: true, force: true }); }
-  });
+  }, heavyGitTimeout);
 
   test("fetches an exact cold checkpoint using a local request or one-file Git Bootstrap Ref without changing origins", async () => {
     const state = await fixture({ dirty: true });

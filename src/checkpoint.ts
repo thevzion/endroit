@@ -787,7 +787,9 @@ async function observeRestored(manifest: CheckpointManifest, target: string, pac
     const source = declaredWorktrees[0]!.path;
     const observedRefs = refs(source);
     repositories.push({ ...repository, refs: observedRefs, remotes: remotes(source), config: portableConfig(source), objectClosure: objectClosure(source, observedRefs, observed.flatMap((worktree) => worktree.requiredOids)), bundle: repository.bundle });
-    git(source, ["fsck", "--full", "--no-reflogs"]);
+    const gitDir = resolve(source, text(git(source, ["rev-parse", "--git-dir"])));
+    // Keep this worktree's HEAD/index, without passing a long absolute GIT_DIR to fsck's children.
+    git(gitDir, ["--git-dir=.", "fsck", "--full", "--no-reflogs"]);
   }
   repositories.sort((a, b) => a.repositoryId.localeCompare(b.repositoryId));
   worktrees.sort((a, b) => a.worktreeId.localeCompare(b.worktreeId));
